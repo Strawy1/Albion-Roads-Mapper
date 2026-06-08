@@ -36,7 +36,7 @@ function confirm() {
     >
       <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl" @click.stop>
         <h2 class="text-xl font-semibold mb-2 text-white">{{ title }}</h2>
-        <p class="text-sm text-gray-400" :class="detail ? 'mb-2' : 'mb-6'">{{ message }}</p>
+        <p class="text-sm text-gray-400" :class="detail ? 'mb-2' : 'mb-6'" v-html="message"></p>
         <p v-if="detail" class="text-sm text-yellow-400 font-mono mb-6">{{ detail }}</p>
         <div class="flex gap-3 justify-end">
           <button

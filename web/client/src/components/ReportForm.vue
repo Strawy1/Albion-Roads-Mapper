@@ -28,7 +28,7 @@ const toHandleId = ref<string | null>(null);
 const targetPosition = ref<{ x: number, y: number } | null>(null);
 const isLocked = computed(() => store.connections.length === 0);
 const isConnectionMode = ref(false);
-const showLoopWarning = ref(false);
+const warningMessage = ref('');
 const secondsRemaining = ref<number | null>(null);
 const slots = ref<7 | 20>(7);
 const isRoadsZone = computed(() => {
@@ -77,7 +77,7 @@ watch(isOpen, (newVal) => {
   } else {
     isModalReady.value = false;
     isConnectionMode.value = false;
-    showLoopWarning.value = false;
+    warningMessage.value = '';
   }
 });
 
@@ -283,14 +283,18 @@ defineExpose({
     console.log('[ReportForm] targetPosition from drag event:', pos ?? null);
     open();
   }, 
-  setConnection: (fromId: string, fHandleId: string | null, toId: string, tHandleId: string | null, loopWarning = false) => {
+  setConnection: (fromId: string, fHandleId: string | null, toId: string, tHandleId: string | null, loopWarning: boolean | string = false) => {
     fromZoneId.value = fromId;
     fromHandleId.value = fHandleId;
     toZoneId.value = toId;
     toHandleId.value = tHandleId;
     targetPosition.value = null;
     isConnectionMode.value = true;
-    showLoopWarning.value = loopWarning;
+    if (typeof loopWarning === 'string') {
+      warningMessage.value = loopWarning;
+    } else {
+      warningMessage.value = loopWarning ? 'Adding this connection will create a loop — double check this is correct.' : '';
+    }
     open();
   },
   focusTimeInput,
@@ -317,8 +321,8 @@ defineExpose({
           </button>
         </div>
 
-        <div v-if="showLoopWarning" class="mb-4 rounded-lg bg-yellow-900/50 border border-yellow-600 px-4 py-3 text-yellow-300 text-sm">
-          ⚠️ Adding this connection will create a loop — double check this is correct.
+        <div v-if="warningMessage" class="mb-4 rounded-lg bg-yellow-900/50 border border-yellow-600 px-4 py-3 text-yellow-300 text-sm">
+          <span v-html="'⚠️ ' + warningMessage"></span>
         </div>
 
         <form

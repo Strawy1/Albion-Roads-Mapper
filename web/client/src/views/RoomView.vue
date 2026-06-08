@@ -858,9 +858,34 @@ async function handleConnect(params: any) {
         ? (params.targetHandle || 'center')
         : (params.sourceHandle || 'center');
 
-      // Only allow if the non-roads handle stays the same (pure roads-side handle reassignment)
+      // Block if the non-roads zone would gain a second portal entrance
       if (existingNonRoadsHandle !== newNonRoadsHandle) {
         showToast("A non-roads zone cannot have multiple portal entrances to a roads zone.", "error");
+        return;
+      }
+
+      // Non-roads handle is the same — check if the roads-side handle is also changing to a
+      // genuinely different (non-center) handle, which would create a second portal link from
+      // the roads zone to the same non-roads zone.
+      const existingRoadsHandle = nonRoadsZoneIsFrom
+        ? (existing.toHandleId || 'center')
+        : (existing.fromHandleId || 'center');
+      const newRoadsHandle = isSourceRoads
+        ? (params.sourceHandle || 'center')
+        : (params.targetHandle || 'center');
+
+      const isReplacingCenter = existingRoadsHandle === 'center' || newRoadsHandle === 'center';
+      const isMovingOtherEnd = existingRoadsHandle === newRoadsHandle;
+
+      if (!isReplacingCenter && !isMovingOtherEnd) {
+        const isLoop = wouldCreateLongerLoop(store.connections, params.source, params.target);
+        reportForm.value?.setConnection(
+          params.source,
+          params.sourceHandle,
+          params.target,
+          params.targetHandle,
+          'Adding this connection would create a multiple portal link. This is <b>extremely</b> rare, please double check this is correct!'
+        );
         return;
       }
     }
@@ -883,9 +908,14 @@ async function handleConnect(params: any) {
       const isMovingOtherEnd = existingSourceHandle === params.sourceHandle;
 
       if (!isReplacingCenter && !isMovingOtherEnd) {
-        pendingConnection.value = params;
-        confirmationModalText.value = "This will create an unusual and rare connection where there are two portals linking to the same destination zone. Are you sure this is correct?";
-        showConfirmationModal.value = true;
+        const isLoop = wouldCreateLongerLoop(store.connections, params.source, params.target);
+        reportForm.value?.setConnection(
+          params.source,
+          params.sourceHandle,
+          params.target,
+          params.targetHandle,
+          'Adding this connection would create a multiple portal link. This is <b>extremely</b> rare, please double check this is correct!'
+        );
         return;
       }
     }

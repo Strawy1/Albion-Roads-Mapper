@@ -115,7 +115,7 @@ describe('RoomView - Multiple Connections', () => {
     expect(vm.toastType).toBe("error");
   });
 
-  it('shows a confirmation modal when trying to create a second connection between two roads zones', async () => {
+  it('opens the Add Connection form with a warning when trying to create a second connection between two roads zones', async () => {
     const store = useRoomStore();
     // Both are roads
     store.connections = [
@@ -155,7 +155,14 @@ describe('RoomView - Multiple Connections', () => {
     });
 
     const vm = wrapper.vm as any;
-    
+
+    // Mock reportForm.setConnection before the connect call
+    const setConnectionMock = vi.fn();
+    vm.reportForm = {
+      setConnection: setConnectionMock,
+      open: vi.fn(),
+    };
+
     // Attempt to connect them again with different handles
     await vm.handleConnect({
       source: 'xerites-oxoulum',
@@ -164,26 +171,18 @@ describe('RoomView - Multiple Connections', () => {
       targetHandle: 'p-p1'
     });
 
-    // Expect confirmation modal to be visible
-    expect(vm.showConfirmationModal).toBe(true);
-    expect(vm.confirmationModalText).toContain("This will create an unusual and rare connection");
+    // Should NOT show a confirmation modal — warning is inline in the Add Connection form
+    expect(vm.showConfirmationModal).toBe(false);
 
-    // Mock reportForm.setConnection
-    vm.reportForm = {
-      setConnection: vi.fn(),
-      open: vi.fn(),
-    };
-
-    // Confirm
-    await vm.handleConfirmConnection();
-
-    expect(vm.reportForm.setConnection).toHaveBeenCalledWith(
+    // Should open the Add Connection form with the multiple portal link warning
+    expect(setConnectionMock).toHaveBeenCalledWith(
       'xerites-oxoulum',
       'x-p5',
       'puyitos-aiataum',
       'p-p1',
-      true // isLoop
+      expect.stringContaining('multiple portal link')
     );
+    expect(setConnectionMock.mock.calls[0][4]).toContain('extremely');
   });
 
   it('does NOT show confirmation modal when replacing a center handle with a real handle between two roads zones', async () => {
@@ -346,10 +345,81 @@ describe('RoomView - Multiple Connections', () => {
     expect(vm.showConfirmationModal).toBe(false);
   });
 
-  it('allows reassigning the source handle on a roads→non-roads connection (different fromHandleId, same zone pair)', async () => {
+  it('opens the Add Connection form with a warning when a roads zone tries to connect to the same non-roads zone via a second portal', async () => {
     const store = useRoomStore();
-    // soros-axaesum is roads, nightcreak-marsh is non-roads (no mapType entry → treated as non-roads)
-    // Existing connection uses s-p2 as the source handle
+    // hynitos-ayousum is roads, hightree-isle is non-roads (slots:7, no customHandles)
+    // Existing connection already links h-p1 → center
+    store.connections = [
+      {
+        id: 'YC_SutyXDKGgg08nwWI78',
+        roomId: 'test-room',
+        fromZoneId: 'hynitos-ayousum',
+        toZoneId: 'hightree-isle',
+        fromHandleId: 'h-p1',
+        toHandleId: 'center',
+        expiresAt: new Date(Date.now() + 1000000).toISOString(),
+        reportedAt: new Date().toISOString(),
+      }
+    ];
+
+    const wrapper = mount(RoomView, {
+      props: { id: 'test-room' },
+      global: {
+        plugins: [pinia],
+        stubs: {
+          ZoneNode: true,
+          NonRoadsNode: true,
+          ConnectionEdge: true,
+          ConnectionLine: true,
+          ReportForm: true,
+          DebugTray: true,
+          MegaToast: true,
+          TopToolbar: true,
+          TopLeftToolbar: true,
+          TopRightToolbar: true,
+          BottomRightPins: true,
+          MobileRoomSummary: true,
+          Background: true,
+          Controls: true,
+        }
+      }
+    });
+
+    const vm = wrapper.vm as any;
+
+    // Mock reportForm.setConnection before the connect call
+    const setConnectionMock = vi.fn();
+    vm.reportForm = {
+      setConnection: setConnectionMock,
+      open: vi.fn(),
+    };
+
+    // User attempts to connect hynitos-ayousum's NW portal (h-p6) to hightree-isle's center
+    await vm.handleConnect({
+      source: 'hynitos-ayousum',
+      sourceHandle: 'h-p6',
+      target: 'hightree-isle',
+      targetHandle: 'center',
+    });
+
+    // Should NOT show a confirmation modal — warning is inline in the Add Connection form
+    expect(vm.showConfirmationModal).toBe(false);
+
+    // Should open the Add Connection form with the multiple portal link warning
+    expect(setConnectionMock).toHaveBeenCalledWith(
+      'hynitos-ayousum',
+      'h-p6',
+      'hightree-isle',
+      'center',
+      expect.stringContaining('multiple portal link')
+    );
+    expect(setConnectionMock.mock.calls[0][4]).toContain('extremely');
+  });
+
+  it('does NOT show confirmation modal when reassigning roads-side handle to center on a roads→non-roads connection', async () => {
+    const store = useRoomStore();
+    // soros-axaesum is roads, nightcreak-marsh is non-roads
+    // Existing connection uses s-p2 as the source handle; user reassigns to center
     store.connections = [
       {
         id: 'gKfdzU8EvQHVGLTx3Ze65',
@@ -394,22 +464,16 @@ describe('RoomView - Multiple Connections', () => {
 
     const vm = wrapper.vm as any;
 
-    // User drags from s-p3 (a different source handle) to the same nightcreak-marsh destination
+    // User reassigns to center (one side is center → not a genuine second portal)
     await vm.handleConnect({
       source: 'soros-axaesum',
-      sourceHandle: 's-p3',
+      sourceHandle: 'center',
       target: 'nightcreak-marsh',
       targetHandle: 'center',
     });
 
-    // Should NOT show the error toast — this is a handle reassignment, not a duplicate connection
-    expect(vm.toast).not.toBe("A non-roads zone cannot have multiple portal entrances to a roads zone.");
+    // Should NOT show the confirmation modal — one side uses center, this is a handle replacement
     expect(vm.showConfirmationModal).toBe(false);
-
-    // Should have called fetch to update the existing connection
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('gKfdzU8EvQHVGLTx3Ze65'),
-      expect.objectContaining({ method: 'PATCH' })
-    );
+    expect(vm.toast).not.toBe("A non-roads zone cannot have multiple portal entrances to a roads zone.");
   });
 });
