@@ -132,7 +132,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(401).send({ error: 'Invalid password' });
     }
 
-    const token = app.jwt.sign({ roomId: room.id }, { expiresIn: '24h' });
+    const token = app.jwt.sign({ roomId: room.id }, { expiresIn: '7d' });
     return reply.send({ token });
   });
 
