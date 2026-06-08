@@ -66,6 +66,7 @@ const submitting = ref(false);
 
 watch(isOpen, (newVal) => {
   if (newVal) {
+    document.addEventListener('keydown', handleTabKey, true);
     nextTick(() => {
       isModalReady.value = true;
       if (isConnectionMode.value) {
@@ -75,6 +76,7 @@ watch(isOpen, (newVal) => {
       }
     });
   } else {
+    document.removeEventListener('keydown', handleTabKey, true);
     isModalReady.value = false;
     isConnectionMode.value = false;
     warningMessage.value = '';
@@ -254,6 +256,35 @@ function onTimeKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') submitAndClose();
 }
 
+const modalRef = ref<HTMLElement | null>(null);
+
+function handleTabKey(e: KeyboardEvent) {
+  if (e.key !== 'Tab' || !modalRef.value) return;
+
+  // Always intercept Tab — never let the browser move focus freely while modal is open.
+  e.preventDefault();
+  e.stopPropagation();
+
+  const focusable = Array.from(
+    modalRef.value.querySelectorAll<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  );
+  if (!focusable.length) return;
+
+  let currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+  // If focus is outside the modal for any reason, start from the beginning.
+  if (currentIndex === -1) currentIndex = e.shiftKey ? 0 : focusable.length - 1;
+
+  if (e.shiftKey) {
+    const prevIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+    focusable[prevIndex].focus();
+  } else {
+    const nextIndex = currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1;
+    focusable[nextIndex].focus();
+  }
+}
+
 const timeInputEl = ref<{ focus: () => void } | null>(null);
 const toComboboxInputEl = ref<{ focus: () => void; flash: () => void } | null>(null);
 const fromComboboxInputEl = ref<{ focus: () => void } | null>(null);
@@ -313,7 +344,7 @@ defineExpose({
       :class="Z_INDEX.MODAL"
       @click.self="close"
     >
-      <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-xl shadow-2xl" @click.stop>
+      <div ref="modalRef" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-xl shadow-2xl" @click.stop>
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-xl font-bold text-white">Add Connection</h2>
           <button @click="close" class="text-gray-400 hover:text-white transition-colors p-1">
