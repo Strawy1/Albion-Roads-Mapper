@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { useRoomStore } from '../src/stores/useRoomStore.js';
@@ -192,6 +192,66 @@ describe('ZoneCombobox filtering logic', () => {
         expect(filteredZones.some((z: any) => z.id === zone.id)).toBe(false);
     }
     
+    wrapper.unmount();
+  });
+});
+
+describe('ZoneCombobox Tab key accepts single result', () => {
+  it('selects the only non-disabled result when Tab is pressed', () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '' },
+      global: { plugins: [createPinia()] },
+    });
+
+    // Simulate: user typed "Saddle" — filteredZones has exactly one result: Saddle Tor
+    wrapper.vm.setTestQuery('Saddle');
+
+    // Verify the filter immediately returns exactly one non-disabled zone (computed is lazy/sync)
+    const filtered: any[] = wrapper.vm.getTestFilteredZones();
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].name).toBe('Saddle Tor');
+
+    // Fire Tab via the exposed trigger — no reka-ui involved
+    wrapper.vm.triggerTabKeydown();
+
+    const emitted = wrapper.emitted('update:modelValue');
+    expect(emitted).toBeTruthy();
+    expect(emitted![0][0]).toBe('saddle-tor');
+    wrapper.unmount();
+  });
+
+  it('does NOT auto-select when there are multiple results', () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '' },
+      global: { plugins: [createPinia()] },
+    });
+
+    // "a" matches many zones
+    wrapper.vm.setTestQuery('a');
+    expect(wrapper.vm.getTestFilteredZones().length).toBeGreaterThan(1);
+
+    wrapper.vm.triggerTabKeydown();
+
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy();
+    wrapper.unmount();
+  });
+
+  it('does NOT auto-select when the only result is disabled', () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '', disabledIds: ['saddle-tor'] },
+      global: { plugins: [createPinia()] },
+    });
+
+    // "Saddle" matches only Saddle Tor, but it is in disabledIds
+    wrapper.vm.setTestQuery('Saddle');
+    expect(wrapper.vm.getTestFilteredZones().length).toBe(1);
+
+    wrapper.vm.triggerTabKeydown();
+
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy();
     wrapper.unmount();
   });
 });

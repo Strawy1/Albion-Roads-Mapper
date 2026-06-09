@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, inject } from 'vue';
-import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import ZoneCombobox from './ZoneCombobox.vue';
 import TutorialTooltip from './tutorial/TutorialTooltip.vue';
 import TimeInput from './common/TimeInput.vue';
+import TagZone from './common/TagZone.vue';
+import TagTier from './common/TagTier.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { useTutorialStore } from '@/stores/useTutorialStore';
 import { addConnection } from '@/utils/roomOperations';
+import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, getHandleFacing } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
+import TagExtras from "@/components/common/TagExtras.vue";
 
 const props = defineProps<{}>();
 
@@ -30,6 +33,10 @@ const isLocked = computed(() => store.connections.length === 0);
 const isConnectionMode = ref(false);
 const warningMessage = ref('');
 const secondsRemaining = ref<number | null>(null);
+const connectorColor = computed(() => {
+  if (secondsRemaining.value === null) return '#6b7280';
+  return connectionStyle(secondsRemaining.value * 1000, false).stroke;
+});
 const slots = ref<7 | 20>(7);
 const isRoadsZone = computed(() => {
   if (!toZoneId.value) return false;
@@ -287,7 +294,7 @@ function handleTabKey(e: KeyboardEvent) {
 
 const timeInputEl = ref<{ focus: () => void } | null>(null);
 const toComboboxInputEl = ref<{ focus: () => void; flash: () => void } | null>(null);
-const fromComboboxInputEl = ref<{ focus: () => void } | null>(null);
+const fromZone = computed(() => fromZoneId.value ? ZONE_BY_ID.get(fromZoneId.value) : null);
 
 function focusToCombobox() {
   toComboboxInputEl.value?.focus();
@@ -329,7 +336,7 @@ defineExpose({
     open();
   },
   focusTimeInput,
-  focusToCombobox, 
+  focusToCombobox,
   flashToCombobox,
   setTargetPosition: (pos: { x: number, y: number }) => {
     targetPosition.value = pos;
@@ -344,8 +351,8 @@ defineExpose({
       :class="Z_INDEX.MODAL"
       @click.self="close"
     >
-      <div ref="modalRef" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-xl shadow-2xl" @click.stop>
-        <div class="flex items-center justify-between mb-6">
+      <div ref="modalRef" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-lg shadow-2xl" @click.stop>
+        <div class="flex items-center justify-between mb-3">
           <h2 class="text-xl font-bold text-white">Add Connection</h2>
           <button @click="close" class="text-gray-400 hover:text-white transition-colors p-1">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -361,81 +368,62 @@ defineExpose({
           data-testid="report-form"
           @submit.prevent="submitAndClose"
         >
-          <!-- From -->
-          <div class="flex flex-col gap-1.5">
-            <label class="text-sm font-medium text-gray-400">From Zone</label>
-            <template v-if="isLocked">
-              <TooltipProvider :delay-duration="0">
-                <TooltipRoot>
-                  <TooltipTrigger asChild>
-                    <ZoneCombobox
-                      ref="fromComboboxInputEl"
-                      v-model="fromZoneId"
-                      placeholder="From zone…"
-                      data-testid="from-combobox"
-                      :smart-already-added="true"
-                      already-added-placement="top"
-                      :error="secondsRemaining !== null && !fromZoneId"
-                      :disabled="true"
-                      :only-roads-hideout="!tutorialStore.completed"
-                      icon="🏠"
-                      @tab-select="focusToCombobox"
-                      @select="focusToCombobox"
-                      @update:model-value="fromHandleId = null"
-                    />
-                  </TooltipTrigger>
-                  <TooltipPortal>
-                    <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-50">
-                      Locked until more zones added
-                    </TooltipContent>
-                  </TooltipPortal>
-                </TooltipRoot>
-              </TooltipProvider>
-            </template>
-            <ZoneCombobox
-              v-else
-              ref="fromComboboxInputEl"
-              v-model="fromZoneId"
-              placeholder="From zone…"
-              data-testid="from-combobox"
-              :smart-already-added="true"
-              already-added-placement="top"
-              :error="secondsRemaining !== null && !fromZoneId"
-              :only-roads-hideout="!tutorialStore.completed"
-              @tab-select="focusToCombobox"
-              @select="focusToCombobox"
-              @update:model-value="(_) => { if (fromHandleId && !fromHandleId.startsWith('default-')) fromHandleId = null; }"
-            />
-          </div>
-
-          <!-- To -->
-          <div ref="toZoneContainer">
-            <TutorialTooltip
-              v-if="isModalReady && !tutorialStore.completed && tutorialStore.step === 1 && toZoneContainer"
-              :target="toZoneContainer"
-              message="Enter your destination zone by hovering over the portal in game for its name. For tutorial purposes you can only choose hideouts."
-              pointing="down"
-              containerClass="w-72"
-              :offset-y="20"
-            />
-            <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-medium text-gray-400">To Zone</label>
-              <ZoneCombobox
-                ref="toComboboxInputEl"
-                v-model="toZoneId"
-                placeholder="To zone…"
-                :excluded-ids="[fromZoneId, ...connectedToFromZone]"
-                :smart-already-added="true"
-                already-added-placement="bottom"
-                data-testid="to-combobox"
-                :error="secondsRemaining !== null && !toZoneId"
-                :only-roads-hideout="!tutorialStore.completed"
-                @tab-select="focusTimeInput"
-                @select="focusTimeInput"
-                @update:model-value="(_) => { if (toHandleId && !toHandleId.startsWith('default-')) toHandleId = null; }"
-              />
+          <!-- From / To -->
+          <div class="flex gap-2">
+            <!-- Vertical connector -->
+            <div class="flex flex-col items-center shrink-0 pt-3 pb-2.5">
+              <div class="w-3 h-3 rounded-full shrink-0" :style="{ backgroundColor: connectorColor }"></div>
+              <div class="w-px flex-1" :style="{ backgroundColor: connectorColor }"></div>
+              <svg class="mt-0.5" width="12" height="10" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L5 5L9 1" :stroke="connectorColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </div>
-          </div>
+
+            <!-- From / To rows -->
+            <div class="flex flex-col gap-2 flex-1 min-w-0">
+              <!-- From -->
+              <div class="flex flex-col">
+                <div class="flex items-center gap-2 py-2.5 md:py-2 opacity-100 min-w-0">
+                  <span class="flex-1 text-white text-base leading-none">{{ fromZone?.name ?? fromZoneId }}</span>
+                  <TagExtras :zone-id="fromZoneId" />
+                  <TagZone v-if="fromZone" :type="fromZone.type" :category="fromZone.category" :map-shape="fromZone.mapShape" :zone-name="fromZone.name" :proximity-to="fromZone.proximityTo" />
+                  <TagTier v-if="fromZone" :tier="fromZone.tier" :type="fromZone.type" />
+                </div>
+              </div>
+
+              <!-- To -->
+              <div ref="toZoneContainer">
+                <TutorialTooltip
+                  v-if="isModalReady && !tutorialStore.completed && tutorialStore.step === 1 && toZoneContainer"
+                  :target="toZoneContainer"
+                  message="Enter your destination zone by hovering over the portal in game for its name. For tutorial purposes you can only choose hideouts."
+                  pointing="down"
+                  containerClass="w-72"
+                  :offset-y="20"
+                />
+                <div class="flex items-center gap-2">
+                  <div class="flex-1">
+                  <ZoneCombobox
+                    ref="toComboboxInputEl"
+                    v-model="toZoneId"
+                    variant="underline"
+                    placeholder="To zone…"
+                    :excluded-ids="[fromZoneId]"
+                    :disabled-ids="connectedToFromZone"
+                    :smart-already-added="true"
+                    already-added-placement="bottom"
+                    data-testid="to-combobox"
+                    :error="secondsRemaining !== null && !toZoneId"
+                    :only-roads-hideout="!tutorialStore.completed"
+                    @tab-select="focusTimeInput"
+                    @select="focusTimeInput"
+                    @update:model-value="(_) => { if (toHandleId && !toHandleId.startsWith('default-')) toHandleId = null; }"
+                  />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div><!-- end From/To wrapper -->
           
           <!-- Time + Slots -->
           <div class="grid grid-cols-2 gap-3">
@@ -494,7 +482,7 @@ defineExpose({
         </form>
 
         <div class="pt-4 text-[12px] text-gray-500 leading-relaxed">
-          <p><strong>Hint:</strong> Press <span class="key">tab</span> to move between fields, <span class="key">enter</span> to submit. This saves you time entering the data and reduces risk.</p>
+          <p><strong>Hint:</strong> Press <span class="key">tab</span> to move between fields, <span class="key">enter</span> to submit. This saves you time and reduces risk.</p>
         </div>
       </div>
     </div>
