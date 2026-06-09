@@ -10,7 +10,7 @@ defineProps<{
 </script>
 
 <template>
-  <span class="truncate flex-1 flex items-center gap-1"><img v-if="zone.isRoadsHideout" src="/images/hideout.png" class="shrink-0 w-4 h-4 object-contain" title="Hideout" />{{ zone.name }}</span>
+  <span class="truncate flex-1 flex items-center gap-1"><img v-if="zone.type === 'roadsHideout'" src="/images/hideout.png" class="shrink-0 w-4 h-4 object-contain" title="Hideout" />{{ zone.name }}</span>
   <TagExtras :zone-id="zone.id" />
   <TagZone :type="zone.type" :category="zone.category" :map-shape="zone.mapShape" :zone-name="zone.name" :proximity-to="zone.proximityTo" />
   <TagTier :tier="zone.tier" :type="zone.type" />
