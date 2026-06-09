@@ -183,7 +183,7 @@ function getHandleFacing(left: string, top: string): string {
 </script>
 
 <template>
-  <div class="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4" :class="Z_INDEX.MODAL" @click.self="emit('close')">
+  <div class="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-md p-4" :class="Z_INDEX.MODAL" @click.self="emit('close')">
     <div class="max-w-lg w-full p-2 flex flex-col items-center relative">
       <div 
         ref="containerRef"

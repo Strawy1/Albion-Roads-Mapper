@@ -321,7 +321,7 @@ defineExpose({
       <!-- Countdown label -->
       <div
         data-trigger="true"
-        class="text-xs px-3 py-2 inline-flex flex-col items-center justify-center gap-0.5 rounded-full text-white cursor-pointer backdrop-blur-sm"
+        class="text-xs px-3 py-2 inline-flex flex-col items-center justify-center gap-0.5 rounded-full text-white cursor-pointer backdrop-blur-md"
         :style="{ backgroundColor: pillStyle.color + 'b3', border: `1px solid ${pillStyle.stroke}` }"
         @click.stop="showPopover = !showPopover"
         @mousedown.stop
