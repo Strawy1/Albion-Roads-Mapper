@@ -26,6 +26,36 @@ defineProps<{ ms: number }>();
 </template>
 
 <style scoped>
+/* noinspection CssUnusedSymbol */
+.route-pill-blue {
+  border: 2px solid #3b82f6;
+  color: #bfdbfe;
+  background: rgba(29, 78, 216, 0.5);
+}
+
+/* noinspection CssUnusedSymbol */
+.route-pill-orange {
+  border: 2px solid #f59e0b;
+  color: #f59e0b;
+  background: rgba(172, 105, 0, 0.7);
+  animation: route-pill-pulse-orange 3s ease-in-out infinite;
+}
+
+/* noinspection CssUnusedSymbol */
+.route-pill-red {
+  border: 2px dotted #ef4444;
+  color: #ef4444;
+  background: rgba(163, 0, 0, 0.5);
+  animation: route-pill-pulse-red 2s ease-in-out infinite;
+}
+
+/* noinspection CssUnusedSymbol */
+.route-pill-expired {
+  border: 2px dotted #acadae;
+  color: #acadae;
+  background: rgba(30, 30, 30, 0.5);
+}
+
 @keyframes route-pill-pulse-orange {
   0%, 100% {
     background: rgba(172, 105, 0, 0.7);
