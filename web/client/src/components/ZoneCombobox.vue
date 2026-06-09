@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import {
   ComboboxRoot,
   ComboboxInput,
@@ -9,23 +9,17 @@ import {
   ComboboxItem,
   ComboboxItemIndicator,
   TooltipProvider,
-  TooltipRoot,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipPortal,
 } from 'reka-ui';
 import { ZONES } from 'shared';
-import type { Zone, ZoneType } from 'shared';
-import { useRoomStore } from '../stores/useRoomStore.js';
-import { useRoomMemoryStore } from '../stores/useRoomMemoryStore.js';
-import TagTier from './common/TagTier.vue';
-import TagZone from './common/TagZone.vue';
-import { TYPE_LABELS, getZoneTypeDisplay } from '../utils/zoneStyles';
+import type { Zone } from 'shared';
+import { useRoomStore } from '@/stores/useRoomStore';
+import ZoneComboItem from './common/ZoneComboItem.vue';
 
 const props = withDefaults(defineProps<{
   modelValue: string;
   placeholder?: string;
   excludedIds?: string[];
+  disabledIds?: string[];
   showAlreadyAdded?: boolean;
   smartAlreadyAdded?: boolean;
   alreadyAddedPlacement?: 'top' | 'bottom';
@@ -33,12 +27,14 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   icon?: string;
   onlyRoadsHideout?: boolean;
+  variant?: 'default' | 'underline';
 }>(), {
   showAlreadyAdded: true,
   smartAlreadyAdded: false,
   alreadyAddedPlacement: 'bottom',
   disabled: false,
   onlyRoadsHideout: false,
+  variant: 'default',
 });
 
 const emit = defineEmits<{
@@ -48,38 +44,17 @@ const emit = defineEmits<{
 }>();
 
 const store = useRoomStore();
-const memoryStore = useRoomMemoryStore();
 const query = ref('');
 const comboboxInput = ref<any>(null);
+const comboboxWrapper = ref<HTMLElement | null>(null);
 const isOpen = ref(false);
 const highlightedId = ref<string | null>(null);
+const singleResultId = ref<string | null>(null);
 const isFlashing = ref(false);
 
 const selectedZone = computed<Zone | undefined>(() =>
   props.modelValue ? ZONES.find((z) => z.id === props.modelValue) : undefined
 );
-
-function formatLastSeen(isoDate: string): string {
-  const d = new Date(isoDate);
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-defineExpose({
-  focus: () => {
-    comboboxInput.value?.$el?.focus();
-  },
-  flash: () => {
-    isFlashing.value = true;
-    setTimeout(() => {
-      isFlashing.value = false;
-    }, 1000);
-  }
-});
-
-/** Full label including hideout distinction */
-function zoneTypeLabel(zone: Zone): string {
-  return getZoneTypeDisplay(zone.type, zone.mapShape).label;
-}
 
 // Zone IDs that appear in any current connection
 const mappedZoneIds = computed<Set<string>>(() => {
@@ -91,12 +66,16 @@ const mappedZoneIds = computed<Set<string>>(() => {
   return ids;
 });
 
+const disabledIdsSet = computed<Set<string>>(() => new Set(props.disabledIds ?? []));
+
 const filteredZones = computed<Zone[]>(() => {
   const q = query.value.toLowerCase().trim();
   let zones = ZONES.filter((z) => {
     if (props.onlyRoadsHideout && !z.isRoadsHome) return false;
     if (props.excludedIds && props.excludedIds.includes(z.id)) return false;
-    if (props.showAlreadyAdded === false && mappedZoneIds.value.has(z.id)) return false;
+    if (props.showAlreadyAdded === false && mappedZoneIds.value.has(z.id) && !disabledIdsSet.value.has(z.id)) return false;
+    // disabledIds zones only appear when the user has typed a query that matches them
+    if (disabledIdsSet.value.has(z.id)) return !!q && z.name.toLowerCase().includes(q);
     if (props.smartAlreadyAdded && !q && mappedZoneIds.value.has(z.id)) return false;
     
     if (!q) {
@@ -128,6 +107,34 @@ const filteredZones = computed<Zone[]>(() => {
   }
 
   return zones.slice(0, 100);
+});
+
+defineExpose({
+  focus: () => {
+    comboboxInput.value?.$el?.focus();
+  },
+  flash: () => {
+    isFlashing.value = true;
+    setTimeout(() => {
+      isFlashing.value = false;
+    }, 1000);
+  },
+  /** Exposed for testing only: mutate query and read filtered results from within the component closure */
+  setTestQuery: (val: string) => { query.value = val; },
+  getTestFilteredZones: () => filteredZones.value,
+  triggerTabKeydown: () => {
+    // Ensure singleResultId is in sync before firing Tab (watch is async in tests)
+    const nonDisabled = filteredZones.value.filter((z) => !disabledIdsSet.value.has(z.id));
+    singleResultId.value = nonDisabled.length === 1 ? nonDisabled[0].id : null;
+    const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    onWrapperKeydown(e);
+  },
+});
+
+// Track a single non-disabled result so Tab can accept it even before reka-ui highlights it
+watch(filteredZones, (zones) => {
+  const nonDisabled = zones.filter((z) => !disabledIdsSet.value.has(z.id));
+  singleResultId.value = nonDisabled.length === 1 ? nonDisabled[0].id : null;
 });
 
 /** Convert a stored zone ID back to the friendly display name for the input */
@@ -165,7 +172,7 @@ function onInputFocus() {
  */
 function onWrapperKeydown(e: KeyboardEvent) {
   if (e.key !== 'Tab' && e.key !== 'Enter') return;
-  const id = highlightedId.value;
+  const id = highlightedId.value ?? (e.key === 'Tab' ? singleResultId.value : null);
   if (!id) return;
   e.preventDefault();
   emit('update:modelValue', id);
@@ -182,7 +189,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
 <template>
   <!-- capture Tab on the wrapper before reka-ui's internal listeners fire -->
   <TooltipProvider :delay-duration="300">
-  <div class="relative" @keydown.capture="onWrapperKeydown">
+  <div ref="comboboxWrapper" class="relative" @keydown.capture="onWrapperKeydown">
     <ComboboxRoot
       :model-value="modelValue"
       v-model:open="isOpen"
@@ -193,11 +200,10 @@ function onWrapperKeydown(e: KeyboardEvent) {
       data-testid="zone-combobox"
     >
       <div 
-        class="flex items-center border rounded bg-gray-800 text-white px-3 py-2.5 md:py-2 transition-colors focus-within:border-white" 
         :class="[
-          error ? 'border-red-500' : (isFlashing ? 'border-indigo-400' : 'border-gray-600'),
-          isFlashing ? 'flash-animation' : '',
-          disabled ? 'cursor-not-allowed text-gray-400' : ''
+          variant === 'underline'
+            ? ['flex items-center text-white py-1 px-1 -mx-1 hover:rounded transition-colors border-b hover:border-transparent hover:bg-gray-700/40', error ? 'border-dashed border-red-500' : (modelValue ? 'border-green-500' : 'border-dashed border-gray-500'), isFlashing ? 'flash-animation' : '', disabled ? 'cursor-not-allowed text-gray-400' : '']
+            : ['flex items-center border rounded bg-gray-800 text-white px-3 py-2.5 md:py-2 transition-colors focus-within:border-white', error ? 'border-red-500' : (isFlashing ? 'border-indigo-400' : 'border-gray-600'), isFlashing ? 'flash-animation' : '', disabled ? 'cursor-not-allowed text-gray-400' : '']
         ]"
       >
         <span v-if="icon" class="mr-2 text-sm leading-none shrink-0">{{ icon }}</span>
@@ -207,10 +213,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
           class="flex-1 flex items-center gap-2 min-w-0 cursor-text"
           @click="() => { comboboxInput.$el?.focus(); }"
         >
-          <span class="truncate flex-1 text-base leading-none">{{ selectedZone.name }}</span>
-          <img v-if="selectedZone.id === store.homeZoneId" src="/images/hideout.png" class="shrink-0 w-4 h-4 object-contain" />
-          <TagZone :type="selectedZone.type" :category="selectedZone.category" :map-shape="selectedZone.mapShape" :zone-name="selectedZone.name" :proximity-to="selectedZone.proximityTo" />
-          <TagTier :tier="selectedZone.tier" :type="selectedZone.type" />
+          <ZoneComboItem :zone="selectedZone" />
         </div>
         <ComboboxInput
           ref="comboboxInput"
@@ -226,6 +229,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
           @focus="onInputFocus"
         />
         <ComboboxTrigger 
+          v-if="variant !== 'underline'"
           class="pl-3 py-0 text-gray-400 text-sm leading-none"
           :class="disabled ? 'cursor-not-allowed' : 'hover:text-white'"
           :disabled="disabled"
@@ -245,27 +249,19 @@ function onWrapperKeydown(e: KeyboardEvent) {
             v-for="zone in filteredZones"
             :key="zone.id"
             :value="zone.id"
-            class="flex items-center gap-2 px-3 py-2 text-sm text-white cursor-pointer data-[highlighted]:bg-gray-700 transition-colors"
-            :class="mappedZoneIds.has(zone.id) && zone.id !== modelValue ? 'bg-green-900/40 hover:bg-green-900/60' : 'hover:bg-gray-700'"
+            :disabled="disabledIdsSet.has(zone.id)"
+            class="flex items-center gap-2 px-3 py-2 text-sm transition-colors"
+            :class="[
+              disabledIdsSet.has(zone.id)
+                ? 'opacity-50 cursor-not-allowed text-white bg-green-900/40'
+                : (mappedZoneIds.has(zone.id) && zone.id !== modelValue
+                    ? 'text-white cursor-pointer bg-green-900/40 hover:bg-green-900/60 data-[highlighted]:bg-gray-700'
+                    : 'text-white cursor-pointer hover:bg-gray-700 data-[highlighted]:bg-gray-700')
+            ]"
           >
-            <span class="truncate flex-1">{{ zone.name }}</span>
-            <span v-if="mappedZoneIds.has(zone.id) && zone.id !== modelValue" class="shrink-0 bg-green-700 text-white text-[11px] font-semibold px-2 py-0.5 rounded-full leading-none">Already Added</span>
-            <img v-if="zone.id === store.homeZoneId" src="/images/hideout.png" class="shrink-0 w-5 h-5 object-contain" title="Room home zone" />
-            <TagZone :type="zone.type" :category="zone.category" :map-shape="zone.mapShape" :zone-name="zone.name" :proximity-to="zone.proximityTo" />
-            <TagTier :tier="zone.tier" :type="zone.type" />
-            <template v-if="memoryStore.getEntry(zone.id)">
-              <TooltipRoot>
-                <TooltipTrigger asChild>
-                  <span class="shrink-0 text-yellow-300 text-xs cursor-default">⏳</span>
-                </TooltipTrigger>
-                <TooltipPortal>
-                  <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]">
-                    Last seen: {{ formatLastSeen(memoryStore.getEntry(zone.id)!.timesAdded[memoryStore.getEntry(zone.id)!.timesAdded.length - 1]) }}
-                  </TooltipContent>
-                </TooltipPortal>
-              </TooltipRoot>
-            </template>
-            <ComboboxItemIndicator class="shrink-0 text-green-400">✓</ComboboxItemIndicator>
+            <ZoneComboItem :zone="zone" />
+            <span v-if="disabledIdsSet.has(zone.id)" class="shrink-0 text-green-400">✓</span>
+            <ComboboxItemIndicator v-else class="shrink-0 text-green-400">✓</ComboboxItemIndicator>
           </ComboboxItem>
         </ComboboxViewport>
       </ComboboxContent>
