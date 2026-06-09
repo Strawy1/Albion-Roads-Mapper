@@ -165,6 +165,19 @@ function onInputFocus() {
   isOpen.value = true;
 }
 
+function onInputBlur(_e: FocusEvent) {
+  // onWrapperKeydown never fires for Tab (reka-ui or browser eats it before capture).
+  // Instead, commit the highlighted or single result here on blur — covers both
+  // arrow-key navigation and single-result Tab. Enter is already handled by
+  // reka-ui's own onSelect path.
+  const id = highlightedId.value ?? singleResultId.value;
+  if (id) {
+    emit('update:modelValue', id);
+    query.value = '';
+    highlightedId.value = null;
+  }
+}
+
 /**
  * Capture Tab on the wrapper so we intercept before reka-ui's own keydown
  * handlers (which only cover Up/Down). When a dropdown item is highlighted we
@@ -227,6 +240,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
           ]"
           data-testid="zone-combobox-input"
           @focus="onInputFocus"
+          @blur="onInputBlur"
         />
         <ComboboxTrigger 
           v-if="variant !== 'underline'"
