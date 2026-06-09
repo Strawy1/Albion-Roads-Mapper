@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import type { CustomHandle } from 'shared';
-import { rotationStepsToDegrees, rotateClockwise, rotateCounterClockwise } from 'shared';
+import { rotateClockwise, rotateCounterClockwise } from 'shared';
 import { useTutorialStore } from '@/stores/useTutorialStore';
 import { Z_INDEX } from '@/constants/Layers';
 import TutorialTooltip from '../../tutorial/TutorialTooltip.vue';
@@ -307,15 +307,6 @@ function getHandleFacing(left: string, top: string): string {
   background: transparent;
   box-sizing: border-box;
 }
-
-.handle.facing-n  { transform: translate(-50%, -50%) rotate(0deg); }
-.handle.facing-ne { transform: translate(-50%, -50%) rotate(45deg); }
-.handle.facing-e  { transform: translate(-50%, -50%) rotate(90deg); }
-.handle.facing-se { transform: translate(-50%, -50%) rotate(135deg); }
-.handle.facing-s  { transform: translate(-50%, -50%) rotate(180deg); }
-.handle.facing-sw { transform: translate(-50%, -50%) rotate(225deg); }
-.handle.facing-w  { transform: translate(-50%, -50%) rotate(270deg); }
-.handle.facing-nw { transform: translate(-50%, -50%) rotate(315deg); }
 
 .handle::after {
   content: '';

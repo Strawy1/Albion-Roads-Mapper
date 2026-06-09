@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, nextTick, inject, type Ref, onUpdated } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted, nextTick, inject, type Ref } from 'vue';
 import { BaseEdge, EdgeLabelRenderer, useVueFlow } from '@vue-flow/core';
 import type { EdgeProps } from '@vue-flow/core';
 import { connectionStyle } from '@/utils/connectionStyle';
