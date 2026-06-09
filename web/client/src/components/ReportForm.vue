@@ -381,7 +381,7 @@ defineExpose({
             <div class="flex flex-col items-center shrink-0 pt-3.5 pb-2.5">
               <div class="w-3 h-3 shrink-0 rotate-45" :style="{ backgroundColor: connectorColor }"></div>
               <div class="w-0 flex-1 border-l-2" :style="{ borderColor: connectorColor, borderStyle: connectorDash }"></div>
-              <svg class="relative z-10 -my-1.5" width="12" height="10" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg class="relative z-10 -my-1.5" width="14" height="10" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M1 1L5 5L9 1" :stroke="connectorColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
               <div class="w-0 flex-1 border-l-2" :style="{ borderColor: connectorColor, borderStyle: connectorDash }"></div>

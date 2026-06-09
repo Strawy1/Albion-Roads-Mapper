@@ -223,7 +223,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
         <!-- Selected zone display (shown when a zone is chosen and dropdown is closed) -->
         <div
           v-if="selectedZone && !isOpen"
-          class="flex-1 flex items-center gap-2 min-w-0 cursor-text"
+          class="flex-1 flex items-center gap-2 min-w-0 cursor-text h-[22px]"
           @click="() => { comboboxInput.$el?.focus(); }"
         >
           <ZoneComboItem :zone="selectedZone" />
@@ -233,7 +233,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
           v-model="query"
           :display-value="displayValue"
           :placeholder="placeholder ?? 'Search zones…'"
-          class="bg-transparent py-0 outline-none text-base leading-none min-w-0"
+          class="bg-transparent py-0 outline-none text-base leading-none min-w-0 h-[22px]"
           :class="[
             disabled ? 'cursor-not-allowed opacity-75' : '',
             selectedZone && !isOpen ? 'w-0 opacity-0 absolute' : 'flex-1'
