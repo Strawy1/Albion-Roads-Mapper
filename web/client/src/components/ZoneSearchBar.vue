@@ -4,7 +4,7 @@ import { ZONE_BY_ID } from 'shared';
 import TagTier from './common/TagTier.vue';
 import TagZone from './common/TagZone.vue';
 import TagExtras from './common/TagExtras.vue';
-import { TYPE_LABELS, getZoneTypeDisplay } from '../utils/zoneStyles';
+import { TYPE_LABELS, getZoneTypeDisplay } from '@/utils/zoneStyles';
 import type { ZoneType } from 'shared';
 
 const props = defineProps<{
@@ -83,7 +83,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="relative w-full md:w-96 mt-2 md:mt-0" ref="containerRef">
-    <div class="flex items-center border border-gray-700/50 rounded frosted-background text-white px-3 py-1.5 transition-colors focus-within:border-white" :class="{ '!bg-gray-800/80': isOpen }">
+    <div class="flex items-center border border-gray-700/50 rounded frosted-background text-white px-3 py-1.5 transition-colors duration-300 focus-within:border-gray-500 focus-within:rounded-b-none" :class="{ '!bg-gray-800/80': isOpen }">
       <span class="mr-2 text-gray-400 text-sm leading-none shrink-0">🔍</span>
       <input
         ref="inputRef"
@@ -105,7 +105,7 @@ function onKeydown(e: KeyboardEvent) {
     <Transition name="fade">
     <div
       v-if="isOpen"
-      class="absolute z-[200] mt-1 w-full frosted-background border border-gray-300/50 rounded-xl shadow-3xl max-h-64 overflow-y-auto"
+      class="absolute z-[200] w-full frosted-background border border-t-0 border-gray-300/50 rounded-xl rounded-t-none shadow-3xl max-h-64 overflow-y-auto"
     >
       <div v-if="filteredNodes.length === 0" class="px-3 py-2 text-sm text-gray-400">
         No active zones found
@@ -135,7 +135,7 @@ function onKeydown(e: KeyboardEvent) {
 <style scoped>
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.3s ease;
 }
 
 .fade-enter-from,
