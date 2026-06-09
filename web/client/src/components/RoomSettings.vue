@@ -12,6 +12,7 @@ import TutorialTooltip from './tutorial/TutorialTooltip.vue';
 
 const props = defineProps<{
   tray?: boolean;
+  fullWidth?: boolean;
 }>();
 
 const store = useRoomStore();
@@ -102,15 +103,14 @@ function logout() {
 
 <template>
   <div class="contents">
-    <div ref="popupEl" :class="['relative shrink-0', open ? Z_INDEX.OVERLAY : '']">
+    <div ref="popupEl" :class="['relative', fullWidth ? 'w-full' : 'shrink-0', open ? Z_INDEX.OVERLAY : '']">
       <!-- Cog button -->
       <button
         ref="cogRef"
         type="button"
         :class="[
-          tray
-            ? ['w-12 h-12 flex items-center justify-center rounded-full border text-xl shadow-lg transition-colors', open ? 'bg-indigo-600 border-indigo-400 hover:bg-indigo-500' : 'bg-gray-800 border-gray-600 hover:bg-gray-700']
-            : ['flex items-center justify-center px-3 py-2 rounded border text-white text-sm leading-none transition-colors', open ? 'bg-indigo-600 border-indigo-400 hover:bg-indigo-500' : 'bg-gray-800 border-gray-500 hover:bg-gray-700']
+          'w-12 h-12 flex items-center justify-center rounded-full border text-xl shadow-lg transition-colors',
+          open ? 'bg-indigo-600 border-indigo-400 hover:bg-indigo-500' : 'frosted-button border-gray-600 hover:bg-gray-700'
         ]"
         title="Room settings"
         data-testid="settings-cog"
@@ -134,7 +134,7 @@ function logout() {
         v-if="open"
         :class="[
           'absolute w-64 bg-gray-900 border border-gray-600 rounded shadow-xl',
-          tray ? 'left-0 top-full mt-2' : 'left-0 top-full mt-1',
+          tray ? 'right-0 top-full mt-2' : 'left-0 top-full mt-1',
           Z_INDEX.OVERLAY
         ]"
         data-testid="settings-popup"

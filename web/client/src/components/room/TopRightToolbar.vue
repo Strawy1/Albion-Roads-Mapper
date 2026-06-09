@@ -16,7 +16,7 @@ const emit = defineEmits<{
 
 <template>
   <!-- Map Features Summary Toolbar (Desktop only) -->
-  <div class="toolbar-wrap absolute top-4 right-4 pointer-events-none" :class="Z_INDEX.TRAY">
+  <div class="toolbar-wrap absolute top-16 right-4 pointer-events-none" :class="Z_INDEX.TRAY">
     <RoomMapFeaturesToolbar
       :cores="cores"
       :crystals="crystals"
@@ -34,7 +34,6 @@ const emit = defineEmits<{
 }
 @media (min-width: 768px) and (min-height: 501px) {
   .toolbar-wrap {
-    @apply top-14;
     display: flex;
   }
 }

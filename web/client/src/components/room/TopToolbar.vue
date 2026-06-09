@@ -44,7 +44,7 @@ function onPlotRouteClick() {
     <!-- Landscape mobile: debug button left of fit-view -->
     <button
       v-if="showDebug"
-      class="landscape-debug w-10 h-10 items-center justify-center rounded-full frosted-button text-lg shadow-lg flex-shrink-0"
+      class="landscape-debug w-12 h-12 items-center justify-center rounded-full frosted-button text-lg shadow-lg flex-shrink-0"
       title="Debug tray"
       @click="emit('openDebug')"
     >🐛</button>
@@ -54,7 +54,7 @@ function onPlotRouteClick() {
       <TooltipRoot>
         <TooltipTrigger as-child>
           <button
-            class="fit-view-btn w-10 h-10 items-center justify-center rounded-full frosted-button text-lg shadow-lg transition-colors flex-shrink-0"
+            class="fit-view-btn w-12 h-12 items-center justify-center rounded-full frosted-button text-xl shadow-lg transition-colors flex-shrink-0"
             @click="emit('fitView')"
           >🔄</button>
         </TooltipTrigger>
@@ -72,7 +72,7 @@ function onPlotRouteClick() {
       <TooltipRoot>
         <TooltipTrigger as-child>
           <button
-            class="plot-route-btn w-10 h-10 items-center justify-center rounded-full text-lg shadow-lg transition-colors flex-shrink-0"
+            class="plot-route-btn w-12 h-12 items-center justify-center rounded-full text-xl shadow-lg transition-colors flex-shrink-0"
             :class="plotRouteMode ? 'bg-blue-600 text-white ring-2 ring-blue-300' : (hasRoute ? 'plot-route-active-pulse text-blue-300' : 'frosted-button')"
             @click="onPlotRouteClick"
           >🗺️</button>
@@ -91,16 +91,18 @@ function onPlotRouteClick() {
 </template>
 
 <style scoped>
-/* Default (portrait mobile): centred */
+/* Default (portrait mobile): full-width with margin */
 .toolbar-wrap {
   top: 3.5rem;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 1rem;
+  right: 1rem;
 }
 /* Desktop: centred */
 @media (min-width: 768px) {
   .toolbar-wrap {
     top: 0.5rem;
+    left: 50%;
+    right: auto;
     transform: translateX(-50%);
   }
 }

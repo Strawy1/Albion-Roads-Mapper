@@ -18,7 +18,7 @@ const emit = defineEmits<{
 
 <template>
   <!-- Resource Summary Tray + refresh button (Desktop only) -->
-  <div class="tray-wrap absolute top-14 left-4 hidden md:flex flex-col gap-2 pointer-events-none" :class="Z_INDEX.TRAY">
+  <div class="tray-wrap absolute top-16 left-4 hidden md:flex flex-col gap-2 pointer-events-none" :class="Z_INDEX.TRAY">
     <RoomResourcesToolbar
       :fibre="fibre"
       :leather="leather"

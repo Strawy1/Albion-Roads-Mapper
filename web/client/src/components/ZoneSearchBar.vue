@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { ZONE_BY_ID } from 'shared';
 import TagTier from './common/TagTier.vue';
 import TagZone from './common/TagZone.vue';
+import TagExtras from './common/TagExtras.vue';
 import { TYPE_LABELS, getZoneTypeDisplay } from '../utils/zoneStyles';
 import type { ZoneType } from 'shared';
 
@@ -81,7 +82,7 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="relative w-64 md:w-80" ref="containerRef">
+  <div class="relative w-full md:w-96 mt-2 md:mt-0" ref="containerRef">
     <div class="flex items-center border border-gray-700/50 rounded frosted-background text-white px-3 py-1.5 transition-colors focus-within:border-white" :class="{ '!bg-gray-800/80': isOpen }">
       <span class="mr-2 text-gray-400 text-sm leading-none shrink-0">🔍</span>
       <input
@@ -101,9 +102,10 @@ function onKeydown(e: KeyboardEvent) {
       >&times;</button>
     </div>
 
+    <Transition name="fade">
     <div
       v-if="isOpen"
-      class="absolute z-[200] mt-1 w-full frosted-background border border-gray-700/50 rounded-xl shadow-2xl max-h-64 overflow-y-auto"
+      class="absolute z-[200] mt-1 w-full frosted-background border border-gray-300/50 rounded-xl shadow-3xl max-h-64 overflow-y-auto"
     >
       <div v-if="filteredNodes.length === 0" class="px-3 py-2 text-sm text-gray-400">
         No active zones found
@@ -116,6 +118,7 @@ function onKeydown(e: KeyboardEvent) {
       >
         <TagTier :tier="node.data.tier" :type="node.data.type as ZoneType" />
         <span class="truncate flex-1">{{ node.data.zoneName }}</span>
+        <TagExtras :zone-id="node.id" />
         <TagZone
           :type="node.data.type as ZoneType"
           :category="node.data.category"
@@ -125,10 +128,20 @@ function onKeydown(e: KeyboardEvent) {
         />
       </button>
     </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 /* Prevent iOS Safari from zooming in on input focus (requires min 16px font size) */
 .search-input {
   font-size: 16px;
