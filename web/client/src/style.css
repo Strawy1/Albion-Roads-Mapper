@@ -60,6 +60,24 @@
     background-color: var(--hover-bg) !important;
     box-shadow: inset 0 0 0 1px var(--border-color), var(--outer-shadow, none) !important;
   }
+  .portal-7 {
+    @apply bg-blue-700 border-blue-400 text-white hover:bg-blue-800 hover:border-blue-500;
+  }
+  .portal-7-active {
+    @apply bg-blue-700 border-blue-400 text-white;
+  }
+  .portal-7-inactive {
+    @apply bg-gray-700 border-gray-700 text-gray-200 hover:bg-blue-800 hover:border-blue-500;
+  }
+  .portal-20 {
+    @apply bg-yellow-700 border-yellow-500 text-white hover:bg-yellow-800 hover:border-yellow-500;
+  }
+  .portal-20-active {
+    @apply bg-yellow-700 border-yellow-500 text-white;
+  }
+  .portal-20-inactive {
+    @apply bg-gray-700 border-gray-700 text-gray-200 hover:bg-yellow-800 hover:border-yellow-500;
+  }
 }
 
 @tailwind utilities;

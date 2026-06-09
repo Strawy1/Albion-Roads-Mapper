@@ -329,8 +329,8 @@ defineExpose({
         <span class="leading-none">{{ isIsolated ? 'Isolated' : (isDirectlyExpired ? 'Expired' : formatCountdown(remainingMs)) }}</span>
         <span
           v-if="props.data?.slots !== undefined && !isRestricted"
-          class="text-[10px] leading-none mt-0.5 px-1.5 pt-0.5 pb-1 rounded-full font-bold text-white border"
-          :class="props.data.slots === 20 ? 'bg-yellow-600/50 border-yellow-500' : 'bg-blue-600/60 border-blue-300'"
+          class="text-[10px] leading-none mt-0.5 px-1.5 pt-0.5 pb-1 rounded-full font-bold border"
+          :class="props.data.slots === 20 ? 'portal-20-active' : 'portal-7-active'"
         >{{ props.data.slots }} slots</span>
       </div>
 
@@ -389,13 +389,13 @@ defineExpose({
           <div class="text-xs text-gray-400 mb-1 text-center">Slots</div>
           <div class="flex gap-2">
             <button
-              class="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors"
-              :class="props.data?.slots === 7 ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'"
+              class="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors border"
+              :class="props.data?.slots === 7 ? 'portal-7-active' : 'portal-7-inactive'"
               @click.stop="data?.onUpdateSlots?.(id, 7)"
             >7</button>
             <button
-              class="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors"
-              :class="props.data?.slots === 20 ? 'bg-yellow-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'"
+              class="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors border"
+              :class="props.data?.slots === 20 ? 'portal-20-active' : 'portal-20-inactive'"
               @click.stop="data?.onUpdateSlots?.(id, 20)"
             >20</button>
           </div>

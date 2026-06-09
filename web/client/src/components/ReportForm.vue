@@ -456,12 +456,12 @@ defineExpose({
               <div class="flex gap-2">
                 <button
                   type="button"
-                  :class="['flex-1 px-3 py-2 rounded border text-sm font-semibold transition-colors', slots === 7 ? 'bg-blue-600 border-gray-400 text-white' : 'bg-gray-800 border-gray-400 text-gray-300 hover:bg-gray-600']"
+                  :class="['flex-1 py-2.5 rounded text-sm font-semibold transition-colors border', slots === 7 ? 'portal-7-active' : 'portal-7-inactive']"
                   @click="slots = 7"
                 >7</button>
                 <button
                   type="button"
-                  :class="['flex-1 px-3 py-2 rounded border text-sm font-semibold transition-colors', slots === 20 ? 'bg-yellow-600 border-gray-300 text-white' : 'bg-gray-800 border-gray-400 text-gray-300 hover:bg-gray-600', isRoyalOrOutlands && 'opacity-50 cursor-not-allowed']"
+                  :class="['flex-1 py-2.5 rounded text-sm font-semibold transition-colors border', slots === 20 ? 'portal-20-active' : 'portal-20-inactive', isRoyalOrOutlands && 'opacity-50 cursor-not-allowed']"
                   :disabled="isRoyalOrOutlands"
                   @click="slots = 20"
                 >20</button>
