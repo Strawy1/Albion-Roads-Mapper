@@ -1431,7 +1431,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         v-if="toast"
         class="fixed top-16 left-1/2 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg flex items-center gap-3 transition-colors"
         :class="[
-          Z_INDEX.UI_OVERLAY,
+          Z_INDEX.TOAST,
           toastType === 'error' ? 'bg-red-900 border border-red-500' : 'bg-gray-800 border border-gray-600'
         ]"
       >
