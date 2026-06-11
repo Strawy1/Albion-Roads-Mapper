@@ -7,6 +7,7 @@ import { getConnectionPath } from '@/utils/connectionPath';
 import { formatCountdown } from '@/utils/formatters';
 import TimeInput from '../common/TimeInput.vue';
 import TutorialTooltip from '../tutorial/TutorialTooltip.vue';
+import UnexploredHandleTooltip from './zone/UnexploredHandleTooltip.vue';
 import { useTutorialStore } from '@/stores/useTutorialStore';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { ZONE_BY_ID, type Connection } from 'shared';
@@ -231,6 +232,15 @@ const numChevrons = computed(() => Math.max(1, Math.round(stableDistance.value /
 const labelX = computed(() => pathData.value[1]);
 const labelY = computed(() => pathData.value[2]);
 
+const isTargetUnexplored = computed(() => {
+  const d = props.targetNode?.data as any;
+  if (!d) return false;
+  return !d.isHome && !d.isGhost && !d.explored;
+});
+
+const tooltipDismissed = ref(false);
+watch(isTargetUnexplored, () => { tooltipDismissed.value = false; });
+
 defineExpose({
   showPopover,
 });
@@ -306,6 +316,15 @@ defineExpose({
   </g>
 
   <EdgeLabelRenderer v-if="!props.data?.isGhost">
+    <!-- Unexplored source tooltip -->
+    <div
+      v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
+      class="absolute nodrag nopan pointer-events-none mt-8"
+      :class="Z_INDEX.TOAST"
+      :style="{ transform: `translate(${srcCenter?.x ?? sourceX}px, ${srcCenter?.y ?? sourceY}px)` }"
+    >
+      <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />
+    </div>
      <TutorialTooltip
           v-if="isTutorialTooltipReady && !tutorialStore.completed && tutorialStore.step === 13"
           message="Click on the rounded pill with the time."
