@@ -91,8 +91,9 @@ watch(showPopover, (val) => {
     }, 200);
     nextTick(() => {
       document.addEventListener('click', closePopover);
-      if (window.innerWidth < 768) {
-        setCenter(labelX.value, labelY.value + 100, { duration: 600, zoom: 1.4 });
+      if (Math.min(window.innerWidth, window.innerHeight) < 768) {
+        const zoom = 1.2 * Math.sqrt(Math.min(1, Math.max(window.innerWidth, window.innerHeight) / 1440));
+        setCenter(labelX.value, labelY.value + 100, { duration: 600, zoom });
       }
     });
   } else {
