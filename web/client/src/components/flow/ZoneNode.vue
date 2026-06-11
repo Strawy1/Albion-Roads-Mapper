@@ -48,6 +48,31 @@ const memoryStore = useRoomMemoryStore();
 const plotRouteStore = usePlotRouteStore();
 const { connections, homeZoneId, isConnecting } = storeToRefs(store);
 const memoryEntry = computed(() => memoryStore.getEntry(props.id));
+const featuresRequireUpdate = computed(() => {
+  const entry = memoryEntry.value;
+  if (!entry) return true;
+  const f = entry.features;
+  if (!f) return true;
+
+  // Resources with unknown quantities (both small and large are null/undefined) need fixing
+  if (f.resources && f.resources.some(r => r.small == null && r.large == null)) return true;
+
+  // Check if any meaningful content exists
+  const hasContent = (
+    (f.resources && f.resources.length > 0) ||
+    f.powercoreBlue || f.powercorePurple || f.powercoreGreen || f.powercoreYellow ||
+    f.crystalCreaturePresent ||
+    f.dungeonStatic || f.dungeonGroup ||
+    (f.dungeonStaticCount && f.dungeonStaticCount > 0) ||
+    (f.dungeonGroupCount && f.dungeonGroupCount > 0) ||
+    (f.treasuresGreenCount && f.treasuresGreenCount > 0) ||
+    (f.treasuresBlueCount && f.treasuresBlueCount > 0) ||
+    (f.treasuresYellowCount && f.treasuresYellowCount > 0) ||
+    f.slots != null
+  );
+
+  return !hasContent;
+});
 const { updateNodeData } = useVueFlow();
 const tutorialStore = useTutorialStore();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
@@ -1050,6 +1075,7 @@ function lockCore(core: string) {
           :type="props.data.type"
           :has-reds="hasReds"
           :needs-custom-handles="needsCustomHandles"
+          :is-unexplored="isUnexplored && featuresRequireUpdate"
           @click="openHandleEditor"
         />
       </div>
@@ -1077,7 +1103,7 @@ function lockCore(core: string) {
                 ref="mapFeaturesButtonRef"
                 @click.stop="isMapFeaturesModalOpen = !isMapFeaturesModalOpen"
                 @mousedown.stop
-                :class="['zone-button p-1 pointer-events-auto relative', hasReds ? 'zone-button-reds' : '', Z_INDEX.CONTENT_HIGH]"
+                :class="['zone-button p-1 pointer-events-auto relative', hasReds ? 'zone-button-reds' : '', featuresRequireUpdate ? 'pulse-prompt-button' : '', Z_INDEX.CONTENT_HIGH]"
                 title="Edit Map Features"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>

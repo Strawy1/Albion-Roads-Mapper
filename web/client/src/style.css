@@ -121,3 +121,19 @@ html, body, #app {
   padding: 0;
   background-color: #000000;
 }
+
+@keyframes pulse-prompt-button {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px rgb(0 119 255 / 0.7);
+    border-color: rgb(0 128 255);
+    background-color: #1d4ed8;
+  }
+}
+
+.pulse-prompt-button {
+  animation: pulse-prompt-button 2s ease-in-out infinite;
+}

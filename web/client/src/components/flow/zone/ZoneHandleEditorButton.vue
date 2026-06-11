@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Z_INDEX } from '@/constants/Layers';
 
 defineProps<{
   mapShape?: string;
   type?: string;
   hasReds?: boolean;
   needsCustomHandles?: boolean;
+  isUnexplored?: boolean;
 }>();
 
 defineEmits<{
@@ -33,8 +33,7 @@ defineExpose({
       :class="[
         'zone-button px-3 py-1.5 flex items-center gap-1.5 shadow-lg pointer-events-auto', 
         hasReds ? 'zone-button-reds' : '', 
-        needsCustomHandles ? 'pulsing-button' : '',
-        Z_INDEX.CONTENT_LOW
+        needsCustomHandles || isUnexplored ? 'pulse-prompt-button' : '',
       ]"
       @click.stop="$emit('click')"
     >
@@ -45,21 +44,6 @@ defineExpose({
 </template>
 
 <style scoped>
-@keyframes pulse-prompt {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
-    border-color: rgba(255, 255, 255, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 8px 2px rgb(0 132 191 / 0.7);
-    border-color: rgb(0 166 255);
-    background-color: #1d4ed8;
-  }
-}
-
-.pulsing-button {
-  animation: pulse-prompt 2s ease-in-out infinite;
-}
 
 .mini-handle {
   width: 16px;
