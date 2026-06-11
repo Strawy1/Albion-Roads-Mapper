@@ -204,6 +204,74 @@ describe('Node features persistence', () => {
     socket.close();
   });
 
+  it('clears memory features when all resources are removed via X button (clearResource)', async () => {
+    const { app, mockDb, token } = testApp;
+    await app!.listen({ port: 0 });
+
+    const { socket } = await connectWs(roomId);
+
+    // Auth mocks
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
+
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Simulate the state after clearResource: features exist (reds still present)
+    // but no memory-worthy content (resources were removed via the X button)
+    const nodePositions = [
+      {
+        zoneId: VALID_ZONE_A,
+        x: 100,
+        y: 100,
+        features: {
+          reds: 3,        // not saved to memory
+          // resources array is now absent — user hit X to remove them
+        }
+      }
+    ];
+
+    const mockClient = await mockDb.connect();
+    mockClient.query.mockResolvedValueOnce({ rows: [] }); // BEGIN
+    mockClient.query.mockResolvedValueOnce({ rows: [{ home_zone_id: VALID_ZONE_A }] }); // room lock
+    mockClient.query.mockResolvedValueOnce({ rows: [] }); // DELETE room_node_positions
+    mockClient.query.mockResolvedValueOnce({ rows: [] }); // INSERT room_node_positions
+    mockClient.query.mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+    // Re-read after save
+    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: VALID_ZONE_A, x: 100, y: 100, features: nodePositions[0].features, custom_handles: null, explored: true, rotation: 0 }] });
+
+    // Memory INSERT/UPDATE + SELECT after
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // INSERT INTO room_node_memory (upsert)
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // SELECT after upsert
+
+    socket.send(JSON.stringify({ type: 'update_node_positions', nodePositions }));
+    await new Promise((r) => setTimeout(r, 200));
+
+    // Find the INSERT INTO room_node_memory call
+    const upsertCall = mockDb.query.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT INTO room_node_memory')
+    );
+
+    // The upsert MUST have been called — the memory entry should be updated even
+    // when memoryFeatures is null (i.e. all resources were cleared).
+    expect(upsertCall).toBeDefined();
+
+    // The features param ($3) should be null, meaning the memory features are explicitly cleared.
+    // Before the fix, the SQL used `CASE WHEN $3 IS NOT NULL THEN $3 ELSE room_node_memory.features END`
+    // which means a null $3 would NEVER overwrite existing stale features — that is the bug.
+    const featuresParam = upsertCall[1][2]; // $3
+    expect(featuresParam).toBeNull(); // null means "clear the features"
+
+    // Additionally, the ON CONFLICT clause must NOT preserve the old value when features were explicitly cleared.
+    // The query should use `$3` directly (not the CASE guard) so that null wipes the old data.
+    expect(upsertCall[0]).not.toMatch(/CASE WHEN \$3 IS NOT NULL THEN \$3 ELSE room_node_memory\.features END/);
+
+    socket.close();
+  });
+
   it('saves node features even for a single node (home zone)', async () => {
     const { app, mockDb, token } = testApp;
     await app!.listen({ port: 0 });

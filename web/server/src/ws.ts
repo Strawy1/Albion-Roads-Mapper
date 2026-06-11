@@ -247,11 +247,15 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
               : null;
 
             // Update or create zone memory
+            // Always update features with the new value (even null) so that clearing resources
+            // via the X button correctly removes them from memory. Previously, the CASE guard
+            // `WHEN $3 IS NOT NULL` meant a null value (all features cleared) would leave stale
+            // data in the memory entry.
             await app.db.query(`
               INSERT INTO room_node_memory (room_id, zone_id, features, custom_handles, rotation, last_updated, times_added)
               VALUES ($1, $2, $3, $4, $5, $6, ARRAY[$6::timestamptz])
               ON CONFLICT (room_id, zone_id) DO UPDATE SET
-                features = CASE WHEN $3 IS NOT NULL THEN $3 ELSE room_node_memory.features END,
+                features = $3,
                 custom_handles = CASE WHEN $4 IS NOT NULL THEN $4 ELSE room_node_memory.custom_handles END,
                 rotation = EXCLUDED.rotation,
                 last_updated = EXCLUDED.last_updated
