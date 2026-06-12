@@ -233,6 +233,7 @@ const labelX = computed(() => pathData.value[1]);
 const labelY = computed(() => pathData.value[2]);
 
 const isTargetUnexplored = computed(() => {
+  if (props.targetNode?.type === 'non-roads') return false;
   const d = props.targetNode?.data as any;
   if (!d) return false;
   return !d.isHome && !d.isGhost && !d.explored;
@@ -316,15 +317,6 @@ defineExpose({
   </g>
 
   <EdgeLabelRenderer v-if="!props.data?.isGhost">
-    <!-- Unexplored source tooltip -->
-    <div
-      v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
-      class="absolute nodrag nopan pointer-events-none mt-8"
-      :class="Z_INDEX.TOAST"
-      :style="{ transform: `translate(${srcCenter?.x ?? sourceX}px, ${srcCenter?.y ?? sourceY}px)` }"
-    >
-      <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />
-    </div>
      <TutorialTooltip
           v-if="isTutorialTooltipReady && !tutorialStore.completed && tutorialStore.step === 13"
           message="Click on the rounded pill with the time."
@@ -338,6 +330,14 @@ defineExpose({
       }"
       :class="['absolute nodrag nopan', showPopover ? Z_INDEX.POPOVER_ACTIVE : Z_INDEX.CONNECTION_PILL]"
     >
+      <!-- Unexplored target tooltip — right of the pill -->
+      <div
+        v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
+        class="absolute left-full top-1/2 -translate-y-1/2 ml-2 pointer-events-none"
+        :class="Z_INDEX.TOAST"
+      >
+        <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />
+      </div>
       <!-- Countdown label -->
       <div
         data-trigger="true"
