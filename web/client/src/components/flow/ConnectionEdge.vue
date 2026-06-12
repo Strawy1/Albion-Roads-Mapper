@@ -236,7 +236,10 @@ const isTargetUnexplored = computed(() => {
   if (props.targetNode?.type === 'non-roads') return false;
   const d = props.targetNode?.data as any;
   if (!d) return false;
-  return !d.isHome && !d.isGhost && !d.explored;
+  if (d.isHome || d.isGhost) return false;
+  // A connection to the center handle means the portal is unlinked (zone may be explored but reset)
+  if (props.data?.connection?.toHandleId === 'center') return true;
+  return !d.explored;
 });
 
 const tooltipDismissed = ref(false);
