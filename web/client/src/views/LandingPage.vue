@@ -140,7 +140,7 @@ onMounted(() => {
       <p class="text-white text-center">
         All Rooms are secured with a password, which you can rotate at any time.
       </p>
-       <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> Maelstrome</p>
+       <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
     </div>
     <div class="w-full max-w-[2000px] mt-4 min-[1200px]:mt-0 min-[1200px]:px-24 min-[1200px]:pt-4 pb-10">
       <div class="mb-4 w-full px-4 min-[1200px]:px-0 text-center">
