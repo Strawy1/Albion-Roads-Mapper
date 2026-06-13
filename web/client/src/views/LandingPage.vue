@@ -104,7 +104,7 @@ const getChapterProgress = (chapter: Chapter) => {
   return ((currentTime.value - chapter.start) / duration) * 100 + '%';
 };
 
-const videoSrc = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1.mp4`;
+const videoSrc = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1-1.mp4`;
 
 function openCreateRoom() {
   showCreate.value = true;
