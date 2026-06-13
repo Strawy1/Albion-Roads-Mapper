@@ -6,7 +6,7 @@ const MEDIA_DIR = process.env['MEDIA_PATH'] ?? join(process.cwd(), 'media');
 
 export async function mediaRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/media/demov1-1.mp4', async (request, reply) => {
-    const filePath = join(MEDIA_DIR, 'demov1.mp4');
+    const filePath = join(MEDIA_DIR, 'demov1-1.mp4');
 
     let stat: ReturnType<typeof statSync>;
     try {
