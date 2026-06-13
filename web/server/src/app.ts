@@ -55,7 +55,21 @@ export async function buildApp(options: AppOptions) {
       try {
         await request.jwtVerify();
       } catch {
-        reply.status(401).send({ error: 'Unauthorized' });
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      // Validate that the token's passwordVersion matches the current DB value,
+      // ensuring tokens are invalidated when a room's password is rotated.
+      const payload = request.user as { roomId?: string; passwordVersion?: number };
+      if (payload.roomId && payload.passwordVersion !== undefined) {
+        const { rows } = await db.query<{ password_version: number }>(
+          'SELECT password_version FROM rooms WHERE id = $1',
+          [payload.roomId]
+        );
+        const currentVersion = rows[0]?.password_version ?? 1;
+        if (payload.passwordVersion !== currentVersion) {
+          return reply.status(401).send({ error: 'Token invalidated due to password rotation. Please re-authenticate.' });
+        }
       }
     },
   );

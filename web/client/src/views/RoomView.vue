@@ -127,8 +127,10 @@ watch(() => store.wsStatus, (status) => {
   if (status === 'auth_failed') {
     const id = props.id || store.roomId;
     sessionStorage.removeItem(`token:${id}`);
-    router.replace(`/rooms/${id}/auth`).catch(() => {
-      window.location.href = `/rooms/${id}/auth`;
+    const reason = store.disconnectReason;
+    const dest = reason ? `/rooms/${id}/auth?reason=${reason}` : `/rooms/${id}/auth`;
+    router.replace(dest).catch(() => {
+      window.location.href = dest;
     });
   }
 }, { immediate: true });

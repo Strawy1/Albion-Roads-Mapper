@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useRoomStore } from '../stores/useRoomStore.js';
 import { API_BASE_URL } from '../utils/api';
 import { track } from '@vercel/analytics';
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
+const route = useRoute();
 const store = useRoomStore();
+
+const passwordRotatedBanner = computed(() => route.query.reason === 'password_rotated');
 
 const password = ref('');
 const authError = ref('');
@@ -58,6 +61,9 @@ async function authenticate() {
     <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
       <h2 class="text-xl font-semibold mb-4">Enter Room Password</h2>
       <p class="text-gray-400 text-sm mb-4">Room: <code class="text-indigo-300">{{ id }}</code></p>
+      <div v-if="passwordRotatedBanner" class="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
+        <strong>Room password has been rotated.</strong> Please re-enter the new password to continue.
+      </div>
       <input
         v-model="password"
         type="password"

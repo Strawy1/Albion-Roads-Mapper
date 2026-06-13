@@ -9,6 +9,7 @@ import { useRoomMemoryStore } from './useRoomMemoryStore';
 import { usePlotRouteStore } from './usePlotRouteStore';
 
 export type WsStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
+export type DisconnectReason = 'password_rotated' | null;
 
 export const useRoomStore = defineStore('room', () => {
   const connections = ref<Connection[]>([]);
@@ -23,6 +24,7 @@ export const useRoomStore = defineStore('room', () => {
   const token = ref<string>('');
   const roomId = ref<string>('');
   const isConnecting = ref(false);
+  const disconnectReason = ref<DisconnectReason>(null);
   const connectingSourceHandleId = ref<string | null>(null);
   const connectingSourceNodeId = ref<string | null>(null);
 
@@ -204,6 +206,15 @@ export const useRoomStore = defineStore('room', () => {
         nodePositions.value = nodePositions.value.filter(n => n.zoneId === homeZoneId.value);
         lastUpdate.value = new Date();
         usePlotRouteStore().exitPlotRouteMode();
+        break;
+
+      case 'password_rotated':
+        // The room password was changed — invalidate the stored token and force re-authentication
+        sessionStorage.removeItem(`token:${roomId.value}`);
+        disconnectReason.value = 'password_rotated';
+        wsStatus.value = 'auth_failed';
+        ws?.close();
+        ws = null;
         break;
 
       case 'plot_route_updated':
@@ -514,6 +525,7 @@ export const useRoomStore = defineStore('room', () => {
     token,
     roomId,
     isConnecting,
+    disconnectReason,
     connectingSourceHandleId,
     connectingSourceNodeId,
     recentlyViewedRooms,

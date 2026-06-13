@@ -117,8 +117,8 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: formatZodError(parsed.error) });
     }
 
-    const { rows } = await app.db.query<{ id: string; password_hash: string; home_zone_id: string; created_at: string }>(
-      'SELECT id, password_hash, home_zone_id, created_at FROM rooms WHERE id = $1',
+    const { rows } = await app.db.query<{ id: string; password_hash: string; home_zone_id: string; created_at: string; password_version: number }>(
+      'SELECT id, password_hash, home_zone_id, created_at, password_version FROM rooms WHERE id = $1',
       [id]
     );
     const room = rows[0];
@@ -132,7 +132,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(401).send({ error: 'Invalid password' });
     }
 
-    const token = app.jwt.sign({ roomId: room.id }, { expiresIn: '7d' });
+    const token = app.jwt.sign({ roomId: room.id, passwordVersion: room.password_version ?? 1 }, { expiresIn: '7d' });
     return reply.send({ token });
   });
 
@@ -168,12 +168,16 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     const result = await app.db.query(
-      'UPDATE rooms SET password_hash = $1 WHERE id = $2',
+      'UPDATE rooms SET password_hash = $1, password_version = COALESCE(password_version, 1) + 1 WHERE id = $2',
       [passwordHash, id]
     );
     if (result.rowCount === 0) {
       return reply.status(404).send({ error: 'Room not found' });
     }
+
+    // Immediately boot all active WebSocket clients in this room
+    broadcast(id, { type: 'password_rotated' });
+
     return reply.send({ ok: true });
   });
 
