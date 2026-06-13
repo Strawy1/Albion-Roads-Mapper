@@ -145,7 +145,17 @@ onMounted(() => {
   <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4">
      <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center">
       <h1 class="text-4xl font-bold text-indigo-600 text-center">Albion Online Roads Mapper</h1>
-      <div class="flex flex-col items-center gap-6">
+      <RecentlyViewedRooms />
+      <p class="text-white text-center">
+        Collaborate with your guildmates in <b>real-time</b> to track Roads of Avalon portal zones and map content. Locate and track Cores and Treasure Chests with real time-timers, Map Resources (and sizes), Avalonian Chests, and easily find connections to the Royal Continent, Outlands portals and rest zones.
+      </p>
+      <p class="text-white text-center">
+        All Rooms are secured with a password, which you can rotate at any time.
+      </p>
+       <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
+    </div>
+
+    <div class="flex flex-col items-center gap-6 mb-4 mt-4">
         <button
           class="px-10 py-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 border border-blue-400 hover:border-blue-300 font-bold text-xl transition-colors duration-500 btn-pulsate"
           @click="openCreateRoom()"
@@ -156,29 +166,20 @@ onMounted(() => {
            <a
           href="https://discord.gg/uFq2PJuZ3r"
           target="_blank"
-          class="px-4 py-1.5 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center transition-colors duration-500"
+          class="px-4 py-1.5 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center duration-500"
         >
           Discord
         </a>
         <a
           href="https://github.com/dignityofwar/albion-mapper"
           target="_blank"
-          class="px-4 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 border border-transparent hover:border hover:border-gray-300 font-medium text-sm transition-colors text-center transition-colors duration-500"
+          class="px-4 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 border border-transparent hover:border hover:border-gray-300 font-medium text-sm transition-colors text-center duration-500"
         >
           GitHub
         </a>
         </div>
 
       </div>
-      <RecentlyViewedRooms />
-      <p class="text-white text-center">
-        Collaborate with your guildmates in <b>real-time</b> to track Roads of Avalon portal zones and map content. Locate and track Cores and Treasure Chests with real time-timers, Map Resources (and sizes), Avalonian Chests, and easily find connections to the Royal Continent, Outlands portals and rest zones.
-      </p>
-      <p class="text-white text-center">
-        All Rooms are secured with a password, which you can rotate at any time.
-      </p>
-       <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
-    </div>
     <div class="w-full max-w-[2000px] mt-4 min-[1200px]:mt-0 min-[1200px]:px-24 min-[1200px]:pt-4 pb-10 overflow-hidden">
       <div class="mb-2 w-full px-4 min-[1200px]:px-0 text-center">
         <button
