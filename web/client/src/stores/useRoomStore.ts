@@ -210,7 +210,7 @@ export const useRoomStore = defineStore('room', () => {
 
       case 'password_rotated':
         // The room password was changed — invalidate the stored token and force re-authentication
-        sessionStorage.removeItem(`token:${roomId.value}`);
+        localStorage.removeItem(`token:${roomId.value}`);
         disconnectReason.value = 'password_rotated';
         wsStatus.value = 'auth_failed';
         ws?.close();
@@ -219,7 +219,7 @@ export const useRoomStore = defineStore('room', () => {
 
       case 'room_deleted':
         // The room has been permanently deleted — boot all users out
-        sessionStorage.removeItem(`token:${roomId.value}`);
+        localStorage.removeItem(`token:${roomId.value}`);
         disconnectReason.value = 'room_deleted';
         wsStatus.value = 'auth_failed';
         ws?.close();
@@ -229,7 +229,7 @@ export const useRoomStore = defineStore('room', () => {
       case 'error':
         // Handle fatal server errors — treat "Room not found" as a hard redirect
         if (msg.message === 'Room not found') {
-          sessionStorage.removeItem(`token:${roomId.value}`);
+          localStorage.removeItem(`token:${roomId.value}`);
           disconnectReason.value = 'room_not_found';
           wsStatus.value = 'auth_failed';
           ws?.close();
@@ -350,7 +350,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function logout() {
-    sessionStorage.removeItem(`token:${roomId.value}`);
+    localStorage.removeItem(`token:${roomId.value}`);
     disconnect();
     track('logout');
   }

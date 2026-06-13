@@ -126,7 +126,7 @@ watch(() => props.id, () => {
 watch(() => store.wsStatus, (status) => {
   if (status === 'auth_failed') {
     const id = props.id || store.roomId;
-    sessionStorage.removeItem(`token:${id}`);
+    localStorage.removeItem(`token:${id}`);
     const reason = store.disconnectReason;
     const dest = reason ? `/rooms/${id}/auth?reason=${reason}` : `/rooms/${id}/auth`;
     router.replace(dest).catch(() => {
@@ -136,17 +136,17 @@ watch(() => store.wsStatus, (status) => {
 }, { immediate: true });
 
 async function initializeRoom() {
-  const stored = sessionStorage.getItem(`token:${props.id}`);
+  const stored = localStorage.getItem(`token:${props.id}`);
   if (!stored) {
     router.replace({ path: `/rooms/${props.id}/auth` });
     return;
   }
   store.setCredentials(props.id, stored);
   store.connect();
-  const shareUrl = sessionStorage.getItem(`shareUrl:${props.id}`);
+  const shareUrl = localStorage.getItem(`shareUrl:${props.id}`);
   if (shareUrl) {
     showToast(`Share URL: ${shareUrl}`);
-    sessionStorage.removeItem(`shareUrl:${props.id}`);
+    localStorage.removeItem(`shareUrl:${props.id}`);
   }
 }
 

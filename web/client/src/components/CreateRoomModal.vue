@@ -118,9 +118,8 @@ async function createRoom() {
     });
     const { token } = await authRes.json() as { token: string };
 
-    sessionStorage.setItem(`token:${id}`, token);
-    sessionStorage.setItem(`shareUrl:${id}`, `${window.location.origin}/rooms/${id}`);
-
+    localStorage.setItem(`token:${id}`, token);
+    localStorage.setItem(`shareUrl:${id}`, `${window.location.origin}/rooms/${id}`);
 
     track('create_room');
     resetForm();

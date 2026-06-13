@@ -43,8 +43,8 @@ onMounted(async () => {
   }
   checkingRoom.value = false;
 
-  // If already authenticated (token in session storage), go straight to the room
-  const stored = sessionStorage.getItem(`token:${props.id}`);
+  // If already authenticated (token in local storage), go straight to the room
+  const stored = localStorage.getItem(`token:${props.id}`);
   if (stored) {
     store.setCredentials(props.id, stored);
     router.replace({ path: `/rooms/${props.id}` });
@@ -70,7 +70,7 @@ async function authenticate() {
       return;
     }
     const { token } = await res.json() as { token: string };
-    sessionStorage.setItem(`token:${props.id}`, token);
+    localStorage.setItem(`token:${props.id}`, token);
     store.setCredentials(props.id, token);
     track('authenticate_room');
     router.push({ path: `/rooms/${props.id}` });
