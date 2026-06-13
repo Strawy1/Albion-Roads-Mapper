@@ -10,6 +10,7 @@ import {
   getGlobalAnalyticsSnapshot,
   clearAnalyticsDate,
 } from './broadcast_analytics.js';
+import { getTotalSocketCount } from './broadcast.js';
 
 /**
  * Flushes all in-memory concurrency/token analytics to the DB.
@@ -34,8 +35,42 @@ export async function runAnalyticsFlush(db: Pool): Promise<void> {
 }
 
 /**
+ * Returns the current UTC hour as an ISO-8601 timestamp truncated to the hour,
+ * e.g. "2026-06-13T04:00:00.000Z". Used both as a change-detection key and as
+ * the DB primary key value for analytics_hourly_connections.
+ */
+function utcHourTimestamp(): string {
+  const now = new Date();
+  now.setUTCMinutes(0, 0, 0);
+  return now.toISOString();
+}
+
+/**
+ * Upserts the current total WebSocket connection count into analytics_hourly_connections
+ * for the current UTC hour bucket. Safe to call multiple times per hour — uses GREATEST
+ * so the stored value is the peak observed count for that hour.
+ */
+export async function flushHourlyConnections(db: Pool): Promise<void> {
+  const hour = utcHourTimestamp();
+  const count = getTotalSocketCount();
+  try {
+    await db.query(
+      `INSERT INTO analytics_hourly_connections (hour, connections)
+       VALUES ($1, $2)
+       ON CONFLICT (hour) DO UPDATE
+         SET connections = GREATEST(analytics_hourly_connections.connections, EXCLUDED.connections)`,
+      [hour, count],
+    );
+  } catch (err) {
+    console.error('[analyticsCron] failed to flush hourly connections:', err);
+  }
+}
+
+/**
  * Starts the analytics cron.
- * - Every minute: flush in-memory concurrency/token data to the DB.
+ * - Every minute: flush in-memory concurrency/token data to the DB and record
+ *   the current total WebSocket connection count into analytics_hourly_connections
+ *   for the current UTC hour bucket (GREATEST ensures the peak is kept).
  * - On UTC date change: create the new day's global_daily row seeded with total_rooms,
  *   flush and clear the previous day's in-memory data.
  *
@@ -71,6 +106,12 @@ export function startAnalyticsCron(db: Pool): NodeJS.Timeout {
         // Regular minute tick — flush current in-memory state
         await runAnalyticsFlush(db);
       }
+
+      // Every tick: record the current WS connection count for this hour bucket.
+      // Calling this every minute (rather than once at the hour boundary) means
+      // GREATEST accumulates the true peak across all 60 samples in the hour,
+      // giving us correct per-day per-hour maximum concurrent connections.
+      await flushHourlyConnections(db);
     })().catch((err) => console.error('[analyticsCron] tick error:', err));
   }, 60_000);
 }

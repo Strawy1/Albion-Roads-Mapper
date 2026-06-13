@@ -43,7 +43,7 @@ export function trackRoomModified(db: Pool, roomId: string): void {
 }
 
 export function trackRoutePlotted(db: Pool, roomId: string): void {
-  incrementGlobal(db, { routes_plotted: 1 });
+  incrementGlobal(db, { routes_plotted: 1, room_data_updates: 1 });
   incrementRoomDaily(db, roomId, { routes_plotted: 1 });
   incrementRoomAlltime(db, roomId, { routes_plotted: 1 });
 }

@@ -871,3 +871,48 @@ describe('analyticsCron — runAnalyticsFlush', () => {
     expect(mockDb.query).not.toHaveBeenCalled();
   });
 });
+
+describe('analyticsCron — flushHourlyConnections', () => {
+  it('upserts into analytics_hourly_connections with a single hour-truncated ISO timestamp', async () => {
+    const { flushHourlyConnections } = await import('../src/analyticsCron.js');
+    const mockDb = { query: vi.fn().mockResolvedValue({ rows: [] }) } as any;
+
+    await flushHourlyConnections(mockDb);
+
+    expect(mockDb.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = mockDb.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('analytics_hourly_connections');
+    expect(sql).toContain('ON CONFLICT (hour)');
+    expect(sql).toContain('GREATEST');
+    // First param: ISO timestamp with minutes/seconds zeroed, e.g. "2026-06-13T04:00:00.000Z"
+    expect(typeof params[0]).toBe('string');
+    expect(params[0] as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00\.000Z$/);
+    // Second param: non-negative integer connection count
+    expect(typeof params[1]).toBe('number');
+    expect(params[1] as number).toBeGreaterThanOrEqual(0);
+  });
+
+  it('targets the same hour bucket on repeated calls within the same minute', async () => {
+    const { flushHourlyConnections } = await import('../src/analyticsCron.js');
+    const mockDb = { query: vi.fn().mockResolvedValue({ rows: [] }) } as any;
+
+    await flushHourlyConnections(mockDb);
+    await flushHourlyConnections(mockDb);
+
+    expect(mockDb.query).toHaveBeenCalledTimes(2);
+    const hours = mockDb.query.mock.calls.map((c: any[]) => (c[1] as unknown[])[0]);
+    // Both calls must reference the same hour-truncated timestamp
+    expect(hours[0]).toBe(hours[1]);
+    // Both must use GREATEST so the peak is preserved
+    for (const [sql] of mockDb.query.mock.calls as [string, unknown[]][]) {
+      expect(sql).toContain('GREATEST');
+    }
+  });
+
+  it('does not throw if the DB query fails', async () => {
+    const { flushHourlyConnections } = await import('../src/analyticsCron.js');
+    const mockDb = { query: vi.fn().mockRejectedValue(new Error('DB down')) } as any;
+
+    await expect(flushHourlyConnections(mockDb)).resolves.toBeUndefined();
+  });
+});

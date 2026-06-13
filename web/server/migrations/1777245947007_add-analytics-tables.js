@@ -30,6 +30,12 @@ export const up = (pgm) => {
     routes_plotted:          { type: 'integer', notNull: true, default: 0 },
   });
 
+  // Hourly global WebSocket connection snapshots — one row per UTC hour
+  pgm.createTable('analytics_hourly_connections', {
+    hour:        { type: 'timestamp with time zone', primaryKey: true }, // truncated to the hour, UTC
+    connections: { type: 'integer', notNull: true, default: 0 },
+  });
+
   // Per-room daily stats — only rows with real activity, no zero rows
   // No FK on room_id so stats survive room deletion
   pgm.createTable('analytics_room_daily', {
@@ -61,6 +67,7 @@ export const up = (pgm) => {
 
 export const down = (pgm) => {
   pgm.dropTable('analytics_room_alltime');
+  pgm.dropTable('analytics_hourly_connections');
   pgm.dropTable('analytics_room_daily');
   pgm.dropTable('analytics_global_daily');
 };
