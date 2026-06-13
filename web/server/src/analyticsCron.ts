@@ -48,17 +48,19 @@ function utcHourTimestamp(): string {
 /**
  * Upserts the current total WebSocket connection count into analytics_hourly_connections
  * for the current UTC hour bucket. Safe to call multiple times per hour — uses GREATEST
- * so the stored value is the peak observed count for that hour.
+ * for max_connections and LEAST for min_connections so the stored values represent the
+ * true peak and trough observed across all samples within that hour.
  */
 export async function flushHourlyConnections(db: Pool): Promise<void> {
   const hour = utcHourTimestamp();
   const count = getTotalSocketCount();
   try {
     await db.query(
-      `INSERT INTO analytics_hourly_connections (hour, connections)
-       VALUES ($1, $2)
+      `INSERT INTO analytics_hourly_connections (hour, max_connections, min_connections)
+       VALUES ($1, $2, $2)
        ON CONFLICT (hour) DO UPDATE
-         SET connections = GREATEST(analytics_hourly_connections.connections, EXCLUDED.connections)`,
+         SET max_connections = GREATEST(analytics_hourly_connections.max_connections, EXCLUDED.max_connections),
+             min_connections = LEAST(analytics_hourly_connections.min_connections, EXCLUDED.min_connections)`,
       [hour, count],
     );
   } catch (err) {

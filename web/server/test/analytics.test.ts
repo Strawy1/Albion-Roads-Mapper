@@ -882,12 +882,15 @@ describe('analyticsCron — flushHourlyConnections', () => {
     expect(mockDb.query).toHaveBeenCalledTimes(1);
     const [sql, params] = mockDb.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('analytics_hourly_connections');
+    expect(sql).toContain('max_connections');
+    expect(sql).toContain('min_connections');
     expect(sql).toContain('ON CONFLICT (hour)');
     expect(sql).toContain('GREATEST');
+    expect(sql).toContain('LEAST');
     // First param: ISO timestamp with minutes/seconds zeroed, e.g. "2026-06-13T04:00:00.000Z"
     expect(typeof params[0]).toBe('string');
     expect(params[0] as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00\.000Z$/);
-    // Second param: non-negative integer connection count
+    // Second param: non-negative integer connection count (used for both max and min on insert)
     expect(typeof params[1]).toBe('number');
     expect(params[1] as number).toBeGreaterThanOrEqual(0);
   });
@@ -903,9 +906,10 @@ describe('analyticsCron — flushHourlyConnections', () => {
     const hours = mockDb.query.mock.calls.map((c: any[]) => (c[1] as unknown[])[0]);
     // Both calls must reference the same hour-truncated timestamp
     expect(hours[0]).toBe(hours[1]);
-    // Both must use GREATEST so the peak is preserved
+    // Both must use GREATEST (max) and LEAST (min) so the peak and trough are preserved
     for (const [sql] of mockDb.query.mock.calls as [string, unknown[]][]) {
       expect(sql).toContain('GREATEST');
+      expect(sql).toContain('LEAST');
     }
   });
 
