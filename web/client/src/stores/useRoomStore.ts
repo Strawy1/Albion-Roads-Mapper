@@ -349,10 +349,9 @@ export const useRoomStore = defineStore('room', () => {
     useRoomMemoryStore().clear();
   }
 
-  function logout() {
-    localStorage.removeItem(`token:${roomId.value}`);
+  function exitRoom() {
     disconnect();
-    track('logout');
+    track('exit_room');
   }
 
   function updateNodePositionsInStore(positions: NodePosition[]) {
@@ -565,7 +564,7 @@ export const useRoomStore = defineStore('room', () => {
     send,
     connect,
     disconnect,
-    logout,
+    exitRoom,
     shapeBackgroundOpacity,
     setShapeBackgroundOpacity,
     animationsEnabled,

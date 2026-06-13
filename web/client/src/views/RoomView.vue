@@ -150,8 +150,8 @@ async function initializeRoom() {
   }
 }
 
-function logout() {
-  store.logout();
+function exitRoom() {
+  store.exitRoom();
   router.replace({ path: '/' });
 }
 
@@ -1266,7 +1266,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
 
 <template>
   <div class="h-dvh relative bg-gray-950 text-white">
-    <TitleSegment :room-title="roomTitle" :class="Z_INDEX.UI_OVERLAY" @logout="logout" @fit-view="fitView({ padding: 0.2, duration: 300 })" />
+    <TitleSegment :room-title="roomTitle" :class="Z_INDEX.UI_OVERLAY" @logout="exitRoom" @fit-view="fitView({ padding: 0.2, duration: 300 })" />
     <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" />
 
     <ReportForm

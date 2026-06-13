@@ -129,7 +129,7 @@ async function deleteRoom(adminPassword: string, setError: (msg: string) => void
       return;
     }
     track('delete_room');
-    store.logout();
+    store.exitRoom();
     router.replace({ path: '/' });
   } finally {
     resetting.value = false;
@@ -148,8 +148,8 @@ function copyLink() {
 }
 
 
-function logout() {
-  store.logout();
+function exitRoom() {
+  store.exitRoom();
   router.replace({ path: '/' });
 }
 </script>
@@ -264,9 +264,9 @@ function logout() {
           <button
             type="button"
             class="w-full text-left px-3 py-2 text-sm rounded text-red-400 hover:bg-gray-700 hover:text-red-300"
-            @click="logout"
+            @click="exitRoom"
           >
-            🚪 Log out
+            🚪 Exit Room
           </button>
         </div>
       </div>
