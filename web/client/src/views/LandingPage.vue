@@ -130,13 +130,24 @@ onMounted(() => {
 });
 </script>
 
+<style scoped>
+.btn-pulsate {
+  animation: pulsate 5s ease-in-out infinite;
+}
+
+@keyframes pulsate {
+  0%, 100% { box-shadow: 0 4px 32px 4px rgba(99, 102, 241, 0.7); }
+  50% { box-shadow: 0 4px 32px 4px rgba(99, 102, 241, 0.15); }
+}
+</style>
+
 <template>
-  <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center pt-4">
+  <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4">
      <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center">
       <h1 class="text-4xl font-bold text-indigo-600 text-center">Albion Online Roads Mapper</h1>
       <div class="flex flex-col items-center gap-6">
         <button
-          class="px-10 py-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-bold text-xl transition-colors shadow-lg shadow-indigo-900"
+          class="px-10 py-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 border border-blue-400 hover:border-blue-300 font-bold text-xl transition-colors duration-500 btn-pulsate"
           @click="openCreateRoom()"
         >
           Create Room
@@ -145,14 +156,14 @@ onMounted(() => {
            <a
           href="https://discord.gg/uFq2PJuZ3r"
           target="_blank"
-          class="px-4 py-1.5 rounded-lg bg-[#5865F2] hover:bg-indigo-500 font-medium text-sm transition-colors text-center"
+          class="px-4 py-1.5 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center transition-colors duration-500"
         >
           Discord
         </a>
         <a
           href="https://github.com/dignityofwar/albion-mapper"
           target="_blank"
-          class="px-4 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 font-medium text-sm transition-colors text-center"
+          class="px-4 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 border border-transparent hover:border hover:border-gray-300 font-medium text-sm transition-colors text-center transition-colors duration-500"
         >
           GitHub
         </a>
