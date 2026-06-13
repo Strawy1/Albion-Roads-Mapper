@@ -8,7 +8,6 @@ import RecentlyViewedRooms from '../components/RecentlyViewedRooms.vue';
 const route = useRoute();
 
 const showCreate = ref(false);
-const showJoin = ref(false);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const currentTime = ref(0);
@@ -128,7 +127,7 @@ onMounted(() => {
     openCreateRoom();
   }
 });
-</script>
+</script>Improved the landing page a little bit
 
 <style scoped>
 .btn-pulsate {
@@ -136,8 +135,8 @@ onMounted(() => {
 }
 
 @keyframes pulsate {
-  0%, 100% { box-shadow: 0 4px 32px 4px rgba(99, 102, 241, 0.7); }
-  50% { box-shadow: 0 4px 32px 4px rgba(99, 102, 241, 0.15); }
+  0%, 100% { box-shadow: 0 4px 32px 8px rgba(99, 102, 241, 1); }
+  50% { box-shadow: 0 4px 32px 8px rgba(99, 102, 241, 0.4); }
 }
 </style>
 
