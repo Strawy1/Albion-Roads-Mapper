@@ -813,6 +813,7 @@ describe('GET /api/rooms/:id/connections', () => {
     const res = await app.inject({
       method: 'GET',
       url: `/api/rooms/${roomId}/connections`,
+      headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
     const connections = res.json<Connection[]>();

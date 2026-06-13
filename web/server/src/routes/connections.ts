@@ -37,8 +37,14 @@ function dbRowToConnection(row: DbConnection): Connection {
 
 export async function connectionRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/rooms/:id/connections — list non-expired connections
-  app.get<{ Params: { id: string } }>('/api/rooms/:id/connections', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/api/rooms/:id/connections', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
     const { id } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
 
     const { rows: rooms } = await app.db.query('SELECT id FROM rooms WHERE id = $1', [id]);
     if (rooms.length === 0) {
