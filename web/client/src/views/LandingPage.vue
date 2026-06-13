@@ -134,20 +134,30 @@ onMounted(() => {
   <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center pt-4">
      <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center">
       <h1 class="text-4xl font-bold text-indigo-600 text-center">Albion Online Roads Mapper</h1>
-      <div class="flex gap-4">
+      <div class="flex flex-col items-center gap-6">
         <button
-          class="px-6 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium transition-colors"
+          class="px-10 py-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-bold text-xl transition-colors shadow-lg shadow-indigo-900"
           @click="openCreateRoom()"
         >
           Create Room
         </button>
-        <a
+        <div class="flex gap-2">
+           <a
           href="https://discord.gg/uFq2PJuZ3r"
           target="_blank"
-          class="px-6 py-3 rounded-lg bg-[#5865F2] hover:bg-indigo-500 font-medium transition-colors text-center"
+          class="px-4 py-1.5 rounded-lg bg-[#5865F2] hover:bg-indigo-500 font-medium text-sm transition-colors text-center"
         >
           Discord
         </a>
+        <a
+          href="https://github.com/dignityofwar/albion-mapper"
+          target="_blank"
+          class="px-4 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 font-medium text-sm transition-colors text-center"
+        >
+          GitHub
+        </a>
+        </div>
+
       </div>
       <RecentlyViewedRooms />
       <p class="text-white text-center">
