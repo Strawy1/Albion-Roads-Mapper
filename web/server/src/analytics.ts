@@ -11,12 +11,14 @@ export interface GlobalDailyCounters {
   zones_added?: number;
   non_roads_zones_added?: number;
   room_data_updates?: number;
+  routes_plotted?: number;
 }
 
 export interface RoomDailyCounters {
   data_updates?: number;
   zones_added_roads?: number;
   zones_added_nonroads?: number;
+  routes_plotted?: number;
 }
 
 export interface RoomAlltimeCounters {
@@ -25,6 +27,7 @@ export interface RoomAlltimeCounters {
   zones_added_nonroads?: number;
   peak_concurrent?: number;
   unique_tokens?: number;
+  routes_plotted?: number;
 }
 
 /** Returns today's date as a YYYY-MM-DD string in UTC. */

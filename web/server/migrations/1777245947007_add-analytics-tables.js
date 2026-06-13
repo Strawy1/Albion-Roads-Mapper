@@ -27,6 +27,7 @@ export const up = (pgm) => {
     zones_added:             { type: 'integer', notNull: true, default: 0 },
     non_roads_zones_added:   { type: 'integer', notNull: true, default: 0 },
     room_data_updates:       { type: 'integer', notNull: true, default: 0 },
+    routes_plotted:          { type: 'integer', notNull: true, default: 0 },
   });
 
   // Per-room daily stats — only rows with real activity, no zero rows
@@ -39,6 +40,7 @@ export const up = (pgm) => {
     zones_added_nonroads: { type: 'integer', notNull: true, default: 0 },
     peak_concurrent:      { type: 'integer', notNull: true, default: 0 },
     unique_tokens:        { type: 'integer', notNull: true, default: 0 },
+    routes_plotted:       { type: 'integer', notNull: true, default: 0 },
   });
   pgm.addConstraint('analytics_room_daily', 'analytics_room_daily_pk', {
     primaryKey: ['room_id', 'date'],
@@ -53,6 +55,7 @@ export const up = (pgm) => {
     zones_added_nonroads: { type: 'integer', notNull: true, default: 0 },
     peak_concurrent:      { type: 'integer', notNull: true, default: 0 },
     unique_tokens:        { type: 'integer', notNull: true, default: 0 },
+    routes_plotted:       { type: 'integer', notNull: true, default: 0 },
   });
 };
 

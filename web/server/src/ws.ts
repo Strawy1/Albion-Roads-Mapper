@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZONE_BY_ID, type Connection, type ClientMessage, type ServerMessage, type NodePosition, type RoomMemoryEntry } from 'shared';
 import { addSocket, removeSocket, broadcast, getTotalSocketCount } from './broadcast.js';
-import { incrementGlobal, incrementRoomDaily, incrementRoomAlltime } from './analytics.js';
+import { trackRoomModified, trackRoutePlotted } from './routes/rooms_analytics.js';
 import { recordPolo, getWatchingCount } from './marcopolo.js';
 
 interface DbConnection {
@@ -221,9 +221,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             explored: row.explored ?? false,
           }));
           broadcast(roomId, { type: 'node_positions_updated', nodePositions: broadcastPositions, updateLastUpdated: msg.updateLastUpdated }, socket);
-          incrementGlobal(app.db, { rooms_modified: 1 });
-          incrementRoomDaily(app.db, roomId, { data_updates: 1 });
-          incrementRoomAlltime(app.db, roomId, { data_updates: 1 });
+          trackRoomModified(app.db, roomId);
 
           // Update zone memory for nodes that already have a memory entry,
           // storing only map features (resources) and custom handles.
@@ -300,6 +298,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             [plottedRoute.length > 0 ? plottedRoute : null, roomId]
           );
           broadcast(roomId, { type: 'plot_route_updated', plottedRoute, destinationZoneId }, socket);
+          if (plottedRoute.length > 0) trackRoutePlotted(app.db, roomId);
           return;
         }
 

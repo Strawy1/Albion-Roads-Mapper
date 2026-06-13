@@ -116,10 +116,11 @@ describe('WebSocket authentication', () => {
   });
 
   it('only fans out to clients in the same room', async () => {
-    // room 1 sync mocks
+    // room 1 sync mocks (room, connections, node positions, memory)
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
     mockDb.query.mockResolvedValueOnce({ rows: [] });
     mockDb.query.mockResolvedValueOnce({ rows: [] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
 
     await app.listen({ port: 0 });
 
@@ -128,10 +129,11 @@ describe('WebSocket authentication', () => {
     const token1 = app.jwt.sign({ roomId });
     const token2 = app.jwt.sign({ roomId: roomId2 });
 
-    // room 2 sync mocks
+    // room 2 sync mocks (room, connections, node positions, memory)
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId2, home_zone_id: VALID_ZONE_B, created_at: new Date().toISOString() }] });
     mockDb.query.mockResolvedValueOnce({ rows: [] });
     mockDb.query.mockResolvedValueOnce({ rows: [] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
 
     const ws1 = await connectWs(roomId);
     const ws2 = await connectWs(roomId2);

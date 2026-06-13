@@ -498,6 +498,7 @@ describe('Analytics — node position updates via POST /connections', () => {
 
     expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'zones_added')).toBe(true);
     expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'non_roads_zones_added')).toBe(false);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'room_data_updates')).toBe(true);
   });
 
   it('increments global non_roads_zones_added when a new non-roads zone is added for the first time', async () => {
@@ -527,6 +528,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     expect(res.statusCode).toBe(201);
 
     expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'non_roads_zones_added')).toBe(true);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'room_data_updates')).toBe(true);
     // zones_added (roads) column must NOT be set — check no analytics_global_daily SQL mentions `zones_added`
     // as a standalone column (i.e. not as part of non_roads_zones_added)
     const globalRoadsCalls: string[] = mockDb.query.mock.calls
@@ -535,14 +537,14 @@ describe('Analytics — node position updates via POST /connections', () => {
     expect(globalRoadsCalls.length).toBe(0);
   });
 
-  it('increments global room_actions on every node position update', async () => {
+  it('increments global room_data_updates on every node position update', async () => {
     const roomId = 'test-room';
     const token = app.jwt.sign({ roomId });
 
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
-      // zone already exists — no zone discovery fires, only room_actions
+      // zone already exists — no zone discovery fires, only room_data_updates
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [{ zone_id: VALID_ZONE_B }] });
       if (q.includes('custom_handles FROM room_node_positions')) return Promise.resolve({ rows: [] });
       return Promise.resolve({ rows: [], rowCount: 1 });
@@ -705,6 +707,61 @@ describe('Analytics — node position updates via WebSocket', () => {
 
     s1.close();
     s2.close();
+  });
+
+  it('increments routes_plotted globally and per-room when update_plot_route is sent via WS', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
+
+    await app.listen({ port: 0 });
+    const { socket } = await connectAndAuth();
+    const token = testApp.token!;
+
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 150));
+
+    mockDb.query.mockClear();
+    mockDb.query.mockResolvedValue({ rows: [], rowCount: 1 });
+
+    socket.send(JSON.stringify({
+      type: 'update_plot_route',
+      plottedRoute: [VALID_ZONE_A, VALID_ZONE_B],
+      destinationZoneId: VALID_ZONE_B,
+    }));
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'routes_plotted')).toBe(true);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'room_data_updates')).toBe(true);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_room_daily', 'routes_plotted')).toBe(true);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_room_alltime', 'routes_plotted')).toBe(true);
+
+    socket.close();
+  });
+
+  it('does NOT increment routes_plotted when update_plot_route is sent with an empty route (clear)', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] });
+
+    await app.listen({ port: 0 });
+    const { socket } = await connectAndAuth();
+    const token = testApp.token!;
+
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 150));
+
+    mockDb.query.mockClear();
+    mockDb.query.mockResolvedValue({ rows: [], rowCount: 1 });
+
+    socket.send(JSON.stringify({ type: 'update_plot_route', plottedRoute: [] }));
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'routes_plotted')).toBe(false);
+
+    socket.close();
   });
 });
 
