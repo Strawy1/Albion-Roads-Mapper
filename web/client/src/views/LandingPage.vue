@@ -179,7 +179,7 @@ onMounted(() => {
       </div>
       <video
         ref="videoRef"
-        src="/demo2.mp4"
+        :src="`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1.mp4`"
         autoplay
         loop
         muted
