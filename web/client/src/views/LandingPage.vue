@@ -158,7 +158,7 @@ onMounted(() => {
       </p>
        <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
     </div>
-    <div class="w-full max-w-[2000px] mt-4 min-[1200px]:mt-0 min-[1200px]:px-24 min-[1200px]:pt-4 pb-10">
+    <div class="w-full max-w-[2000px] mt-4 min-[1200px]:mt-0 min-[1200px]:px-24 min-[1200px]:pt-4 pb-10 overflow-hidden">
       <div class="mb-2 w-full px-4 min-[1200px]:px-0 text-center">
         <button
           @click="toggleMute"
@@ -179,26 +179,27 @@ onMounted(() => {
             {{ chapter.name }}
           </option>
         </select>
-        <div class="hidden min-[1200px]:flex gap-2">
-          <button
-            v-for="chapter in chapters"
-            :key="chapter.name"
-            class="flex-1 flex flex-col gap-1 cursor-pointer group"
-            @click="jumpToChapter(chapter)"
-          >
-            <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                class="bg-indigo-500 h-full transition-all duration-300 ease-linear"
-                :style="{ width: getChapterProgress(chapter) }"
-              ></div>
-            </div>
-            <div
-              class="w-full text-xs text-center truncate transition-colors group-hover:text-white"
-              :class="currentTime >= chapter.start && currentTime < chapter.end ? 'text-white' : 'text-gray-500'"
+        <div class="hidden min-[1200px]:flex gap-2 flex-wrap max-w-full">
+          <template v-for="(chapter, index) in chapters" :key="chapter.name">
+            <div v-if="index === 7" class="w-full min-[1700px]:hidden"></div>
+            <button
+              class="flex-1 flex flex-col gap-1 cursor-pointer group"
+              @click="jumpToChapter(chapter)"
             >
-              {{ chapter.name }}
-            </div>
-          </button>
+              <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  class="bg-indigo-500 h-full transition-all duration-300 ease-linear"
+                  :style="{ width: getChapterProgress(chapter) }"
+                ></div>
+              </div>
+              <div
+                class="w-full text-xs text-center truncate transition-colors group-hover:text-white"
+                :class="currentTime >= chapter.start && currentTime < chapter.end ? 'text-white' : 'text-gray-500'"
+              >
+                {{ chapter.name }}
+              </div>
+            </button>
+          </template>
         </div>
       </div>
       <video
