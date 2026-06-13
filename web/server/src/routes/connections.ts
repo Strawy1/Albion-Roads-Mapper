@@ -5,6 +5,7 @@ import * as Shared from 'shared';
 import type { Connection, RoomMemoryEntry } from 'shared';
 import { broadcast } from '../broadcast.js';
 import { getInitialFeatures } from '../utils/nodeFeatures.js';
+import { trackRoomModified, trackZoneAdded } from './rooms_analytics.js';
 
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
@@ -180,11 +181,25 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         }
         // else: handles are a valid rotation of the shape — keep them and the stored rotation unchanged
       }
+      // For non-roads zones, check whether this is a brand-new position (to count it as a discovered zone)
+      let isNewNonRoadsZone = false;
+      if (!isRoads) {
+        const { rows: existingPos } = await app.db.query<{ zone_id: string }>(
+          'SELECT zone_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+          [id, toZoneId]
+        );
+        isNewNonRoadsZone = existingPos.length === 0;
+      }
+
       await app.db.query(`
         INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, explored, rotation)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (room_id, zone_id) DO UPDATE SET x = EXCLUDED.x, y = EXCLUDED.y, features = EXCLUDED.features, custom_handles = EXCLUDED.custom_handles, rotation = EXCLUDED.rotation
       `, [id, toZoneId, targetPosition.x, targetPosition.y, JSON.stringify(initialFeatures), JSON.stringify(initialHandles), false, initialRotation]);
+
+      if (isNewNonRoadsZone) {
+        trackZoneAdded(app.db, id, false); // non-roads zone newly discovered
+      }
 
       // Record room memory for the newly added node (with 3-hour dedup guard)
       // Only for roads zones
@@ -209,6 +224,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
                 custom_handles = EXCLUDED.custom_handles,
                 last_updated = EXCLUDED.last_updated
         `, [id, toZoneId, now.toISOString(), JSON.stringify(initialFeatures), JSON.stringify(initialHandles)]);
+        trackZoneAdded(app.db, id, true); // roads zone (only roads zones use memory/shouldAppend)
       } else if (handlesWereCorrected) {
         // Handles were stale and corrected — update memory in-place without adding a new timestamp
         await app.db.query(`
@@ -268,6 +284,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
     }));
     
     broadcast(id, { type: 'node_positions_updated', nodePositions });
+    trackRoomModified(app.db, id);
 
     const connId = randomUUID();
     const reportedAt = now.toISOString();
@@ -510,6 +527,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         }));
 
         broadcast(actualId, { type: 'node_positions_updated', nodePositions });
+        trackRoomModified(app.db, actualId);
       }
 
       const { rows: updatedConns } = await app.db.query<DbConnection>(

@@ -11,6 +11,15 @@ import {
 } from 'shared';
 import { broadcast } from '../broadcast.js';
 import { getInitialFeatures } from '../utils/nodeFeatures.js';
+import {
+  trackRoomCreated,
+  trackPasswordRotated,
+  trackRoomReset,
+  trackMemoryWipedFull,
+  trackMemoryWipedSingle,
+  trackRoomDeleted,
+  trackRoomModified,
+} from './rooms_analytics.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -105,6 +114,8 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       client.release();
     }
 
+    trackRoomCreated(app.db);
+
     const shareUrl = `${request.protocol}://${request.hostname}/rooms/${id}`;
     return reply.status(201).send({ id, shareUrl });
   });
@@ -177,6 +188,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
     // Immediately boot all active WebSocket clients in this room
     broadcast(id, { type: 'password_rotated' });
+    trackPasswordRotated(app.db);
 
     return reply.send({ ok: true });
   });
@@ -218,6 +230,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     }
 
     broadcast(id, { type: 'room_reset' });
+    trackRoomReset(app.db);
 
     return reply.status(204).send();
   });
@@ -235,6 +248,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     await app.db.query('DELETE FROM room_node_memory WHERE room_id = $1', [id]);
 
     broadcast(id, { type: 'memory_sync', memory: [] });
+    trackMemoryWipedFull(app.db);
 
     return reply.status(204).send();
   });
@@ -252,6 +266,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     await app.db.query('DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = $2', [id, zoneId]);
 
     broadcast(id, { type: 'memory_deleted', zoneId });
+    trackMemoryWipedSingle(app.db);
 
     return reply.status(204).send();
   });
@@ -300,6 +315,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     }
 
     broadcast(id, { type: 'room_deleted' });
+    trackRoomDeleted(app.db);
 
     return reply.status(204).send();
   });
@@ -377,6 +393,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     }
     
     broadcast(id, { type: 'room_reset' });
+    trackRoomModified(app.db, id);
 
     return reply.status(204).send();
   });

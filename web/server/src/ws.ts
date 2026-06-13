@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZONE_BY_ID, type Connection, type ClientMessage, type ServerMessage, type NodePosition, type RoomMemoryEntry } from 'shared';
 import { addSocket, removeSocket, broadcast, getTotalSocketCount } from './broadcast.js';
+import { incrementGlobal, incrementRoomDaily, incrementRoomAlltime } from './analytics.js';
 import { recordPolo, getWatchingCount } from './marcopolo.js';
 
 interface DbConnection {
@@ -76,7 +77,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
 
             clearTimeout(authTimeout);
             authenticated = true;
-            addSocket(roomId, socket);
+            addSocket(roomId, socket, msg.token);
 
             send({ type: 'auth_ok' });
 
@@ -220,6 +221,9 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             explored: row.explored ?? false,
           }));
           broadcast(roomId, { type: 'node_positions_updated', nodePositions: broadcastPositions, updateLastUpdated: msg.updateLastUpdated }, socket);
+          incrementGlobal(app.db, { rooms_modified: 1 });
+          incrementRoomDaily(app.db, roomId, { data_updates: 1 });
+          incrementRoomAlltime(app.db, roomId, { data_updates: 1 });
 
           // Update zone memory for nodes that already have a memory entry,
           // storing only map features (resources) and custom handles.

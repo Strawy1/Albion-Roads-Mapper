@@ -750,6 +750,10 @@ describe('PATCH /api/rooms/:id/connections/:connId', () => {
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE connections
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE room_node_positions
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // SELECT positions (for broadcast)
+    // analytics fire-and-forget calls (rooms_modified global, room daily, room alltime)
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
     mockDb.query.mockResolvedValueOnce({ rows: [{
       id: connId, room_id: roomId, from_zone_id: VALID_ZONE_A, to_zone_id: VALID_ZONE_B,
       expires_at: new Date(Date.now() + 120 * 60 * 1000).toISOString(),
@@ -928,6 +932,10 @@ describe('Connection lastUpdatedAt refresh', () => {
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE connection
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE node positions
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // SELECT positions (for broadcast)
+    // analytics fire-and-forget calls (rooms_modified global, room daily, room alltime)
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: connId, expires_at: new Date().toISOString() }] }); // SELECT updated connection
 
     const res = await app.inject({

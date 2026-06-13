@@ -1,21 +1,26 @@
 import type { WebSocket } from '@fastify/websocket';
 import type { ServerMessage } from 'shared';
 import { ensureMarcoStarted, stopMarcoIfEmpty } from './marcopolo.js';
+import { recordSocketAnalytics } from './broadcast_analytics.js';
 
 // Map of roomId → Set of authenticated WebSocket clients
 const roomSockets = new Map<string, Set<WebSocket>>();
 
-export function addSocket(roomId: string, ws: WebSocket): void {
+export function addSocket(roomId: string, ws: WebSocket, token?: string): void {
   if (!roomSockets.has(roomId)) {
     roomSockets.set(roomId, new Set());
   }
   roomSockets.get(roomId)!.add(ws);
   ensureMarcoStarted();
+
+  const roomCount = roomSockets.get(roomId)!.size;
+  const totalCount = getTotalSocketCount();
+
+  recordSocketAnalytics(roomId, token, roomCount, totalCount);
+
   // Broadcast updated counts to all other clients immediately
-  const count = roomSockets.get(roomId)!.size;
-  const totalConnected = getTotalSocketCount();
-  broadcast(roomId, { type: 'watching', roomId, count, totalConnected }, ws);
-  broadcastAll({ type: 'watching', roomId, count, totalConnected }, ws);
+  broadcast(roomId, { type: 'watching', roomId, count: roomCount, totalConnected: totalCount }, ws);
+  broadcastAll({ type: 'watching', roomId, count: roomCount, totalConnected: totalCount }, ws);
 }
 
 export function removeSocket(roomId: string, ws: WebSocket): void {
