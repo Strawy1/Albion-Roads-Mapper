@@ -20,14 +20,20 @@ interface Chapter {
 }
 
 const chapters: Chapter[] = [
-  { name: "Adding Zones", start: 0, end: 10 },
-  { name: "Updating Map Portals", start: 10, end: 21 },
-  { name: "Updating Map Features", start: 21, end: 89 },
-  { name: "Editing Connections", start: 89, end: 122 },
-  { name: "Searching zones", start: 122, end: 148 },
-  { name: "Real-Time Sync", start: 148, end: 186 },
-  { name: "Route Plotting", start: 186, end: 222 },
-  { name: "Map Summaries", start: 222, end: 268 },
+  { name: "Adding Zones", start: 0, end: 30 },
+  { name: "Rotating Maps & Portal Edits", start: 30, end: 50 },
+  { name: "Link Zone Portal", start: 50, end: 81 },
+  { name: "Editing Connections", start: 81, end: 91 },
+  { name: "Map Features", start: 91, end: 129 },
+  { name: "Map History", start: 129, end: 148 },
+  { name: "Cores, Chests & Dungeons", start: 148, end: 206 },
+  { name: "Links Expiry", start: 206, end: 235 },
+  { name: "Search", start: 235, end: 250 },
+  { name: "Pinging & Reds", start: 250, end: 278 },
+  { name: "Real-Time Sync", start: 278, end: 305 },
+  { name: "Route Plotting", start: 305, end: 333 },
+  { name: "Room History", start: 333, end: 360 },
+  { name: "Room Management", start: 360, end: 999 },
 ];
 
 const activeChapterName = computed(() => {
@@ -36,6 +42,14 @@ const activeChapterName = computed(() => {
 });
 
 const dropdownValue = ref<string>(chapters[0].name);
+const isMuted = ref(true);
+
+const toggleMute = () => {
+  if (videoRef.value) {
+    videoRef.value.muted = !videoRef.value.muted;
+    isMuted.value = videoRef.value.muted;
+  }
+};
 
 let animationFrameId: number | null = null;
 
@@ -90,6 +104,8 @@ const getChapterProgress = (chapter: Chapter) => {
   return ((currentTime.value - chapter.start) / duration) * 100 + '%';
 };
 
+const videoSrc = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1.mp4`;
+
 function openCreateRoom() {
   showCreate.value = true;
 }
@@ -143,6 +159,14 @@ onMounted(() => {
        <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
     </div>
     <div class="w-full max-w-[2000px] mt-4 min-[1200px]:mt-0 min-[1200px]:px-24 min-[1200px]:pt-4 pb-10">
+      <div class="mb-2 w-full px-4 min-[1200px]:px-0 text-center">
+        <button
+          @click="toggleMute"
+          class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 font-medium transition-colors text-sm"
+        >
+          {{ isMuted ? '🔇 Unmute' : '🔊 Mute' }}
+        </button>
+      </div>
       <div class="mb-4 w-full px-4 min-[1200px]:px-0 text-center">
         <select
           :value="dropdownValue"
@@ -179,7 +203,7 @@ onMounted(() => {
       </div>
       <video
         ref="videoRef"
-        :src="`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1.mp4`"
+        :src="videoSrc"
         autoplay
         loop
         muted
