@@ -11,12 +11,38 @@ const route = useRoute();
 const store = useRoomStore();
 
 const passwordRotatedBanner = computed(() => route.query.reason === 'password_rotated');
+const roomDeletedBanner = computed(() => route.query.reason === 'room_deleted');
+const roomNotFoundBanner = computed(() => route.query.reason === 'room_not_found');
 
 const password = ref('');
 const authError = ref('');
 const authenticating = ref(false);
+const roomNotFound = ref(false);
+const checkingRoom = ref(true);
 
 onMounted(async () => {
+  // If the room was deleted or not found, show the not-found state immediately
+  if (roomDeletedBanner.value || roomNotFoundBanner.value) {
+    store.removeFromRecentRooms(props.id);
+    roomNotFound.value = true;
+    checkingRoom.value = false;
+    return;
+  }
+
+  // Check that the room actually exists before doing anything else
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/rooms/resolve/${props.id}`);
+    if (res.status === 404) {
+      store.removeFromRecentRooms(props.id);
+      roomNotFound.value = true;
+      checkingRoom.value = false;
+      return;
+    }
+  } catch {
+    // Network error — fall through and let the user try to authenticate
+  }
+  checkingRoom.value = false;
+
   // If already authenticated (token in session storage), go straight to the room
   const stored = sessionStorage.getItem(`token:${props.id}`);
   if (stored) {
@@ -58,7 +84,37 @@ async function authenticate() {
 
 <template>
   <div class="h-dvh flex items-center justify-center bg-gray-950 text-white p-6">
-    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
+    <!-- Room not found error state -->
+    <div v-if="roomNotFound" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-red-400 text-2xl">⚠️</span>
+        <h2 class="text-xl font-semibold text-red-400">Room no longer exists!</h2>
+      </div>
+      <div v-if="roomDeletedBanner" class="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <strong>Room was deleted!</strong> The room owner permanently deleted this room.
+      </div>
+      <div v-else-if="roomNotFoundBanner" class="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <strong>Map Room / Page not found!</strong> Please double check the link!
+      </div>
+      <p class="text-gray-400 text-sm mb-5">
+        If this room was in your recently visited list, it has now been removed.
+      </p>
+      <button
+        class="w-full px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 font-medium mb-3"
+        @click="router.push('/?create=true')"
+      >
+        Create a New Room
+      </button>
+      <button
+        class="w-full px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 font-medium"
+        @click="router.push('/')"
+      >
+        Go to Home Page
+      </button>
+    </div>
+
+    <!-- Normal auth form -->
+    <div v-else-if="!checkingRoom" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
       <h2 class="text-xl font-semibold mb-4">Enter Room Password</h2>
       <p class="text-gray-400 text-sm mb-4">Room: <code class="text-indigo-300">{{ id }}</code></p>
       <div v-if="passwordRotatedBanner" class="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">

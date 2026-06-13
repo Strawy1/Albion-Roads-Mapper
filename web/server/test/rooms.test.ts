@@ -163,6 +163,121 @@ describe('POST /api/rooms/:id/auth', () => {
   });
 });
 
+describe('DELETE /api/rooms/:id', () => {
+  it('returns 204 and deletes room data when admin password is correct', async () => {
+    const bcrypt = await import('bcrypt');
+    const roomId = 'test-room-id';
+    const adminHash = await bcrypt.default.hash('admin-pw', 1);
+    const token = app.jwt.sign({ roomId });
+
+    // Mock: SELECT admin_password_hash
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ admin_password_hash: adminHash }],
+    });
+
+    const clientMock = {
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'admin-pw' },
+    });
+
+    expect(res.statusCode).toBe(204);
+
+    // Verify transaction queries were executed
+    const calls = clientMock.query.mock.calls.map((c: any[]) => c[0]);
+    expect(calls.some((q: string) => q.includes('BEGIN'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('DELETE FROM connections'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('DELETE FROM room_node_positions'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('DELETE FROM room_node_memory'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('DELETE FROM rooms'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('COMMIT'))).toBe(true);
+  });
+
+  it('returns 401 when admin password is wrong', async () => {
+    const bcrypt = await import('bcrypt');
+    const roomId = 'test-room-id';
+    const adminHash = await bcrypt.default.hash('correct-admin', 1);
+    const token = app.jwt.sign({ roomId });
+
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ admin_password_hash: adminHash }],
+    });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'wrong-admin' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json<{ error: string }>().error).toMatch(/invalid admin password/i);
+  });
+
+  it('returns 400 when adminPassword is missing', async () => {
+    const roomId = 'test-room-id';
+    const token = app.jwt.sign({ roomId });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/admin password required/i);
+  });
+
+  it('returns 404 when room does not exist', async () => {
+    const roomId = 'ghost-room';
+    const token = app.jwt.sign({ roomId });
+
+    mockDb.query.mockResolvedValueOnce({ rows: [] });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'any-password' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ error: string }>().error).toMatch(/room not found/i);
+  });
+
+  it('returns 403 when token belongs to a different room', async () => {
+    const roomId = 'test-room-id';
+    const token = app.jwt.sign({ roomId: 'other-room' });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'admin-pw' },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('returns 401 when no auth token is provided', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/rooms/test-room-id',
+      payload: { adminPassword: 'admin-pw' },
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+});
+
 describe('Home Zone Node Protection', () => {
   it('should NOT allow changing home zone via PATCH /api/rooms/:id', async () => {
     const roomId = 'test-room-id';

@@ -336,6 +336,7 @@ export type ServerMessage =
   | { type: 'memory_deleted'; zoneId: string }
   | { type: 'plot_route_updated'; plottedRoute: string[]; destinationZoneId?: string }
   | { type: 'password_rotated' }
+  | { type: 'room_deleted' }
   | { type: 'error'; message: string };
 
 export type ClientMessage =

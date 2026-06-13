@@ -9,7 +9,7 @@ import { useRoomMemoryStore } from './useRoomMemoryStore';
 import { usePlotRouteStore } from './usePlotRouteStore';
 
 export type WsStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
-export type DisconnectReason = 'password_rotated' | null;
+export type DisconnectReason = 'password_rotated' | 'room_deleted' | 'room_not_found' | null;
 
 export const useRoomStore = defineStore('room', () => {
   const connections = ref<Connection[]>([]);
@@ -215,6 +215,26 @@ export const useRoomStore = defineStore('room', () => {
         wsStatus.value = 'auth_failed';
         ws?.close();
         ws = null;
+        break;
+
+      case 'room_deleted':
+        // The room has been permanently deleted — boot all users out
+        sessionStorage.removeItem(`token:${roomId.value}`);
+        disconnectReason.value = 'room_deleted';
+        wsStatus.value = 'auth_failed';
+        ws?.close();
+        ws = null;
+        break;
+
+      case 'error':
+        // Handle fatal server errors — treat "Room not found" as a hard redirect
+        if (msg.message === 'Room not found') {
+          sessionStorage.removeItem(`token:${roomId.value}`);
+          disconnectReason.value = 'room_not_found';
+          wsStatus.value = 'auth_failed';
+          ws?.close();
+          ws = null;
+        }
         break;
 
       case 'plot_route_updated':

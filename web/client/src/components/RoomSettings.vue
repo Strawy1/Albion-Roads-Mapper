@@ -83,6 +83,59 @@ async function reset() {
   }
 }
 
+async function resetWithHistory() {
+  resetting.value = true;
+  resetError.value = '';
+  try {
+    const connectionsRes = await fetch(`${API_BASE_URL}/api/rooms/${store.roomId}/connections`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${store.token}`,
+      },
+    });
+    if (!connectionsRes.ok) {
+      const body = await connectionsRes.json() as { error?: string };
+      resetError.value = body.error ?? 'Reset failed';
+      return;
+    }
+    await fetch(`${API_BASE_URL}/api/rooms/${store.roomId}/memory`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${store.token}`,
+      },
+    });
+    open.value = false;
+    resetSubForms();
+    track('reset_all_connections_with_history');
+  } finally {
+    resetting.value = false;
+  }
+}
+
+async function deleteRoom(adminPassword: string, setError: (msg: string) => void) {
+  resetting.value = true;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/rooms/${store.roomId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${store.token}`,
+      },
+      body: JSON.stringify({ adminPassword }),
+    });
+    if (!res.ok) {
+      const body = await res.json() as { error?: string };
+      setError(body.error ?? 'Delete failed');
+      return;
+    }
+    track('delete_room');
+    store.logout();
+    router.replace({ path: '/' });
+  } finally {
+    resetting.value = false;
+  }
+}
+
 // savePassword function removed from here, it's now in ChangePasswordModal.vue
 
 function copyLink() {
@@ -198,11 +251,11 @@ function logout() {
         <div class="border-b border-gray-700 p-2">
           <button
             type="button"
-            class="w-full text-left px-3 py-2 text-sm rounded text-red-400 hover:bg-gray-700 hover:text-red-300"
+            class="w-full text-left px-3 py-2 text-sm rounded text-red-400 hover:bg-red-700 hover:text-white"
             data-testid="settings-reset-room"
             @click="showResetConfirmModal = true"
           >
-            🗑️  Reset Room
+            🗑️  Reset / Delete Room
           </button>
         </div>
 
@@ -219,6 +272,6 @@ function logout() {
       </div>
     </div>
     <ChangePasswordModal v-model="showChangePasswordModal" />
-    <ResetConfirmModal v-model="showResetConfirmModal" @confirmed="reset" />
+    <ResetConfirmModal v-model="showResetConfirmModal" @confirmed="reset" @confirmed-with-history="resetWithHistory" @confirmed-delete-room="deleteRoom" />
   </div>
 </template>

@@ -256,6 +256,54 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(204).send();
   });
 
+  // DELETE /api/rooms/:id — permanently delete the room and all its data
+  app.delete<{ Params: { id: string }; Body: { adminPassword: string } }>('/api/rooms/:id', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+
+    const { adminPassword } = request.body ?? {};
+    if (!adminPassword) {
+      return reply.status(400).send({ error: 'Admin password required' });
+    }
+
+    const { rows } = await app.db.query<{ admin_password_hash: string }>(
+      'SELECT admin_password_hash FROM rooms WHERE id = $1',
+      [id]
+    );
+    const room = rows[0];
+    if (!room) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+    const validAdmin = await bcrypt.compare(adminPassword, room.admin_password_hash);
+    if (!validAdmin) {
+      return reply.status(401).send({ error: 'Invalid admin password' });
+    }
+
+    const client = await app.db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM connections WHERE room_id = $1', [id]);
+      await client.query('DELETE FROM room_node_positions WHERE room_id = $1', [id]);
+      await client.query('DELETE FROM room_node_memory WHERE room_id = $1', [id]);
+      await client.query('DELETE FROM rooms WHERE id = $1', [id]);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    broadcast(id, { type: 'room_deleted' });
+
+    return reply.status(204).send();
+  });
+
   // PUT /api/rooms/:id/import — import full room state
   app.put<{ Params: { id: string }, Body: any }>('/api/rooms/:id/import', {
     preHandler: [app.authenticate],

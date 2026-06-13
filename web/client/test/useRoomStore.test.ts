@@ -198,6 +198,41 @@ describe('useRoomStore', () => {
     expect(store.nodePositions).toHaveLength(3); // all three nodes present
   });
 
+  it('sets wsStatus to auth_failed and disconnectReason to room_deleted on room_deleted message', () => {
+    const store = useRoomStore();
+    store.roomId = 'room-to-delete';
+    sessionStorage.setItem('token:room-to-delete', 'some-token');
+
+    store.applyMessage({ type: 'room_deleted' });
+
+    expect(store.wsStatus).toBe('auth_failed');
+    expect(store.disconnectReason).toBe('room_deleted');
+    expect(sessionStorage.getItem('token:room-to-delete')).toBeNull();
+  });
+
+  it('sets wsStatus to auth_failed and disconnectReason to room_not_found on error message with Room not found', () => {
+    const store = useRoomStore();
+    store.roomId = 'ghost-room';
+    sessionStorage.setItem('token:ghost-room', 'old-token');
+
+    store.applyMessage({ type: 'error', message: 'Room not found' });
+
+    expect(store.wsStatus).toBe('auth_failed');
+    expect(store.disconnectReason).toBe('room_not_found');
+    expect(sessionStorage.getItem('token:ghost-room')).toBeNull();
+  });
+
+  it('does NOT change wsStatus on error message with an unrelated message', () => {
+    const store = useRoomStore();
+    store.roomId = 'room1';
+    store.wsStatus = 'connected';
+
+    store.applyMessage({ type: 'error', message: 'Something else went wrong' });
+
+    expect(store.wsStatus).toBe('connected');
+    expect(store.disconnectReason).toBeNull();
+  });
+
   it('should not expire parent node if child connection is expired but path to hideout still exists', () => {
     const store = useRoomStore();
     const homeZoneId = 'qiient-in-odetum';

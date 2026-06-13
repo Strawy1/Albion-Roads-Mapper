@@ -297,4 +297,49 @@ describe('WebSocket authentication', () => {
 
     socket.close();
   });
+
+  it('broadcasts room_deleted to all connected clients when the room is deleted via HTTP', async () => {
+    const bcrypt = await import('bcrypt');
+    const adminHash = await bcrypt.default.hash('admin-secret', 1);
+
+    // Mock: sync (room, connections, node positions)
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
+
+    await app.listen({ port: 0 });
+
+    const { socket } = await connectWs(roomId);
+    const messages: unknown[] = [];
+    socket.on('message', (d) => messages.push(JSON.parse(d.toString())));
+
+    // Authenticate
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 200)); // wait for auth_ok + sync
+
+    // Mock for the DELETE /api/rooms/:id endpoint
+    mockDb.query.mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash }] });
+    const clientMock = {
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    // Delete the room as the owner
+    const deleteRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'admin-secret' },
+    });
+    expect(deleteRes.statusCode).toBe(204);
+
+    // Wait for the broadcast to reach the connected WS client
+    await new Promise((r) => setTimeout(r, 200));
+
+    const roomDeletedMsg = messages.find((m) => (m as { type: string }).type === 'room_deleted');
+    expect(roomDeletedMsg).toBeDefined();
+
+    socket.close();
+  });
 });
