@@ -30,6 +30,9 @@ COPY --from=builder /app/web/server/fixtures ./web/server/fixtures
 COPY --from=builder /app/web/shared/dist ./web/shared/dist
 COPY --from=builder /app/web/shared/data ./web/shared/data
 
+# Copy media assets
+COPY media/ ./media/
+
 # Verify build output exists at the correct path
 RUN ls -lah /app/web/server/dist
 
