@@ -118,11 +118,11 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const { rows: roomDailyRows } = await app.db.query<{
       room_id: string;
       routes_plotted: string;
-      room_data_updates: string;
+      data_updates: string;
       zones_added: string;
       non_roads_zones_added: string;
     }>(
-      `SELECT room_id, routes_plotted, room_data_updates, zones_added, non_roads_zones_added
+      `SELECT room_id, routes_plotted, data_updates, zones_added, non_roads_zones_added
        FROM analytics_room_daily
        WHERE date = $1`,
       [today],
@@ -131,7 +131,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       lines.push(metricLabeled('albionmapper_room_routes_plotted_today', 'Routes plotted today (UTC) per room', 'gauge',
         roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.routes_plotted ?? '0', 10) }))));
       lines.push(metricLabeled('albionmapper_room_data_updates_today', 'Room data update events today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.room_data_updates ?? '0', 10) }))));
+        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) }))));
       lines.push(metricLabeled('albionmapper_room_zones_added_roads_today', 'Road zones added today (UTC) per room', 'gauge',
         roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added ?? '0', 10) }))));
       lines.push(metricLabeled('albionmapper_room_zones_added_nonroads_today', 'Non-road zones added today (UTC) per room', 'gauge',
