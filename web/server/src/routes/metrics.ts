@@ -8,16 +8,15 @@ function metric(name: string, help: string, type: 'gauge' | 'counter', value: nu
   return `# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name} ${value}\n`;
 }
 
-function isInCidr10(ip: string): boolean {
-  // Allow 10.0.0.0/8 (10.x.x.x)
-  const parts = ip.split('.');
-  return parts.length === 4 && parts[0] === '10';
+function isAllowedMetricsIp(ip: string): boolean {
+  // Only allow 10.0.1.232 (Cloudflare tunnel operates on 10.0.5.0/24 which is blocked)
+  return ip === '10.0.1.232';
 }
 
 export async function metricsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/metrics', async (request, reply) => {
     const ip = request.ip;
-    if (!isInCidr10(ip)) {
+    if (!isAllowedMetricsIp(ip)) {
       return reply.status(403).send({ error: 'Forbidden' });
     }
     // --- Live in-process stats ---
