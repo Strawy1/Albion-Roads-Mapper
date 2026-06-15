@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRafFn } from '@vueuse/core';
+import { useVueFlow } from '@vue-flow/core';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<{
@@ -13,6 +14,8 @@ const props = defineProps<{
 }>();
 
 const rect = ref<DOMRect | null>(null);
+const { viewport } = useVueFlow();
+const zoom = computed(() => viewport.value?.zoom ?? 1);
 
 useRafFn(() => {
   if (props.target) {
@@ -46,17 +49,28 @@ const tooltipStyle = computed(() => {
 
   if (cx === null || cy === null) return {};
 
+  const z = zoom.value;
+  const baseTransform = props.pointing === 'down'
+    ? 'translateX(-50%) translateY(-100%)'
+    : props.pointing === 'up'
+    ? 'translateX(-50%)'
+    : props.pointing === 'left'
+    ? 'translateY(-50%)'
+    : 'translateX(-100%) translateY(-50%)';
+  const transformOrigin = props.pointing === 'down'
+    ? 'bottom center'
+    : props.pointing === 'up'
+    ? 'top center'
+    : props.pointing === 'left'
+    ? 'left center'
+    : 'right center';
+
   return {
     position: 'fixed' as const,
     left: `${cx}px`,
     top: `${cy}px`,
-    transform: props.pointing === 'down'
-      ? 'translateX(-50%) translateY(-100%)'
-      : props.pointing === 'up'
-      ? 'translateX(-50%)'
-      : props.pointing === 'left'
-      ? 'translateY(-50%)'
-      : 'translateX(-100%) translateY(-50%)',
+    transform: `${baseTransform} scale(${z * 0.7})`,
+    transformOrigin,
   };
 });
 </script>
@@ -68,7 +82,7 @@ const tooltipStyle = computed(() => {
       :style="tooltipStyle"
     >
       <div
-        class="relative bg-blue-600 border border-blue-400 text-white text-center px-3 py-1.5 rounded shadow-lg text-lg"
+        class="relative bg-blue-600 border-2 border-blue-400 text-white text-center px-3 py-1.5 rounded shadow-lg text-lg"
         :class="[{ 'animate-bounce-prompt': bounce }]"
       >
         <div class="flex items-center gap-1 whitespace-nowrap">
@@ -77,19 +91,19 @@ const tooltipStyle = computed(() => {
         </div>
         <!-- Arrows (with blue-400 outline via layered larger arrow behind) -->
         <template v-if="pointing === 'down'">
-          <div class="absolute -bottom-3 left-1/2 w-6 h-3 bg-blue-400 [clip-path:polygon(0%_0%,100%_0%,50%_100%)] -translate-x-1/2"></div>
+          <div class="absolute -bottom-[14px] left-1/2 w-7 h-3.5 bg-blue-400 [clip-path:polygon(0%_0%,100%_0%,50%_100%)] -translate-x-1/2"></div>
           <div class="absolute -bottom-[10px] left-1/2 w-[20px] h-[10px] bg-blue-600 [clip-path:polygon(0%_0%,100%_0%,50%_100%)] -translate-x-1/2"></div>
         </template>
         <template v-if="pointing === 'up'">
-          <div class="absolute -top-3 left-1/2 w-6 h-3 bg-blue-400 [clip-path:polygon(50%_0%,0%_100%,100%_100%)] -translate-x-1/2"></div>
+          <div class="absolute -top-[14px] left-1/2 w-7 h-3.5 bg-blue-400 [clip-path:polygon(50%_0%,0%_100%,100%_100%)] -translate-x-1/2"></div>
           <div class="absolute -top-[10px] left-1/2 w-[20px] h-[10px] bg-blue-600 [clip-path:polygon(50%_0%,0%_100%,100%_100%)] -translate-x-1/2"></div>
         </template>
         <template v-if="pointing === 'left'">
-          <div class="absolute -left-3 top-1/2 w-3 h-6 bg-blue-400 [clip-path:polygon(0%_50%,100%_0%,100%_100%)] -translate-y-1/2"></div>
+          <div class="absolute -left-[14px] top-1/2 w-3.5 h-7 bg-blue-400 [clip-path:polygon(0%_50%,100%_0%,100%_100%)] -translate-y-1/2"></div>
           <div class="absolute -left-[10px] top-1/2 w-[10px] h-[20px] bg-blue-600 [clip-path:polygon(0%_50%,100%_0%,100%_100%)] -translate-y-1/2"></div>
         </template>
         <template v-if="pointing === 'right'">
-          <div class="absolute -right-3 top-1/2 w-3 h-6 bg-blue-400 [clip-path:polygon(0%_0%,100%_50%,0%_100%)] -translate-y-1/2"></div>
+          <div class="absolute -right-[14px] top-1/2 w-3.5 h-7 bg-blue-400 [clip-path:polygon(0%_0%,100%_50%,0%_100%)] -translate-y-1/2"></div>
           <div class="absolute -right-[10px] top-1/2 w-[10px] h-[20px] bg-blue-600 [clip-path:polygon(0%_0%,100%_50%,0%_100%)] -translate-y-1/2"></div>
         </template>
       </div>

@@ -406,11 +406,56 @@ useRafFn(() => {
   }
 });
 
+const HIDEOUT_HINT_STORAGE_KEY = 'hideoutNHandleHintDismissedIds';
+// Clean up legacy global dismissal flag so existing users get the hint back.
+try { localStorage.removeItem('hideoutNHandleHintDismissed'); } catch {}
+function readDismissedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDEOUT_HINT_STORAGE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+const hideoutHintDismissed = ref(readDismissedIds().has(props.id));
+
+function dismissHideoutHint() {
+  hideoutHintDismissed.value = true;
+  try {
+    const ids = readDismissedIds();
+    ids.add(props.id);
+    localStorage.setItem(HIDEOUT_HINT_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {}
+}
+
+const hasOnlyDefaultHandles = computed(() => {
+  const custom = props.data.customHandles || [];
+  if (custom.length === 0) return true;
+  const defaults = getDefaultHandles(props.data.type as ZoneType, props.data.mapShape);
+  if (custom.length !== defaults.length) return false;
+  const defaultIds = new Set(defaults.map(d => d.id));
+  return custom.every(c => defaultIds.has(c.id) && !c.disabled);
+});
+
+const hasAnyConnection = computed(() =>
+  connections.value.some(c => c.fromZoneId === props.id || c.toZoneId === props.id)
+);
+
 const showFreshRoomHint = computed(() => {
   if (!isRoadsHideout.value) return false;
   if (props.data.isGhost) return false;
+  if (hideoutHintDismissed.value) return false;
   if (isHandleEditorOpen.value || isMapFeaturesModalOpen.value || isChestModalOpen.value) return false;
-  return store.nodePositions.length === 1 && memoryStore.memory.size === 0;
+  if (hasAnyConnection.value) return false;
+  if (!hasOnlyDefaultHandles.value) return false;
+  return true;
+});
+
+// Auto-dismiss once the user creates their first connection on this hideout
+watch(hasAnyConnection, (has ) => {
+  if (has && !hideoutHintDismissed.value) dismissHideoutHint();
 });
 
 onClickOutside(timerContainerRefNW, (e) => {
@@ -1109,7 +1154,7 @@ function lockCore(core: string) {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
-              <BluePrompt v-if="promptsReady && showFeatures && activeFeatures.length === 0 && mapFeaturesButtonRef" pointing="down" bounce :target="mapFeaturesButtonRef">Add Features</BluePrompt>
+              <BluePrompt v-if="promptsReady && !isMapFeaturesModalOpen && !isHandleEditorOpen && !isChestModalOpen && showFeatures && activeFeatures.length === 0 && mapFeaturesButtonRef" pointing="down" bounce :target="mapFeaturesButtonRef">Add Features</BluePrompt>
             </div>
             <ZoneFeatures 
               :active-features="activeFeatures"
@@ -1165,6 +1210,8 @@ function lockCore(core: string) {
         v-if="promptsReady && showFreshRoomHint && nHandleScreenPos"
         pointing="down"
         bounce
+        :offset-x="5"
+        :offset-y="-60"
         :screen-pos="nHandleScreenPos"
         :class="[Z_INDEX.HANDLE_OVERLAY]"
       >Pull on this handle to add a zone</BluePrompt>

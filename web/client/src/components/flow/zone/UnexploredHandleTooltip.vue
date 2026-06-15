@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import BluePrompt from '@/components/ui/BluePrompt.vue';
+import {Z_INDEX} from "@/constants/Layers";
 
 const emit = defineEmits<{ dismiss: [] }>();
 </script>
 
 <template>
-  <BluePrompt pointing="left" bounce class="pointer-events-auto">
+  <BluePrompt pointing="left" bounce class="pointer-events-auto" :class="[Z_INDEX.HANDLE_OVERLAY]">
     <span>Link Zone portals!</span>
     <template #actions>
       <TooltipProvider :delay-duration="0">
