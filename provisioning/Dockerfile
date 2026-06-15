@@ -14,6 +14,9 @@ ENV CI=true
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
+# Copy media assets
+COPY media/ ./media/
+
 # Copy only workspace-related files for installation
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY web/client/package.json ./web/client/
@@ -29,9 +32,6 @@ COPY --from=builder /app/web/server/migrations ./web/server/migrations
 COPY --from=builder /app/web/server/fixtures ./web/server/fixtures
 COPY --from=builder /app/web/shared/dist ./web/shared/dist
 COPY --from=builder /app/web/shared/data ./web/shared/data
-
-# Copy media assets
-COPY media/ ./media/
 
 # Verify build output exists at the correct path
 RUN ls -lah /app/web/server/dist
