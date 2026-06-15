@@ -56,11 +56,13 @@ export async function flushHourlyConnections(db: Pool): Promise<void> {
   const count = getTotalSocketCount();
   try {
     await db.query(
-      `INSERT INTO analytics_hourly_connections (hour, max_connections, min_connections)
-       VALUES ($1, $2, $2)
+      `INSERT INTO analytics_hourly_connections (hour, max_connections, min_connections, avg_connections, sample_count)
+       VALUES ($1, $2, $2, $2, 1)
        ON CONFLICT (hour) DO UPDATE
          SET max_connections = GREATEST(analytics_hourly_connections.max_connections, EXCLUDED.max_connections),
-             min_connections = LEAST(analytics_hourly_connections.min_connections, EXCLUDED.min_connections)`,
+             min_connections = LEAST(analytics_hourly_connections.min_connections, EXCLUDED.min_connections),
+             avg_connections = (analytics_hourly_connections.avg_connections * analytics_hourly_connections.sample_count + EXCLUDED.avg_connections) / (analytics_hourly_connections.sample_count + 1),
+             sample_count = analytics_hourly_connections.sample_count + 1`,
       [hour, count],
     );
   } catch (err) {

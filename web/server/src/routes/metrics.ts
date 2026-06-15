@@ -87,7 +87,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
        ORDER BY hour ASC`,
     );
 
-    // --- Today's global daily stats ---
+    // Today's global daily stats ---
     const today = new Date().toISOString().slice(0, 10);
     const { rows: dailyRows } = await app.db.query<{
       rooms_created: string;
@@ -114,6 +114,24 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       [today],
     );
     const daily = dailyRows[0];
+
+    // --- Map History stats ---
+    const { rows: mapHistoryRows } = await app.db.query<{ zone_id: string; total_mentions: string }>(
+      `SELECT zone_id, SUM(ARRAY_LENGTH(times_added, 1)) AS total_mentions
+       FROM room_node_memory
+       GROUP BY zone_id`
+    );
+
+    const { rows: roomHistoryRows } = await app.db.query<{ room_id: string; total_entries: string }>(
+      `SELECT room_id, SUM(ARRAY_LENGTH(times_added, 1)) AS total_entries
+       FROM room_node_memory
+       GROUP BY room_id`
+    );
+
+    const { rows: totalHistoryRows } = await app.db.query<{ total: string }>(
+      `SELECT SUM(ARRAY_LENGTH(times_added, 1)) AS total FROM room_node_memory`
+    );
+    const totalHistoryEntries = parseInt(totalHistoryRows[0]?.total ?? '0', 10);
 
     const lines: string[] = [];
 
@@ -148,11 +166,11 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- Active rooms (DB-level room state) ---
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
-    lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection right now', 'gauge', liveRooms));
-    lines.push(metric('albionmapper_rooms_active', 'Number of rooms with at least one active (non-expired) connection', 'gauge', activeRooms));
+    lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection (live now)', 'gauge', liveRooms));
+    lines.push(metric('albionmapper_rooms_active', 'Number of rooms with at least one non-expired connection', 'gauge', activeRooms));
     lines.push(metric('albionmapper_rooms_inactive', 'Number of rooms with no active WebSocket connections', 'gauge', inactiveRooms));
     lines.push(metric('albionmapper_rooms_empty', 'Number of rooms with no connections added', 'gauge', emptyRooms));
-    lines.push(metric('albionmapper_rooms_expired', 'Number of rooms that have connections but all are expired', 'gauge', expiredRooms));
+    lines.push(metric('albionmapper_rooms_expired', 'Number of rooms where all connections have expired', 'gauge', expiredRooms));
 
     // --- Zone counts ---
     lines.push(metric('albionmapper_zones_total', 'Total number of zones entered into the system (excluding home zones)', 'gauge', totalZones));
@@ -217,6 +235,23 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_daily_zones_added_nonroads_total', 'Non-road zones added today (UTC)', 'gauge', parseInt(daily?.non_roads_zones_added ?? '0', 10)));
     lines.push(metric('albionmapper_daily_room_data_updates_total', 'Total room data update events today (UTC)', 'gauge', parseInt(daily?.room_data_updates ?? '0', 10)));
     lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (UTC)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
+
+    // --- Map History stats ---
+    lines.push(metric('albionmapper_history_entries_total', 'Total number of room history entries across all maps and rooms', 'gauge', totalHistoryEntries));
+
+    const mapHistorySeries = mapHistoryRows
+      .map(r => ({ labels: { zone_id: r.zone_id }, value: parseInt(r.total_mentions ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (mapHistorySeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_map_history_mentions_total', 'Total number of times each map is mentioned in room histories', 'gauge', mapHistorySeries));
+    }
+
+    const roomHistorySeries = roomHistoryRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.total_entries ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (roomHistorySeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total history size (number of entries) for each room', 'gauge', roomHistorySeries));
+    }
 
     return reply
       .header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
