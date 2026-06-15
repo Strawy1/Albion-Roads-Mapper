@@ -229,6 +229,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
       await client.query('DELETE FROM connections WHERE room_id = $1', [id]);
       await client.query('DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id != $2', [id, room.home_zone_id]);
+      await client.query(
+        'UPDATE room_node_positions SET features = $1, custom_handles = $2 WHERE room_id = $3 AND zone_id = $4',
+        ['{}', null, id, room.home_zone_id]
+      );
       await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
       
       await client.query('COMMIT');

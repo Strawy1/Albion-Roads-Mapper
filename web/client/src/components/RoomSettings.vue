@@ -71,7 +71,8 @@ async function clearRoom() {
     }
     open.value = false;
     resetSubForms();
-    track('clear_room');
+    await track('clear_room');
+    window.location.reload();
   } finally {
     resetting.value = false;
   }
@@ -104,7 +105,8 @@ async function resetWithHistory(adminPassword: string, setError: (msg: string) =
     memoryStore.clear();
     open.value = false;
     resetSubForms();
-    track('reset_all_connections_with_history');
+    await track('reset_all_connections_with_history');
+    window.location.reload();
   } finally {
     resetting.value = false;
   }
