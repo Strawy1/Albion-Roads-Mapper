@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import {
-  utcDateString,
+  londonDateString,
   flushConcurrencyStats,
   flushGlobalConcurrencyStats,
   recalculateRoomCounts,
@@ -81,11 +81,11 @@ export async function flushHourlyConnections(db: Pool): Promise<void> {
  * Returns the interval handle so it can be cleared on server shutdown.
  */
 export function startAnalyticsCron(db: Pool): NodeJS.Timeout {
-  let lastDate = utcDateString();
+  let lastDate = londonDateString();
 
   return setInterval(() => {
     void (async () => {
-      const today = utcDateString();
+      const today = londonDateString();
 
       if (today !== lastDate) {
         // Day has rolled over — do a final flush of the previous day then clear it

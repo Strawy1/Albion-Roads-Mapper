@@ -30,6 +30,16 @@ export interface RoomAlltimeCounters {
   routes_plotted?: number;
 }
 
+/** Returns today's date as a YYYY-MM-DD string in Europe/London. */
+export function londonDateString(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d).split('/').reverse().join('-');
+}
+
 /** Returns today's date as a YYYY-MM-DD string in UTC. */
 export function utcDateString(d: Date = new Date()): string {
   return d.toISOString().slice(0, 10);

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { londonDateString } from '../analytics.js';
 import { getTotalSocketCount, getAllRoomSockets } from '../broadcast.js';
 
 /**
@@ -77,18 +78,21 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- All hourly buckets for hour-of-day activity chart ---
     // Returns one row per hour bucket recorded, used to build a labelled series
-    // so Grafana can aggregate by UTC hour across multiple days.
+    // so Grafana can aggregate by Europe/London hour across multiple days.
+    // We aggregate by the hour component (0-23) across all days to produce a single series.
     const { rows: allHourlyRows } = await app.db.query<{
-      hour: string;
+      hour_of_day: number;
       avg_connections: string;
     }>(
-      `SELECT hour, avg_connections
+      `SELECT EXTRACT(HOUR FROM hour AT TIME ZONE 'Europe/London') AS hour_of_day,
+              SUM(avg_connections * sample_count) / NULLIF(SUM(sample_count), 0) AS avg_connections
        FROM analytics_hourly_connections
-       ORDER BY hour ASC`,
+       GROUP BY hour_of_day
+       ORDER BY hour_of_day ASC`,
     );
 
-    // Today's global daily stats ---
-    const today = new Date().toISOString().slice(0, 10);
+    // Today's global daily stats (Europe/London) ---
+    const today = londonDateString();
     const { rows: dailyRows } = await app.db.query<{
       rooms_created: string;
       rooms_modified: string;
@@ -195,13 +199,13 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_hourly_connections_avg', 'Average concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourAvg));
 
     // All hourly buckets as labelled series for hour-of-day activity chart.
-    // Label is the UTC hour (0–23) so Grafana can avg across multiple days.
+    // Label is the Europe/London hour (0–23) so Grafana can avg across multiple days.
     const hourlySeries = allHourlyRows.map(r => ({
-      labels: { hour: new Date(r.hour).getUTCHours().toString().padStart(2, '0') },
+      labels: { hour: r.hour_of_day.toString().padStart(2, '0') },
       value: parseFloat(r.avg_connections ?? '0'),
     }));
     if (hourlySeries.length > 0) {
-      lines.push(metricLabeled('albionmapper_hourly_connections_avg_by_hour', 'Average concurrent WebSocket connections per UTC hour of day', 'gauge', hourlySeries));
+      lines.push(metricLabeled('albionmapper_hourly_connections_avg_by_hour', 'Average concurrent WebSocket connections per Europe/London hour of day', 'gauge', hourlySeries));
     }
 
     // Per-room daily stats for today
@@ -219,29 +223,29 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     );
     if (roomDailyRows.length > 0) {
       const routesSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.routes_plotted ?? '0', 10) })).filter(s => s.value > 0);
-      if (routesSeries.length > 0) lines.push(metricLabeled('albionmapper_room_routes_plotted_today', 'Routes plotted today (UTC) per room', 'gauge', routesSeries));
+      if (routesSeries.length > 0) lines.push(metricLabeled('albionmapper_room_routes_plotted_today', 'Routes plotted today (Europe/London) per room', 'gauge', routesSeries));
       const dataUpdatesSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) })).filter(s => s.value > 0);
-      if (dataUpdatesSeries.length > 0) lines.push(metricLabeled('albionmapper_room_data_updates_today', 'Room data update events today (UTC) per room', 'gauge', dataUpdatesSeries));
+      if (dataUpdatesSeries.length > 0) lines.push(metricLabeled('albionmapper_room_data_updates_today', 'Room data update events today (Europe/London) per room', 'gauge', dataUpdatesSeries));
       const zonesRoadsSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_roads ?? '0', 10) })).filter(s => s.value > 0);
-      if (zonesRoadsSeries.length > 0) lines.push(metricLabeled('albionmapper_room_zones_added_roads_today', 'Road zones added today (UTC) per room', 'gauge', zonesRoadsSeries));
+      if (zonesRoadsSeries.length > 0) lines.push(metricLabeled('albionmapper_room_zones_added_roads_today', 'Road zones added today (Europe/London) per room', 'gauge', zonesRoadsSeries));
       const zonesNonroadsSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_nonroads ?? '0', 10) })).filter(s => s.value > 0);
-      if (zonesNonroadsSeries.length > 0) lines.push(metricLabeled('albionmapper_room_zones_added_nonroads_today', 'Non-road zones added today (UTC) per room', 'gauge', zonesNonroadsSeries));
+      if (zonesNonroadsSeries.length > 0) lines.push(metricLabeled('albionmapper_room_zones_added_nonroads_today', 'Non-road zones added today (Europe/London) per room', 'gauge', zonesNonroadsSeries));
     }
 
     // Today's daily counters
-    lines.push(metric('albionmapper_daily_rooms_created_total', 'Rooms created today (UTC)', 'gauge', parseInt(daily?.rooms_created ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_rooms_modified_total', 'Rooms with at least one data modification today (UTC)', 'gauge', parseInt(daily?.rooms_modified ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_rooms_reset_total', 'Rooms reset today (UTC)', 'gauge', parseInt(daily?.rooms_reset ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_rooms_deleted_total', 'Rooms deleted today (UTC)', 'gauge', parseInt(daily?.rooms_deleted ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_memory_wiped_full_total', 'Full memory wipes performed today (UTC)', 'gauge', parseInt(daily?.memory_wiped_full ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_memory_wiped_single_total', 'Single memory wipes performed today (UTC)', 'gauge', parseInt(daily?.memory_wiped_single ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_passwords_rotated_total', 'Password rotations performed today (UTC)', 'gauge', parseInt(daily?.passwords_rotated ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_peak_concurrent', 'Peak concurrent WebSocket connections today (UTC)', 'gauge', parseInt(daily?.peak_concurrent ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_unique_tokens_active', 'Unique authenticated tokens seen today (UTC)', 'gauge', parseInt(daily?.unique_tokens_active ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_zones_added_roads_total', 'Road zones added today (UTC)', 'gauge', parseInt(daily?.zones_added ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_zones_added_nonroads_total', 'Non-road zones added today (UTC)', 'gauge', parseInt(daily?.non_roads_zones_added ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_room_data_updates_total', 'Total room data update events today (UTC)', 'gauge', parseInt(daily?.room_data_updates ?? '0', 10)));
-    lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (UTC)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_rooms_created_total', 'Rooms created today (Europe/London)', 'gauge', parseInt(daily?.rooms_created ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_rooms_modified_total', 'Rooms with at least one data modification today (Europe/London)', 'gauge', parseInt(daily?.rooms_modified ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_rooms_reset_total', 'Rooms reset today (Europe/London)', 'gauge', parseInt(daily?.rooms_reset ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_rooms_deleted_total', 'Rooms deleted today (Europe/London)', 'gauge', parseInt(daily?.rooms_deleted ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_memory_wiped_full_total', 'Full memory wipes performed today (Europe/London)', 'gauge', parseInt(daily?.memory_wiped_full ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_memory_wiped_single_total', 'Single memory wipes performed today (Europe/London)', 'gauge', parseInt(daily?.memory_wiped_single ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_passwords_rotated_total', 'Password rotations performed today (Europe/London)', 'gauge', parseInt(daily?.passwords_rotated ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_peak_concurrent', 'Peak concurrent WebSocket connections today (Europe/London)', 'gauge', parseInt(daily?.peak_concurrent ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_unique_tokens_active', 'Unique authenticated tokens seen today (Europe/London)', 'gauge', parseInt(daily?.unique_tokens_active ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_zones_added_roads_total', 'Road zones added today (Europe/London)', 'gauge', parseInt(daily?.zones_added ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_zones_added_nonroads_total', 'Non-road zones added today (Europe/London)', 'gauge', parseInt(daily?.non_roads_zones_added ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_room_data_updates_total', 'Total room data update events today (Europe/London)', 'gauge', parseInt(daily?.room_data_updates ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (Europe/London)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
 
     // --- Map History stats ---
     lines.push(metric('albionmapper_history_entries_total', 'Total number of unique room-map history entries (excluding home zones)', 'gauge', totalHistoryEntries));
