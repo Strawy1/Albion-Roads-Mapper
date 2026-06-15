@@ -52,10 +52,10 @@ watch(
         >{{ store.lastUpdate ? formatTime(store.lastUpdate) : '…' }}</span>
       </div>
       <div class="flex items-center justify-center">
-        <span class="hidden md:inline-block px-1 pr-2">||</span>
+        <span class="hidden md:inline-block px-1 pr-2 text-md">|</span>
         <span>Active Users - </span>
         <span class="pl-1">Room: {{ store.watchingCount !== null ? store.watchingCount : '…' }}</span>
-        <span class="px-1">|</span>
+        <span class="px-1">-</span>
         <span>Sitewide: {{ store.totalConnected !== null ? store.totalConnected : '…' }}</span>
       </div>
     </div>
