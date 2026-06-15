@@ -59,18 +59,33 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const activeRooms = parseInt(roomRows[0]?.active ?? '0', 10);
 
     // --- Latest hourly connection stats from DB ---
+    // avg_connections is the mean of all per-minute scrape samples recorded in that hour bucket
     const { rows: hourlyRows } = await app.db.query<{
       hour: string;
       max_connections: string;
       min_connections: string;
+      avg_connections: string;
     }>(
-      `SELECT hour, max_connections, min_connections
+      `SELECT hour, max_connections, min_connections, avg_connections
        FROM analytics_hourly_connections
        ORDER BY hour DESC
        LIMIT 1`,
     );
     const lastHourMax = parseInt(hourlyRows[0]?.max_connections ?? '0', 10);
     const lastHourMin = parseInt(hourlyRows[0]?.min_connections ?? '0', 10);
+    const lastHourAvg = parseFloat(hourlyRows[0]?.avg_connections ?? '0');
+
+    // --- All hourly buckets for hour-of-day activity chart ---
+    // Returns one row per hour bucket recorded, used to build a labelled series
+    // so Grafana can aggregate by UTC hour across multiple days.
+    const { rows: allHourlyRows } = await app.db.query<{
+      hour: string;
+      avg_connections: string;
+    }>(
+      `SELECT hour, avg_connections
+       FROM analytics_hourly_connections
+       ORDER BY hour ASC`,
+    );
 
     // --- Today's global daily stats ---
     const today = new Date().toISOString().slice(0, 10);
@@ -148,9 +163,21 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       lines.push(metricLabeled('albionmapper_room_zones_total', 'Total number of zones entered per room (excluding home zone)', 'gauge', perRoomZoneSeries));
     }
 
-    // Last-hour connection stats from analytics_hourly_connections
+    // --- Hourly connection stats ---
+    // Last completed hour bucket
     lines.push(metric('albionmapper_hourly_connections_max', 'Maximum concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourMax));
     lines.push(metric('albionmapper_hourly_connections_min', 'Minimum concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourMin));
+    lines.push(metric('albionmapper_hourly_connections_avg', 'Average concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourAvg));
+
+    // All hourly buckets as labelled series for hour-of-day activity chart.
+    // Label is the UTC hour (0–23) so Grafana can avg across multiple days.
+    const hourlySeries = allHourlyRows.map(r => ({
+      labels: { hour: new Date(r.hour).getUTCHours().toString().padStart(2, '0') },
+      value: parseFloat(r.avg_connections ?? '0'),
+    }));
+    if (hourlySeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_hourly_connections_avg_by_hour', 'Average concurrent WebSocket connections per UTC hour of day', 'gauge', hourlySeries));
+    }
 
     // Per-room daily stats for today
     const { rows: roomDailyRows } = await app.db.query<{
