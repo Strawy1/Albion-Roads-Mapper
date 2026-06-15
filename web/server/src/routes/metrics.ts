@@ -114,6 +114,23 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       lines.push(metricLabeled('albionmapper_room_connections', 'Number of active WebSocket connections per room', 'gauge', roomSeries));
     }
 
+    // --- Zone counts (excluding home zone) ---
+    const { rows: zoneCountRows } = await app.db.query<{ total_zones: string }>(
+      `SELECT COUNT(*) AS total_zones
+       FROM room_node_positions rnp
+       JOIN rooms r ON r.id = rnp.room_id
+       WHERE rnp.zone_id != r.home_zone_id`,
+    );
+    const totalZones = parseInt(zoneCountRows[0]?.total_zones ?? '0', 10);
+
+    const { rows: perRoomZoneRows } = await app.db.query<{ room_id: string; zone_count: string }>(
+      `SELECT rnp.room_id, COUNT(*) AS zone_count
+       FROM room_node_positions rnp
+       JOIN rooms r ON r.id = rnp.room_id
+       WHERE rnp.zone_id != r.home_zone_id
+       GROUP BY rnp.room_id`,
+    );
+
     // --- Active rooms (DB-level room state) ---
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
     lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection right now', 'gauge', liveRooms));
@@ -121,6 +138,15 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_rooms_inactive', 'Number of rooms with no active WebSocket connections', 'gauge', inactiveRooms));
     lines.push(metric('albionmapper_rooms_empty', 'Number of rooms with no connections added', 'gauge', emptyRooms));
     lines.push(metric('albionmapper_rooms_expired', 'Number of rooms that have connections but all are expired', 'gauge', expiredRooms));
+
+    // --- Zone counts ---
+    lines.push(metric('albionmapper_zones_total', 'Total number of zones entered into the system (excluding home zones)', 'gauge', totalZones));
+    const perRoomZoneSeries = perRoomZoneRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zone_count ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (perRoomZoneSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_zones_total', 'Total number of zones entered per room (excluding home zone)', 'gauge', perRoomZoneSeries));
+    }
 
     // Last-hour connection stats from analytics_hourly_connections
     lines.push(metric('albionmapper_hourly_connections_max', 'Maximum concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourMax));
