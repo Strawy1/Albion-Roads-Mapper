@@ -3,7 +3,6 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw, provid
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useRoomStore } from '@/stores/useRoomStore';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { Z_INDEX } from '@/constants/Layers';
 import ReportForm from '../components/ReportForm.vue';
@@ -14,7 +13,6 @@ import ConnectionEdge from '../components/flow/ConnectionEdge.vue';
 import ConnectionLine from '../components/flow/ConnectionLine.vue';
 import TipButton from '../components/TipButton.vue';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
-import TutorialTooltip from '../components/tutorial/TutorialTooltip.vue';
 import MegaToast from '../components/common/MegaToast.vue';
 import ConfirmationModal from '../components/common/ConfirmationModal.vue';
 import TitleSegment from '../components/room/TitleSegment.vue';
@@ -37,7 +35,6 @@ import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type
 
 const props = defineProps<{ id: string }>();
 const store = useRoomStore();
-const tutorialStore = useTutorialStore();
 const plotRouteStore = usePlotRouteStore();
 const { connections, homeZoneId, roomTitle, nodePositions, lastUpdate } = storeToRefs(store);
 const router = useRouter();
@@ -917,9 +914,6 @@ async function handleConnect(params: any) {
         fromHandleId: fHandleId,
         toHandleId: tHandleId
       });
-      if (!tutorialStore.completed && tutorialStore.step === 12) {
-        tutorialStore.setStep(13);
-      }
     } catch (err: any) {
       showToast(err.message || 'Failed to update connection.', 'error');
     }
@@ -1418,57 +1412,6 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
     <!-- Ko-fi button -->
     <TipButton />
     
-    <!-- Tutorial Exit -->
-    <div 
-      v-if="!tutorialStore.completed"
-      class="fixed top-4 right-4"
-      :class="Z_INDEX.TUTORIAL_EXIT"
-    >
-      <button 
-        class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-medium"
-        @click="tutorialStore.setCompleted(true)"
-      >
-        Exit Tutorial
-      </button>
-    </div>
-
-    <!-- Tutorial Step 11 -->
-    <TutorialTooltip
-      v-if="!tutorialStore.completed && tutorialStore.step === 11"
-      message="Please add a new zone."
-      containerClass="fixed bottom-20 left-1/2 -translate-x-1/2"
-      :class="Z_INDEX.OVERLAY"
-      textClass="text-xl"
-    />
-
-    <!-- Tutorial Step 12 -->
-    <TutorialTooltip
-      v-if="!tutorialStore.completed && tutorialStore.step === 12"
-      message="You are able to drag from one zone's handle to another zone's handle to denote &quot;This North West portal in Zone X links to Zone Y at position South West&quot;. This means you can read the map and roughly know where the portals are without having to spend time trying to find it. Add a link now."
-      containerClass="fixed bottom-20 left-1/2 -translate-x-1/2"
-      :class="Z_INDEX.OVERLAY"
-      textClass="text-base"
-    />
-
-    <!-- Tutorial Step 15 -->
-    <TutorialTooltip
-      v-if="!tutorialStore.completed && tutorialStore.step === 15"
-      message="When you add a core or crystal spiders / dungeons, they are added to this summary. Here you can jump to zones that have certain features. Click on one of the zones in the summary to continue."
-      textClass="text-md"
-      containerClass="fixed top-[325px] right-4 w-64"
-      :class="Z_INDEX.OVERLAY"
-      pointing="up"
-    />
-
-    <!-- Tutorial Step 16 -->
-    <TutorialTooltip
-      v-if="!tutorialStore.completed && tutorialStore.step === 16"
-      message="Tutorial complete! You can access the tutorial again by checking &quot;Show Tutorial&quot; on the Create Room page. If you enjoy the site, please consider donating with the button bottom left ❤️ Press Exit Tutorial top right to finish. Happy navigating!"
-      containerClass="fixed bottom-20 left-1/2 -translate-x-1/2"
-      :class="Z_INDEX.OVERLAY"
-      textClass="text-xl"
-    />
-
     <ConfirmationModal
       v-model="showConfirmationModal"
       title="Rare Connection"

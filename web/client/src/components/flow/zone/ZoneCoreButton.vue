@@ -3,17 +3,8 @@ import { ZONE_BUTTON_BG_DEFAULT, ZONE_BUTTON_BG_HAS_REDS, ZONE_BUTTON_HOVER_REDS
 import { TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import IconUnlocked from '../../icons/IconUnlocked.vue';
 import IconLocked from '../../icons/IconLocked.vue';
-import { ref, watch, nextTick, computed, onMounted } from 'vue';
-import TutorialTooltip from '../../tutorial/TutorialTooltip.vue';
-import { useTutorialStore } from '@/stores/useTutorialStore';
+import { ref, watch, nextTick, computed } from 'vue';
 import { Z_INDEX } from '@/constants/Layers';
-
-const tutorialStore = useTutorialStore();
-const isMounted = ref(false);
-
-onMounted(() => {
-  isMounted.value = true;
-});
 
 const props = defineProps<{
   type: 'powercoreGreen' | 'powercoreBlue' | 'powercorePurple' | 'powercoreYellow';
@@ -110,21 +101,6 @@ defineExpose({
 <template>
   <TooltipRoot>
     <TooltipTrigger as-child>
-        <TutorialTooltip
-          v-if="isMounted && type === 'powercoreGreen' && !tutorialStore.completed && tutorialStore.step === 7"
-          message="Click here to log there is a power core in the zone"
-          pointing="down"
-          bounce
-          :class="Z_INDEX.OVERLAY"
-          containerClass="absolute -top-[40px] -left-[40px] w-40"
-        />
-        <TutorialTooltip
-          v-if="isMounted && type === 'powercoreGreen' && !tutorialStore.completed && tutorialStore.step === 8"
-          message="Here you can set the timer for the locked state. You can also mark it as unlocked."
-          pointing="down"
-          :class="Z_INDEX.OVERLAY"
-          containerClass="absolute -top-[80px] w-40"
-        />
       <div 
         @click.stop="$emit('toggle')" 
         class="core-container slide-button relative group"

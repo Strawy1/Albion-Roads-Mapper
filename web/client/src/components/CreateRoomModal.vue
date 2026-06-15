@@ -3,7 +3,6 @@ import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import ZoneCombobox from './ZoneCombobox.vue';
 import { useRoomStore } from '../stores/useRoomStore';
-import { useTutorialStore } from '../stores/useTutorialStore';
 import { API_BASE_URL } from '../utils/api';
 import { track } from '@vercel/analytics';
 import { uniqueNamesGenerator, adjectives, colors, animals } from 'unique-names-generator';
@@ -12,7 +11,6 @@ const emit = defineEmits<{ close: [] }>();
 
 const router = useRouter();
 const store = useRoomStore();
-const tutorialStore = useTutorialStore();
 
 const createPassword = ref('');
 const createAdminPassword = ref('');

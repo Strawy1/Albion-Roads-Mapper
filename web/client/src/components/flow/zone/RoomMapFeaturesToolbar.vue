@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import ActiveCoreSummary from './ActiveCoreSummary.vue';
-
-const tutorialStore = useTutorialStore();
 
 interface ZoneFeatureInfo {
   zoneId: string;
@@ -148,9 +145,6 @@ function getItemIcon(item: ZoneFeatureInfo) {
 }
 
 function toggleView(view: ViewType) {
-  if (tutorialStore.step === 15) {
-    tutorialStore.setStep(16);
-  }
   if (activeView.value === view) {
     activeView.value = null;
     if (view === 'cores') {
@@ -165,9 +159,6 @@ function toggleView(view: ViewType) {
 }
 
 function handleSelect(zoneId: string) {
-  if (tutorialStore.step === 15) {
-    tutorialStore.setStep(16);
-  }
   emit('select', zoneId);
 }
 </script>

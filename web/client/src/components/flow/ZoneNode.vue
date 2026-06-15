@@ -19,7 +19,6 @@ import RoomMemoryButton from './zone/RoomMemoryButton.vue';
 import TutorialTooltip from '../tutorial/TutorialTooltip.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { storeToRefs } from 'pinia';
 import { deleteConnection, deleteNode, updateConnection } from '@/utils/roomOperations';
@@ -74,7 +73,6 @@ const featuresRequireUpdate = computed(() => {
   return !hasContent;
 });
 const { updateNodeData } = useVueFlow();
-const tutorialStore = useTutorialStore();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
 
 const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
@@ -111,11 +109,7 @@ function getInitialHandles(): CustomHandle[] {
 
 const handleEditorButtonRef = ref<any>(null);
 const mapFeaturesButtonRef = ref<HTMLElement | null>(null);
-watch(isHandleEditorOpen, (val) => {
-  if (val && tutorialStore.step === 3) {
-    tutorialStore.setStep(4);
-  }
-});
+const neHandleRef = ref<HTMLElement | null>(null);
 
 function openHandleEditor() {
   isHandleEditorOpen.value = true;
@@ -165,20 +159,13 @@ async function saveCustomHandles(newHandles: CustomHandle[], newRotation: number
 
   store.updateNodeCustomHandles(props.id, newHandles);
   isHandleEditorOpen.value = false;
-  if (tutorialStore.step === 5) {
-    tutorialStore.setStep(6);
-  }
   if (typeof showToast !== 'undefined') showToast('Handle positions updated', 'info', 8000);
 }
 
 const handleCloseTray = () => {
   isMapFeaturesModalOpen.value = false;
-  if (tutorialStore.step === 6) {
-    tutorialStore.setStep(7);
-  }
 };
 const zoneNodeRef = ref<HTMLElement | null>(null);
-const isTutorialTooltipReady = ref(false);
 
 const showDeleteOverlay = ref(false);
 
@@ -261,28 +248,6 @@ function getHandlePosition(left: string, top: string) {
   return Position.Right;
 }
 
-watch(() => tutorialStore.step, (step) => {
-  if (step === 3) {
-    isTutorialTooltipReady.value = false;
-    setTimeout(() => {
-      isTutorialTooltipReady.value = true;
-    }, 1000);
-  } else {
-    isTutorialTooltipReady.value = false;
-  }
-});
-
-watch(activeEditingCore, (newVal, oldVal) => {
-  if (tutorialStore.completed) return;
-  
-  if (newVal === 'powercoreGreen' && tutorialStore.step === 7) {
-    tutorialStore.setStep(8);
-  }
-  
-  if (oldVal === 'powercoreGreen' && newVal === null && tutorialStore.step === 8) {
-    tutorialStore.setStep(9);
-  }
-});
 
 const hoveredHandleId = ref<string | null>(null);
 
@@ -401,16 +366,11 @@ function clearChest() {
 }
 
 
-const showPrompt = computed(() => {
-  if (tutorialStore.completed) return false;
+const showFreshRoomHint = computed(() => {
+  if (!isRoadsHideout.value) return false;
   if (props.data.isGhost) return false;
-  if (isMapFeaturesModalOpen.value || isEditingTimer.value) return false;
-  return tutorialStore.step === 0 && store.nodePositions.length === 1;
-});
-
-const tutorialMessage = computed(() => {
-  if (tutorialStore.step === 0) return 'Pull on this handle to add a zone';
-  return '';
+  if (isHandleEditorOpen.value || isMapFeaturesModalOpen.value || isChestModalOpen.value) return false;
+  return store.nodePositions.length === 1 && memoryStore.memory.size === 0;
 });
 
 onClickOutside(timerContainerRefNW, (e) => {
@@ -902,6 +862,7 @@ function lockCore(core: string) {
             type="source"
             :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
             :id="handle.id"
+            :ref="handle.id === 'n' ? (el) => { neHandleRef = el as HTMLElement | null } : undefined"
             :style="{ left: handle.left, top: handle.top }"
             :class="[
               'handle', 
@@ -1160,11 +1121,11 @@ function lockCore(core: string) {
       />
 
       <TutorialTooltip
-        v-if="!tutorialStore.completed && tutorialStore.step === 3 && !isHandleEditorOpen && handleEditorButtonRef && isTutorialTooltipReady"
-        :message="'Open the handle editor to customize portals'"
-        pointing="right"
+        v-if="showFreshRoomHint && neHandleRef"
+        message="Pull on this handle to add a zone"
+        pointing="down"
         bounce
-        :target="handleEditorButtonRef?.$el ?? undefined"
+        :target="neHandleRef"
         :class="[Z_INDEX.HANDLE_OVERLAY]"
       />
 

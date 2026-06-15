@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, nextTick, inject, type Ref } from 'vue';
+import { computed, ref, watch, onUnmounted, nextTick, inject, type Ref } from 'vue';
 import { BaseEdge, EdgeLabelRenderer, useVueFlow } from '@vue-flow/core';
 import type { EdgeProps } from '@vue-flow/core';
 import { connectionStyle } from '@/utils/connectionStyle';
 import { getConnectionPath } from '@/utils/connectionPath';
 import { formatCountdown } from '@/utils/formatters';
 import TimeInput from '../common/TimeInput.vue';
-import TutorialTooltip from '../tutorial/TutorialTooltip.vue';
 import UnexploredHandleTooltip from './zone/UnexploredHandleTooltip.vue';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { ZONE_BY_ID, type Connection } from 'shared';
 import { getTrueHandleCenter, getHandleFacingFromId, isCenter } from '@/utils/handleCenter';
@@ -31,19 +29,11 @@ type EdgeData = {
 
 const props = defineProps<EdgeProps<EdgeData>>();
 const { setCenter, onNodeDrag, onNodeDragStop } = useVueFlow();
-const tutorialStore = useTutorialStore();
 const roomStore = useRoomStore();
 
 const showPopover = ref(false);
-const isTutorialTooltipReady = ref(false);
 const popoverRef = ref<HTMLElement | null>(null);
 const newSecondsRemaining = ref<number | null>(null);
-
-onMounted(() => {
-  setTimeout(() => {
-    isTutorialTooltipReady.value = true;
-  }, 1000);
-});
 
 const openPopoverId = inject<Ref<string | null>>('openPopoverId');
 
@@ -68,16 +58,10 @@ function closePopover(event: MouseEvent) {
 function handleDelete(deleteFn: (id: string) => void) {
   deleteFn(props.id);
   showPopover.value = false;
-  if (tutorialStore.step === 14) {
-    tutorialStore.setStep(15);
-  }
 }
 
 watch(showPopover, (val) => {
   if (val) {
-    if (tutorialStore.step === 13) {
-      tutorialStore.setStep(14);
-    }
     if (props.data?.isGhost) {
       showPopover.value = false;
       return;
@@ -86,10 +70,6 @@ watch(showPopover, (val) => {
       openPopoverId.value = props.id;
     }
     newSecondsRemaining.value = null;
-    isTutorialTooltipReady.value = false;
-    setTimeout(() => {
-      isTutorialTooltipReady.value = true;
-    }, 200);
     nextTick(() => {
       document.addEventListener('click', closePopover);
       if (Math.min(window.innerWidth, window.innerHeight) < 768) {
@@ -320,12 +300,6 @@ defineExpose({
   </g>
 
   <EdgeLabelRenderer v-if="!props.data?.isGhost">
-     <TutorialTooltip
-          v-if="isTutorialTooltipReady && !tutorialStore.completed && tutorialStore.step === 13"
-          message="Click on the rounded pill with the time."
-          containerClass="absolute -top-24 left-1/2 -translate-x-3/4"
-          :class="Z_INDEX.OVERLAY"
-        />
     <div
       :style="{
         transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
@@ -365,13 +339,6 @@ defineExpose({
         @click.stop
         @mousedown.stop
       >
-        <TutorialTooltip
-          v-if="isTutorialTooltipReady && !tutorialStore.completed && tutorialStore.step === 14"
-          message="Here you can edit the connection and update the time if you made a mistake. Deleting this connection will delete the node. If there are multiple connections in a chain, there will be a button to delete the whole chain beyond this connection. Delete the connection to continue."
-          pointing="down"
-          containerClass="absolute -top-[115px] left-1/2 -translate-x-1/2 w-64"
-          :class="Z_INDEX.OVERLAY"
-        />
         <button
           class="absolute top-2 right-2 text-gray-400 hover:text-white p-1"
           @click.stop="showPopover = false"

@@ -3,7 +3,6 @@ import { mount, VueWrapper } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import ReportForm from '../src/components/ReportForm.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { nextTick } from 'vue';
 
 let attachTo: HTMLDivElement;
@@ -185,7 +184,6 @@ describe('ReportForm', () => {
 
     const wrapper = await mountForm();
     const vm = wrapper.vm as any;
-    useTutorialStore().completed = true;
 
     vm.fromZoneId = 'zoneA';
     vm.toZoneId = 'zoneB';

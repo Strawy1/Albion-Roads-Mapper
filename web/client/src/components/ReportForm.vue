@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, inject } from 'vue';
 import ZoneCombobox from './ZoneCombobox.vue';
-import TutorialTooltip from './tutorial/TutorialTooltip.vue';
 import TimeInput from './common/TimeInput.vue';
 import TagZone from './common/TagZone.vue';
 import TagTier from './common/TagTier.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { addConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, getHandleFacing } from 'shared';
@@ -16,7 +14,6 @@ import TagExtras from "@/components/common/TagExtras.vue";
 const props = defineProps<{}>();
 
 const store = useRoomStore();
-const tutorialStore = useTutorialStore();
 const goToNode = inject<(nodeId: string) => void>('goToNode');
 
 const toZoneContainer = ref<HTMLElement | null>(null);
@@ -66,9 +63,6 @@ watch([fromZoneId, toZoneId], () => {
 });
 watch(toZoneId, (newId) => {
   emit('update:toZoneId', newId);
-  if (!tutorialStore.completed && tutorialStore.step === 1 && newId) {
-    tutorialStore.setStep(2);
-  }
   if (!newId) return;
   const zone = ZONE_BY_ID.get(newId);
   if (!zone || zone.type.startsWith('royal') || zone.type === 'outlands') {
@@ -112,9 +106,6 @@ function open() {
   isOpen.value = true;
   if (!fromZoneId.value && store.homeZoneId) {
     fromZoneId.value = store.homeZoneId;
-  }
-  if (!tutorialStore.completed && tutorialStore.step === 0) {
-    tutorialStore.setStep(1);
   }
 }
 
@@ -220,28 +211,6 @@ async function submitAndAddMore() {
     );
 
     emit('success', 'Connection added!');
-
-    if (!tutorialStore.completed && tutorialStore.step === 2) {
-      if (toZoneId.value) {
-        tutorialStore.setLastAddedNodeId(toZoneId.value);
-        tutorialStore.setStep(3);
-        goToNode?.(toZoneId.value);
-      }
-      close();
-      return;
-    }
-
-    if (!tutorialStore.completed && tutorialStore.step === 11 && targetPosition.value) {
-      tutorialStore.setStep(12);
-      close();
-      return;
-    }
-
-    if (!tutorialStore.completed && tutorialStore.step === 12) {
-      tutorialStore.setStep(13);
-      close();
-      return;
-    }
 
     // Reset To, keep From (common for mapping multiple exits from one zone)
     fromHandleId.value = null; 
@@ -402,14 +371,6 @@ defineExpose({
 
               <!-- To -->
               <div ref="toZoneContainer">
-                <TutorialTooltip
-                  v-if="isModalReady && !tutorialStore.completed && tutorialStore.step === 1 && toZoneContainer"
-                  :target="toZoneContainer"
-                  message="Enter your destination zone by hovering over the portal in game for its name. For tutorial purposes you can only choose hideouts."
-                  pointing="down"
-                  containerClass="w-72"
-                  :offset-y="20"
-                />
                 <div class="flex items-center gap-2">
                   <div class="flex-1">
                   <ZoneCombobox
@@ -423,7 +384,6 @@ defineExpose({
                     already-added-placement="bottom"
                     data-testid="to-combobox"
                     :error="secondsRemaining !== null && !toZoneId"
-                    :only-roads-hideout="!tutorialStore.completed"
                     @tab-select="focusTimeInput"
                     @select="focusTimeInput"
                     @update:model-value="(_) => { if (toHandleId && !toHandleId.startsWith('default-')) toHandleId = null; }"
@@ -438,12 +398,6 @@ defineExpose({
           <div class="grid grid-cols-2 gap-3">
             <div class="flex flex-col gap-1.5" ref="timeInputContainer">
               <label class="text-sm font-medium text-gray-400 text-center">Expires In</label>
-              <TutorialTooltip
-                v-if="isModalReady && !tutorialStore.completed && tutorialStore.step === 2 && timeInputContainer"
-                :target="timeInputContainer"
-                message="You can find this by hovering over the portal in game."
-                pointing="up"
-              />
               <TimeInput
                 ref="timeInputEl"
                 v-model="secondsRemaining"

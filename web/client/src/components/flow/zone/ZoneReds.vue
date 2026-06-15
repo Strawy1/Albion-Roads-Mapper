@@ -1,18 +1,9 @@
 <script setup lang="ts">
 import { ZONE_BUTTON_BG_DEFAULT, ZONE_BUTTON_HOVER_INACTIVE } from '@/constants/ui';
-import { ref, watch, nextTick, computed, onMounted } from 'vue';
+import { ref, watch, nextTick, computed } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import { TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
-import TutorialTooltip from '../../tutorial/TutorialTooltip.vue';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { Z_INDEX } from '@/constants/Layers';
-
-const tutorialStore = useTutorialStore();
-const isMounted = ref(false);
-
-onMounted(() => {
-  isMounted.value = true;
-});
 
 const props = defineProps<{
   reds: number | null | undefined;
@@ -53,15 +44,9 @@ function handleToggle() {
   if (props.reds !== undefined) {
     emit('update:reds', undefined);
     emit('update:isOpen', false);
-    if (!tutorialStore.completed && tutorialStore.step === 10) {
-      tutorialStore.setStep(11);
-    }
   } else {
     emit('update:reds', null);
     emit('update:isOpen', true);
-    if (!tutorialStore.completed && tutorialStore.step === 9) {
-      tutorialStore.setStep(10);
-    }
     nextTick(() => {
       redsInputRef.value?.focus();
     });
@@ -146,18 +131,6 @@ const timerLabel = computed(() => {
 <template>
   <TooltipRoot>
     <TooltipTrigger as-child>
-      <TutorialTooltip
-          v-if="isMounted && !tutorialStore.completed && tutorialStore.step === 9"
-          message="If you spot enemies in zone, let your friends know! Press this button!"
-          pointing="up"
-          :target="containerRef ?? undefined"
-        />
-        <TutorialTooltip
-          v-if="isMounted && !tutorialStore.completed && tutorialStore.step === 10"
-          message="Once you know the enemies are gone, press again to sound all the clear. There is also a auto-clear timer in case you forget."
-          pointing="up"
-          :target="containerRef ?? undefined"
-        />
       <div 
         ref="containerRef"
         @click.stop="handleToggle" 

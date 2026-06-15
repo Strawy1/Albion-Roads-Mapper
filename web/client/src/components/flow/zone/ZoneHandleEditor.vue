@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import type { CustomHandle } from 'shared';
 import { rotateClockwise, rotateCounterClockwise } from 'shared';
-import { useTutorialStore } from '@/stores/useTutorialStore';
 import { Z_INDEX } from '@/constants/Layers';
-import TutorialTooltip from '../../tutorial/TutorialTooltip.vue';
-
-const tutorialStore = useTutorialStore();
-const isModalReady = ref(false);
 
 const props = defineProps<{
   zoneName: string;
@@ -125,18 +120,12 @@ function onMouseMove(e: MouseEvent) {
 }
 
 function stopDragging() {
-  if (draggingHandleId.value && tutorialStore.step === 4) {
-    tutorialStore.setStep(5);
-  }
   draggingHandleId.value = null;
 }
 
 onMounted(() => {
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', stopDragging);
-  nextTick(() => {
-    isModalReady.value = true;
-  });
 });
 
 onUnmounted(() => {
@@ -265,13 +254,6 @@ function getHandleFacing(left: string, top: string): string {
               >
                 Save
               </button>
-              <TutorialTooltip
-                v-if="tutorialStore.step === 5 && isModalReady"
-                message="Click here to save your changes."
-                pointing="down"
-                :style="{ position: 'absolute', bottom: '120%', right: '-20px' }"
-                :class="Z_INDEX.OVERLAY"
-              />
             </div>
 
           </div>
