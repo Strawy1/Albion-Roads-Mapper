@@ -42,12 +42,13 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const liveRooms = roomSockets.size;
 
     // --- DB stats ---
-    const { rows: roomRows } = await app.db.query<{ total: string; inactive: string; empty: string; expired: string }>(
+    const { rows: roomRows } = await app.db.query<{ total: string; inactive: string; empty: string; expired: string; active: string }>(
       `SELECT
          COUNT(*) AS total,
          COUNT(*) - $1 AS inactive,
          COUNT(*) FILTER (WHERE id NOT IN (SELECT DISTINCT room_id FROM connections)) AS empty,
-         COUNT(*) FILTER (WHERE id IN (SELECT DISTINCT room_id FROM connections) AND id NOT IN (SELECT DISTINCT room_id FROM connections WHERE expires_at > NOW())) AS expired
+         COUNT(*) FILTER (WHERE id IN (SELECT DISTINCT room_id FROM connections) AND id NOT IN (SELECT DISTINCT room_id FROM connections WHERE expires_at > NOW())) AS expired,
+         COUNT(*) FILTER (WHERE id IN (SELECT DISTINCT room_id FROM connections WHERE expires_at > NOW())) AS active
        FROM rooms`,
       [liveRooms],
     );
@@ -55,6 +56,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const inactiveRooms = Math.max(0, parseInt(roomRows[0]?.inactive ?? '0', 10));
     const emptyRooms = parseInt(roomRows[0]?.empty ?? '0', 10);
     const expiredRooms = parseInt(roomRows[0]?.expired ?? '0', 10);
+    const activeRooms = parseInt(roomRows[0]?.active ?? '0', 10);
 
     // --- Latest hourly connection stats from DB ---
     const { rows: hourlyRows } = await app.db.query<{
@@ -115,6 +117,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     // --- Active rooms (DB-level room state) ---
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
     lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection right now', 'gauge', liveRooms));
+    lines.push(metric('albionmapper_rooms_active', 'Number of rooms with at least one active (non-expired) connection', 'gauge', activeRooms));
     lines.push(metric('albionmapper_rooms_inactive', 'Number of rooms with no active WebSocket connections', 'gauge', inactiveRooms));
     lines.push(metric('albionmapper_rooms_empty', 'Number of rooms with no connections added', 'gauge', emptyRooms));
     lines.push(metric('albionmapper_rooms_expired', 'Number of rooms that have connections but all are expired', 'gauge', expiredRooms));
