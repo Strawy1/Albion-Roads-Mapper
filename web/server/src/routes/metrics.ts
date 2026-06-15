@@ -84,7 +84,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       hour_of_day: number;
       avg_connections: string;
     }>(
-      `SELECT EXTRACT(HOUR FROM hour AT TIME ZONE 'Europe/London') AS hour_of_day,
+      `SELECT EXTRACT(HOUR FROM hour) AS hour_of_day,
               SUM(avg_connections * sample_count) / NULLIF(SUM(sample_count), 0) AS avg_connections
        FROM analytics_hourly_connections
        GROUP BY hour_of_day

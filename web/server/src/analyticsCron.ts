@@ -35,24 +35,35 @@ export async function runAnalyticsFlush(db: Pool): Promise<void> {
 }
 
 /**
- * Returns the current UTC hour as an ISO-8601 timestamp truncated to the hour,
- * e.g. "2026-06-13T04:00:00.000Z". Used both as a change-detection key and as
- * the DB primary key value for analytics_hourly_connections.
+ * Returns the current Europe/London hour as an ISO-8601-like timestamp truncated to the hour.
+ * Used both as a change-detection key and as the DB primary key value for analytics_hourly_connections.
  */
-function utcHourTimestamp(): string {
+function londonHourTimestamp(): string {
   const now = new Date();
-  now.setUTCMinutes(0, 0, 0);
-  return now.toISOString();
+  // Use Intl to get parts in London time
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value;
+
+  // Build YYYY-MM-DDTHH:00:00.000Z manually to represent the local hour bucket
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:00:00.000Z`;
 }
 
 /**
  * Upserts the current total WebSocket connection count into analytics_hourly_connections
- * for the current UTC hour bucket. Safe to call multiple times per hour — uses GREATEST
+ * for the current Europe/London hour bucket. Safe to call multiple times per hour — uses GREATEST
  * for max_connections and LEAST for min_connections so the stored values represent the
  * true peak and trough observed across all samples within that hour.
  */
 export async function flushHourlyConnections(db: Pool): Promise<void> {
-  const hour = utcHourTimestamp();
+  const hour = londonHourTimestamp();
   const count = getTotalSocketCount();
   try {
     await db.query(
@@ -74,8 +85,8 @@ export async function flushHourlyConnections(db: Pool): Promise<void> {
  * Starts the analytics cron.
  * - Every minute: flush in-memory concurrency/token data to the DB and record
  *   the current total WebSocket connection count into analytics_hourly_connections
- *   for the current UTC hour bucket (GREATEST ensures the peak is kept).
- * - On UTC date change: create the new day's global_daily row seeded with total_rooms,
+ *   for the current Europe/London hour bucket (GREATEST ensures the peak is kept).
+ * - On Europe/London date change: create the new day's global_daily row seeded with total_rooms,
  *   flush and clear the previous day's in-memory data.
  *
  * Returns the interval handle so it can be cleared on server shutdown.

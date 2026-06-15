@@ -54,7 +54,7 @@ export function incrementGlobal(db: Pool, counters: GlobalDailyCounters): void {
   const entries = Object.entries(counters).filter(([, v]) => v && v > 0);
   if (entries.length === 0) return;
 
-  const today = utcDateString();
+  const today = londonDateString();
   const setClauses = entries
     .map(([col]) => `${col} = analytics_global_daily.${col} + EXCLUDED.${col}`)
     .join(', ');
@@ -81,7 +81,7 @@ export function incrementRoomDaily(db: Pool, roomId: string, counters: RoomDaily
   const entries = Object.entries(counters).filter(([, v]) => v && v > 0);
   if (entries.length === 0) return;
 
-  const today = utcDateString();
+  const today = londonDateString();
   const setClauses = entries
     .map(([col]) => `${col} = analytics_room_daily.${col} + EXCLUDED.${col}`)
     .join(', ');
