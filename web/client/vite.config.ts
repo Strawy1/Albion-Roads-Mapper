@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [vue()],
   define: {
     __APP_VERSION__: JSON.stringify(version),
-    __APP_COMMIT_SHA__: JSON.stringify((process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7)),
+    __APP_COMMIT_SHA__: JSON.stringify((process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 8)),
     __VERCEL_ENV__: JSON.stringify(process.env.VERCEL_ENV ?? ''),
   },
   resolve: {
