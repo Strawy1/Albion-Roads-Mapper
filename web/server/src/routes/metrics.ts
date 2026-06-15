@@ -129,14 +129,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       [today],
     );
     if (roomDailyRows.length > 0) {
-      lines.push(metricLabeled('albionmapper_room_routes_plotted_today', 'Routes plotted today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.routes_plotted ?? '0', 10) }))));
-      lines.push(metricLabeled('albionmapper_room_data_updates_today', 'Room data update events today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) }))));
-      lines.push(metricLabeled('albionmapper_room_zones_added_roads_today', 'Road zones added today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_roads ?? '0', 10) }))));
-      lines.push(metricLabeled('albionmapper_room_zones_added_nonroads_today', 'Non-road zones added today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_nonroads ?? '0', 10) }))));
+      const routesSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.routes_plotted ?? '0', 10) })).filter(s => s.value > 0);
+      if (routesSeries.length > 0) lines.push(metricLabeled('albionmapper_room_routes_plotted_today', 'Routes plotted today (UTC) per room', 'gauge', routesSeries));
+      const dataUpdatesSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) })).filter(s => s.value > 0);
+      if (dataUpdatesSeries.length > 0) lines.push(metricLabeled('albionmapper_room_data_updates_today', 'Room data update events today (UTC) per room', 'gauge', dataUpdatesSeries));
+      const zonesRoadsSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_roads ?? '0', 10) })).filter(s => s.value > 0);
+      if (zonesRoadsSeries.length > 0) lines.push(metricLabeled('albionmapper_room_zones_added_roads_today', 'Road zones added today (UTC) per room', 'gauge', zonesRoadsSeries));
+      const zonesNonroadsSeries = roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_nonroads ?? '0', 10) })).filter(s => s.value > 0);
+      if (zonesNonroadsSeries.length > 0) lines.push(metricLabeled('albionmapper_room_zones_added_nonroads_today', 'Non-road zones added today (UTC) per room', 'gauge', zonesNonroadsSeries));
     }
 
     // Today's daily counters
