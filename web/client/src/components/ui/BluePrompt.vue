@@ -92,7 +92,7 @@ const tooltipStyle = computed(() => {
     >
       <div
         class="relative bg-blue-600 border-2 border-blue-400 text-white text-center px-3 py-1.5 rounded shadow-lg text-lg"
-        :class="[{ 'animate-bounce-prompt': bounce }]"
+        :class="[{ 'animate-bounce-prompt': bounce && roomStore.animationsEnabled }]"
       >
         <div class="flex items-center gap-1 whitespace-nowrap">
           <slot />
