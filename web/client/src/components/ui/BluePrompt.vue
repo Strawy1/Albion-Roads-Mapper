@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import { useRafFn } from '@vueuse/core';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<{
@@ -8,60 +9,92 @@ const props = defineProps<{
   offsetY?: number;
   bounce?: boolean;
   target?: HTMLElement;
+  screenPos?: { x: number; y: number };
 }>();
 
-const tooltipStyle = computed(() => {
-  const x = props.offsetX || 0;
-  const y = props.offsetY || 0;
+const rect = ref<DOMRect | null>(null);
 
+useRafFn(() => {
   if (props.target) {
-    const rect = props.target.getBoundingClientRect();
-    return {
-      position: 'fixed' as const,
-      left: props.pointing === 'left'
-        ? `${rect.right + 10 + x}px`
-        : props.pointing === 'right'
-        ? `${rect.left - 10 + x}px`
-        : `${rect.left + rect.width / 2 + x}px`,
-      top: props.pointing === 'down'
-        ? `${rect.top - 10 + y}px`
-        : props.pointing === 'up'
-        ? `${rect.bottom + 10 + y}px`
-        : `${rect.top + rect.height / 2 + y}px`,
-      transform: props.pointing === 'down'
-        ? 'translateX(-50%) translateY(-100%)'
-        : props.pointing === 'up'
-        ? 'translateX(-50%)'
-        : props.pointing === 'left'
-        ? 'translateY(-50%)'
-        : 'translateX(-100%) translateY(-50%)',
-    };
+    rect.value = props.target.getBoundingClientRect();
+  }
+});
+
+const tooltipStyle = computed(() => {
+  const ox = props.offsetX || 0;
+  const oy = props.offsetY || 0;
+
+  let cx: number | null = null;
+  let cy: number | null = null;
+
+  if (props.screenPos) {
+    cx = props.screenPos.x + ox;
+    cy = props.screenPos.y + oy;
+  } else if (props.target && rect.value) {
+    const r = rect.value;
+    cx = props.pointing === 'left'
+      ? r.right + 10 + ox
+      : props.pointing === 'right'
+      ? r.left - 10 + ox
+      : r.left + r.width / 2 + ox;
+    cy = props.pointing === 'down'
+      ? r.top - 10 + oy
+      : props.pointing === 'up'
+      ? r.bottom + 10 + oy
+      : r.top + r.height / 2 + oy;
   }
 
-  return {};
+  if (cx === null || cy === null) return {};
+
+  return {
+    position: 'fixed' as const,
+    left: `${cx}px`,
+    top: `${cy}px`,
+    transform: props.pointing === 'down'
+      ? 'translateX(-50%) translateY(-100%)'
+      : props.pointing === 'up'
+      ? 'translateX(-50%)'
+      : props.pointing === 'left'
+      ? 'translateY(-50%)'
+      : 'translateX(-100%) translateY(-50%)',
+  };
 });
 </script>
 
 <template>
-  <div
-    :class="[Z_INDEX.UI_OVERLAY, { 'absolute': !target }]"
-    :style="tooltipStyle"
-  >
+  <Teleport to="body" :disabled="!target && !screenPos">
     <div
-      class="relative bg-blue-600 text-white text-center text-xs px-2 py-1 rounded shadow-lg"
-      :class="{ 'animate-bounce-prompt': bounce }"
+      :class="[Z_INDEX.UI_OVERLAY, { 'absolute': !target && !screenPos }]"
+      :style="tooltipStyle"
     >
-      <div class="flex items-center gap-1 whitespace-nowrap">
-        <slot />
-        <slot name="actions" />
+      <div
+        class="relative bg-blue-600 border border-blue-400 text-white text-center px-3 py-1.5 rounded shadow-lg text-lg"
+        :class="[{ 'animate-bounce-prompt': bounce }]"
+      >
+        <div class="flex items-center gap-1 whitespace-nowrap">
+          <slot />
+          <slot name="actions" />
+        </div>
+        <!-- Arrows (with blue-400 outline via layered larger arrow behind) -->
+        <template v-if="pointing === 'down'">
+          <div class="absolute -bottom-3 left-1/2 w-6 h-3 bg-blue-400 [clip-path:polygon(0%_0%,100%_0%,50%_100%)] -translate-x-1/2"></div>
+          <div class="absolute -bottom-[10px] left-1/2 w-[20px] h-[10px] bg-blue-600 [clip-path:polygon(0%_0%,100%_0%,50%_100%)] -translate-x-1/2"></div>
+        </template>
+        <template v-if="pointing === 'up'">
+          <div class="absolute -top-3 left-1/2 w-6 h-3 bg-blue-400 [clip-path:polygon(50%_0%,0%_100%,100%_100%)] -translate-x-1/2"></div>
+          <div class="absolute -top-[10px] left-1/2 w-[20px] h-[10px] bg-blue-600 [clip-path:polygon(50%_0%,0%_100%,100%_100%)] -translate-x-1/2"></div>
+        </template>
+        <template v-if="pointing === 'left'">
+          <div class="absolute -left-3 top-1/2 w-3 h-6 bg-blue-400 [clip-path:polygon(0%_50%,100%_0%,100%_100%)] -translate-y-1/2"></div>
+          <div class="absolute -left-[10px] top-1/2 w-[10px] h-[20px] bg-blue-600 [clip-path:polygon(0%_50%,100%_0%,100%_100%)] -translate-y-1/2"></div>
+        </template>
+        <template v-if="pointing === 'right'">
+          <div class="absolute -right-3 top-1/2 w-3 h-6 bg-blue-400 [clip-path:polygon(0%_0%,100%_50%,0%_100%)] -translate-y-1/2"></div>
+          <div class="absolute -right-[10px] top-1/2 w-[10px] h-[20px] bg-blue-600 [clip-path:polygon(0%_0%,100%_50%,0%_100%)] -translate-y-1/2"></div>
+        </template>
       </div>
-      <!-- Arrows -->
-      <div v-if="pointing === 'down'" class="absolute -bottom-1.5 left-1/2 w-4 h-2 bg-blue-600 [clip-path:polygon(0%_0%,100%_0%,50%_100%)] -translate-x-1/2"></div>
-      <div v-if="pointing === 'up'" class="absolute -top-1.5 left-1/2 w-4 h-2 bg-blue-600 [clip-path:polygon(50%_0%,0%_100%,100%_100%)] -translate-x-1/2"></div>
-      <div v-if="pointing === 'left'" class="absolute -left-1.5 top-1/2 w-2 h-4 bg-blue-600 [clip-path:polygon(0%_50%,100%_0%,100%_100%)] -translate-y-1/2"></div>
-      <div v-if="pointing === 'right'" class="absolute -right-1.5 top-1/2 w-2 h-4 bg-blue-600 [clip-path:polygon(0%_0%,100%_50%,0%_100%)] -translate-y-1/2"></div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>

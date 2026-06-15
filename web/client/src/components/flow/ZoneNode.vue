@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Position, useVueFlow, Handle } from '@vue-flow/core';
+import { Position, useVueFlow, Handle, rendererPointToPoint } from '@vue-flow/core';
 import type { NodeProps } from '@vue-flow/core';
 import { ZoneType, NodeFeatures, CustomHandle, getDefaultHandles, getHandleFacing, rotationStepsToDegrees } from 'shared';
 import { getBorderBgClass } from '@/utils/zoneStyles';
@@ -22,8 +22,8 @@ import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { storeToRefs } from 'pinia';
 import { deleteConnection, deleteNode, updateConnection } from '@/utils/roomOperations';
-import { ref, watch, computed, nextTick, inject, type Ref } from 'vue';
-import { onClickOutside } from '@vueuse/core';
+import { ref, watch, computed, nextTick, inject, onMounted, type Ref } from 'vue';
+import { onClickOutside, useRafFn } from '@vueuse/core';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<NodeProps<{ 
@@ -72,7 +72,7 @@ const featuresRequireUpdate = computed(() => {
 
   return !hasContent;
 });
-const { updateNodeData } = useVueFlow();
+const { updateNodeData, findNode, viewport, viewportRef } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
 
 const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
@@ -109,7 +109,6 @@ function getInitialHandles(): CustomHandle[] {
 
 const handleEditorButtonRef = ref<any>(null);
 const mapFeaturesButtonRef = ref<HTMLElement | null>(null);
-const neHandleRef = ref<HTMLElement | null>(null);
 
 function openHandleEditor() {
   isHandleEditorOpen.value = true;
@@ -365,6 +364,47 @@ function clearChest() {
   store.updateNodeFeatures(props.id, currentFeatures);
 }
 
+
+const promptsReady = ref(false);
+onMounted(() => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      promptsReady.value = true;
+    });
+  });
+});
+
+const NODE_SIZE = 400;
+
+function getHandleScreenPos(leftPct: string, topPct: string): { x: number; y: number } | null {
+  const node = findNode(props.id);
+  if (!node) return null;
+  const vp = viewportRef.value;
+  if (!vp) return null;
+  const containerRect = vp.getBoundingClientRect();
+  const left = parseFloat(leftPct) / 100;
+  const top = parseFloat(topPct) / 100;
+  const canvasX = node.computedPosition.x + left * NODE_SIZE;
+  const canvasY = node.computedPosition.y + top * NODE_SIZE;
+  const screen = rendererPointToPoint({ x: canvasX, y: canvasY }, viewport.value);
+  return { x: containerRect.left + screen.x, y: containerRect.top + screen.y };
+}
+
+const nHandleScreenPos = ref<{ x: number; y: number } | null>(null);
+const mapFeaturesButtonScreenPos = ref<{ x: number; y: number } | null>(null);
+
+useRafFn(() => {
+  if (showFreshRoomHint.value) {
+    const nHandle = handles.value.find(h => h.id === 'n');
+    if (nHandle) {
+      nHandleScreenPos.value = getHandleScreenPos(nHandle.left, nHandle.top);
+    }
+  }
+  if (mapFeaturesButtonRef.value) {
+    const r = mapFeaturesButtonRef.value.getBoundingClientRect();
+    mapFeaturesButtonScreenPos.value = { x: r.left + r.width / 2, y: r.top - 10 };
+  }
+});
 
 const showFreshRoomHint = computed(() => {
   if (!isRoadsHideout.value) return false;
@@ -857,12 +897,11 @@ function lockCore(core: string) {
             ]"
             :style="{ left: handle.left, top: handle.top }"
           />
+          <template v-else>
           <Handle
-            v-else
             type="source"
             :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
             :id="handle.id"
-            :ref="handle.id === 'n' ? (el) => { neHandleRef = (el && (el as any).$el ? (el as any).$el : el) as HTMLElement | null } : undefined"
             :style="{ left: handle.left, top: handle.top }"
             :class="[
               'handle', 
@@ -878,6 +917,7 @@ function lockCore(core: string) {
             @mouseenter="hoveredHandleId = handle.id === 'center-overlay' ? 'center' : handle.id"
             @mouseleave="(e: MouseEvent) => { if (!(e.relatedTarget as HTMLElement)?.closest?.('.vue-flow__handle')) hoveredHandleId = null }"
           />
+          </template>
         </template>
     </div>
     
@@ -1069,7 +1109,7 @@ function lockCore(core: string) {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
-              <BluePrompt v-if="showFeatures && activeFeatures.length === 0" pointing="left" bounce class="ml-2">Add Features</BluePrompt>
+              <BluePrompt v-if="promptsReady && showFeatures && activeFeatures.length === 0 && mapFeaturesButtonRef" pointing="down" bounce :target="mapFeaturesButtonRef">Add Features</BluePrompt>
             </div>
             <ZoneFeatures 
               :active-features="activeFeatures"
@@ -1122,10 +1162,10 @@ function lockCore(core: string) {
       />
 
       <BluePrompt
-        v-if="showFreshRoomHint && neHandleRef"
+        v-if="promptsReady && showFreshRoomHint && nHandleScreenPos"
         pointing="down"
         bounce
-        :target="neHandleRef"
+        :screen-pos="nHandleScreenPos"
         :class="[Z_INDEX.HANDLE_OVERLAY]"
       >Pull on this handle to add a zone</BluePrompt>
 
