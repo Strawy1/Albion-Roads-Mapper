@@ -1484,7 +1484,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
       @confirm="handleConfirmOccupied"
     />
 
-    <div class="fixed bottom-12 left-0 right-0 text-center min-[1200px]:left-4 min-[1200px]:right-auto min-[1200px]:text-left pointer-events-none" :class="Z_INDEX.OVERLAY">
+    <div class="fixed bottom-12 md:bottom-8 left-0 right-0 text-center min-[1200px]:left-4 min-[1200px]:right-auto min-[1200px]:text-left pointer-events-none" :class="Z_INDEX.OVERLAY">
       <CopyrightNotice />
     </div>
   </div>

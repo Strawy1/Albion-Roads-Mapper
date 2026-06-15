@@ -27,7 +27,7 @@ function onPlotRouteClick(plotRouteMode?: boolean, hasRoute?: boolean) {
 
 <template>
   <!-- Fixed bottom-right: debug button + mobile summary button + landscape refresh -->
-  <div class="pins-container fixed bottom-14 right-2 md:right-4 flex flex-col items-end gap-4" :class="Z_INDEX.UI_OVERLAY">
+  <div class="pins-container fixed bottom-10 right-2 md:right-4 flex flex-col items-end gap-4" :class="Z_INDEX.UI_OVERLAY">
     <!-- Desktop-only debug button -->
     <TooltipProvider :delay-duration="0">
       <TooltipRoot>

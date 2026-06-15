@@ -137,7 +137,3 @@ html, body, #app {
 .pulse-prompt-button {
   animation: pulse-prompt-button 2s ease-in-out infinite;
 }
-
-.bottom-22 {
-  bottom: 5.5rem;
-}

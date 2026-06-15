@@ -34,7 +34,7 @@ function handleKoFiClick() {
 
 <template>
   <div
-    class="tip-button fixed left-2 md:left-4 bottom-22 cursor-pointer"
+    class="tip-button fixed left-2 md:left-4 bottom-16 md:bottom-[4.5rem] cursor-pointer"
     :class="[Z_INDEX.UI_OVERLAY, { 'jiggle': isJiggling }]"
     @click="handleKoFiClick"
   >
