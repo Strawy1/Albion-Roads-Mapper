@@ -50,7 +50,13 @@ const tooltipStyle = computed(() => {
       : r.top + r.height / 2 + oy;
   }
 
-  if (cx === null || cy === null) return {};
+  if (cx === null || cy === null) {
+    // Inline (non-teleported) mode: honor offsetX/offsetY as a relative translate.
+    if (!props.offsetX && !props.offsetY) return {};
+    return {
+      transform: `translate(${props.offsetX || 0}px, ${props.offsetY || 0}px)`,
+    };
+  }
 
   const z = zoom.value;
   const baseTransform = props.pointing === 'down'

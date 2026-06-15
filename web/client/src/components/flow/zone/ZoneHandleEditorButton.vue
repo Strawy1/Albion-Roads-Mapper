@@ -27,7 +27,7 @@ defineExpose({
 <template>
   <div class="relative flex items-center">
     <!-- Floating Element -->
-    <BluePrompt v-if="needsCustomHandles && buttonRef" pointing="right" :target="buttonRef" :offset-x="-10">Set Portal Positions!</BluePrompt>
+    <BluePrompt v-if="(needsCustomHandles || isUnexplored) && buttonRef" pointing="right" :target="buttonRef" :offset-x="-10">Set Portal Positions</BluePrompt>
     
     <button 
       v-if="mapShape && (type === 'roads' || type === 'roadsHideout')"

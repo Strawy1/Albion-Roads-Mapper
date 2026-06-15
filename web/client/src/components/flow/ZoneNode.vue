@@ -656,6 +656,14 @@ const activeFeatures = computed(() => {
   return list;
 });
 
+const hasUnknownResources = computed(() => {
+  const resources = props.data.features?.resources;
+  if (!resources || resources.length === 0) return false;
+  const hasUnknown = resources.some(r => r.small == null && r.large == null);
+  const hasKnown = resources.some(r => (r.small != null && r.small > 0) || (r.large != null && r.large > 0));
+  return hasUnknown && hasKnown;
+});
+
 const hasReds = computed(() => {
   const reds = props.data.features?.reds;
   const redsTimer = props.data.features?.redsTimer;
@@ -1160,6 +1168,12 @@ function lockCore(core: string) {
                 :offset-y="4"
                 :target="mapFeaturesButtonRef">
                   Add Map Features</BluePrompt>
+              <BluePrompt
+                v-if="promptsReady && !isMapFeaturesModalOpen && !isHandleEditorOpen && !isChestModalOpen && showFeatures && hasUnknownResources && mapFeaturesButtonRef"
+                pointing="left"
+                :offset-x="4"
+                :target="mapFeaturesButtonRef">
+                  Review "?" resources</BluePrompt>
             </div>
             <ZoneFeatures 
               :active-features="activeFeatures"

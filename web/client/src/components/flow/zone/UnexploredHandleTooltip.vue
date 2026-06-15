@@ -11,8 +11,9 @@ const emit = defineEmits<{ dismiss: [] }>();
     pointing="left"
     class="pointer-events-auto"
     :class="[Z_INDEX.HANDLE_OVERLAY]"
-    :offset-y="50"
-    :offset-x="50"
+    bounce
+    :offset-y="-10"
+    :offset-x="10"
   >
     <span>Link Zone portals!</span>
     <template #actions>
