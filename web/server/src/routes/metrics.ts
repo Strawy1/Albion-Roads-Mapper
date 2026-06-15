@@ -117,19 +117,26 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- Map History stats ---
     const { rows: mapHistoryRows } = await app.db.query<{ zone_id: string; total_mentions: string }>(
-      `SELECT zone_id, COUNT(DISTINCT room_id) AS total_mentions
-       FROM room_node_memory
-       GROUP BY zone_id`
+      `SELECT rnm.zone_id, COUNT(DISTINCT rnm.room_id) AS total_mentions
+       FROM room_node_memory rnm
+       JOIN rooms r ON r.id = rnm.room_id
+       WHERE rnm.zone_id != r.home_zone_id
+       GROUP BY rnm.zone_id`
     );
 
     const { rows: roomHistoryRows } = await app.db.query<{ room_id: string; total_entries: string }>(
-      `SELECT room_id, COUNT(DISTINCT zone_id) AS total_entries
-       FROM room_node_memory
-       GROUP BY room_id`
+      `SELECT rnm.room_id, COUNT(DISTINCT rnm.zone_id) AS total_entries
+       FROM room_node_memory rnm
+       JOIN rooms r ON r.id = rnm.room_id
+       WHERE rnm.zone_id != r.home_zone_id
+       GROUP BY rnm.room_id`
     );
 
     const { rows: totalHistoryRows } = await app.db.query<{ total: string }>(
-      `SELECT COUNT(*) AS total FROM room_node_memory`
+      `SELECT COUNT(*) AS total
+       FROM room_node_memory rnm
+       JOIN rooms r ON r.id = rnm.room_id
+       WHERE rnm.zone_id != r.home_zone_id`
     );
     const totalHistoryEntries = parseInt(totalHistoryRows[0]?.total ?? '0', 10);
 
@@ -237,20 +244,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (UTC)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
 
     // --- Map History stats ---
-    lines.push(metric('albionmapper_history_entries_total', 'Total number of unique room-map history entries', 'gauge', totalHistoryEntries));
+    lines.push(metric('albionmapper_history_entries_total', 'Total number of unique room-map history entries (excluding home zones)', 'gauge', totalHistoryEntries));
 
     const mapHistorySeries = mapHistoryRows
       .map(r => ({ labels: { zone_id: r.zone_id }, value: parseInt(r.total_mentions ?? '0', 10) }))
       .filter(s => s.value > 0);
     if (mapHistorySeries.length > 0) {
-      lines.push(metricLabeled('albionmapper_map_history_mentions_total', 'Total number of unique rooms each map has appeared in', 'gauge', mapHistorySeries));
+      lines.push(metricLabeled('albionmapper_map_history_mentions_total', 'Total number of unique rooms each map has appeared in (excluding home zones)', 'gauge', mapHistorySeries));
     }
 
     const roomHistorySeries = roomHistoryRows
       .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.total_entries ?? '0', 10) }))
       .filter(s => s.value > 0);
     if (roomHistorySeries.length > 0) {
-      lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history', 'gauge', roomHistorySeries));
+      lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history (excluding home zone)', 'gauge', roomHistorySeries));
     }
 
     return reply

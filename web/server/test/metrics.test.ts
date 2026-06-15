@@ -18,12 +18,14 @@ describe('GET /metrics', () => {
     expect(body).toMatch(/albionmapper_websocket_connections_active \d+/);
   });
 
-  it('exposes active, inactive and total room gauges', async () => {
+  it('exposes active, inactive, total, expired and empty room gauges', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;
     expect(body).toContain('albionmapper_rooms_active');
     expect(body).toContain('albionmapper_rooms_inactive');
     expect(body).toContain('albionmapper_rooms_total');
+    expect(body).toContain('albionmapper_rooms_expired');
+    expect(body).toContain('albionmapper_rooms_empty');
   });
 
   it('exposes hourly connection max and min gauges', async () => {
@@ -56,13 +58,22 @@ describe('GET /metrics', () => {
     }
   });
 
+  it('exposes Map History stats', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    expect(body).toContain('albionmapper_history_entries_total');
+    // labeled metrics only show up if there is data, but since we default to 0/empty it might not be there
+    // However, the base gauge should exist
+  });
+
   it('outputs valid Prometheus exposition format (HELP, TYPE, value for each metric)', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const lines = res.body.split('\n').filter((l) => l.trim() !== '');
     // Every non-comment line should be a metric value line: "name value"
     const valueLines = lines.filter((l) => !l.startsWith('#'));
     for (const line of valueLines) {
-      expect(line).toMatch(/^albionmapper_\w+ \d+$/);
+      // Allow for labeled metrics: name{label="value"} 123
+      expect(line).toMatch(/^albionmapper_[\w_]+(\{.*?\})? \d+$/);
     }
   });
 
@@ -73,7 +84,20 @@ describe('GET /metrics', () => {
       .split('\n')
       .filter((l) => l.trim() !== '' && !l.startsWith('#'));
     for (const line of valueLines) {
-      expect(line).toMatch(/^albionmapper_\w+ 0$/);
+      expect(line).toMatch(/^albionmapper_[\w_]+(\{.*?\})? 0$/);
     }
+  });
+
+  it('contains correct HELP text for active and expired rooms', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    expect(body).toContain('# HELP albionmapper_rooms_active Number of rooms with at least one non-expired connection (not all expired)');
+    expect(body).toContain('# HELP albionmapper_rooms_expired Number of rooms where all connections are expired');
+  });
+
+  it('contains correct HELP text for Map History stats', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    expect(body).toContain('# HELP albionmapper_history_entries_total Total number of unique room-map history entries (excluding home zones)');
   });
 });
