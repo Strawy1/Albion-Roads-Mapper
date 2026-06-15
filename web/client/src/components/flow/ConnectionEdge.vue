@@ -213,11 +213,11 @@ const labelX = computed(() => pathData.value[1]);
 const labelY = computed(() => pathData.value[2]);
 
 const isTargetUnexplored = computed(() => {
+  if (isExpired.value || isIsolated.value) return false;
   if (props.targetNode?.type === 'non-roads') return false;
   const d = props.targetNode?.data as any;
   if (!d) return false;
   if (d.isHome || d.isGhost) return false;
-  // A connection to the center handle means the portal is unlinked (zone may be explored but reset)
   if (props.data?.connection?.toHandleId === 'center') return true;
   return !d.explored;
 });
@@ -310,7 +310,7 @@ defineExpose({
       <!-- Unexplored target tooltip — right of the pill -->
       <div
         v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
-        class="absolute left-full top-1/2 -translate-y-1/2 ml-2 pointer-events-none"
+        class="absolute left-full top-1/2 -translate-y-1/2 ml-2 pb-4"
         :class="Z_INDEX.TOAST"
       >
         <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />

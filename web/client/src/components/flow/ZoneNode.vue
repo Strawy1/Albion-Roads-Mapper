@@ -16,7 +16,7 @@ import ZoneHandleEditor from './zone/ZoneHandleEditor.vue';
 import ZoneHandleEditorButton from './zone/ZoneHandleEditorButton.vue';
 import PingButton from './zone/PingButton.vue';
 import RoomMemoryButton from './zone/RoomMemoryButton.vue';
-import TutorialTooltip from '../tutorial/TutorialTooltip.vue';
+import BluePrompt from '@/components/ui/BluePrompt.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
@@ -1069,6 +1069,7 @@ function lockCore(core: string) {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
+              <BluePrompt v-if="showFeatures && activeFeatures.length === 0" pointing="left" bounce class="ml-2">Add Features</BluePrompt>
             </div>
             <ZoneFeatures 
               :active-features="activeFeatures"
@@ -1120,14 +1121,13 @@ function lockCore(core: string) {
         @close="isHandleEditorOpen = false"
       />
 
-      <TutorialTooltip
+      <BluePrompt
         v-if="showFreshRoomHint && neHandleRef"
-        message="Pull on this handle to add a zone"
         pointing="down"
         bounce
         :target="neHandleRef"
         :class="[Z_INDEX.HANDLE_OVERLAY]"
-      />
+      >Pull on this handle to add a zone</BluePrompt>
 
       <!-- Room Memory Button (bottom tip) -->
       <div class="absolute left-1/2 -translate-x-1/2 bottom-5 flex items-center justify-center" :class="Z_INDEX.CONTENT_LOW" v-if="!props.data.isHome">
