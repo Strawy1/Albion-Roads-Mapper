@@ -24,7 +24,8 @@ function metricLabeled(name: string, help: string, type: 'gauge' | 'counter', se
 }
 
 function isAllowedMetricsIp(ip: string): boolean {
-  // Allow 10.0.1.0/24; Cloudflare tunnel on 10.0.5.0/24 is blocked
+  // Allow localhost and 10.0.1.0/24; Cloudflare tunnel on 10.0.5.0/24 is blocked
+  if (ip === '127.0.0.1' || ip === '::1') return true;
   const parts = ip.split('.');
   return parts.length === 4 && parts[0] === '10' && parts[1] === '0' && parts[2] === '1';
 }
@@ -119,10 +120,10 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       room_id: string;
       routes_plotted: string;
       data_updates: string;
-      zones_added: string;
-      non_roads_zones_added: string;
+      zones_added_roads: string;
+      zones_added_nonroads: string;
     }>(
-      `SELECT room_id, routes_plotted, data_updates, zones_added, non_roads_zones_added
+      `SELECT room_id, routes_plotted, data_updates, zones_added_roads, zones_added_nonroads
        FROM analytics_room_daily
        WHERE date = $1`,
       [today],
@@ -133,9 +134,9 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       lines.push(metricLabeled('albionmapper_room_data_updates_today', 'Room data update events today (UTC) per room', 'gauge',
         roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) }))));
       lines.push(metricLabeled('albionmapper_room_zones_added_roads_today', 'Road zones added today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added ?? '0', 10) }))));
+        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_roads ?? '0', 10) }))));
       lines.push(metricLabeled('albionmapper_room_zones_added_nonroads_today', 'Non-road zones added today (UTC) per room', 'gauge',
-        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.non_roads_zones_added ?? '0', 10) }))));
+        roomDailyRows.map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.zones_added_nonroads ?? '0', 10) }))));
     }
 
     // Today's daily counters

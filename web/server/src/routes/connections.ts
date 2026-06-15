@@ -385,6 +385,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         }));
         
         broadcast(id, { type: 'node_positions_updated', nodePositions });
+        trackRoomModified(app.db, id);
       }
 
       return reply.status(204).send();
@@ -437,6 +438,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       }));
 
       broadcast(id, { type: 'node_positions_updated', nodePositions });
+      trackRoomModified(app.db, id);
 
       return reply.status(204).send();
     },
