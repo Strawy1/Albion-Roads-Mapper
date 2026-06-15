@@ -8,6 +8,11 @@ import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
 import ChangePasswordModal from './ChangePasswordModal.vue';
 import ResetConfirmModal from './ResetConfirmModal.vue';
+declare const __APP_VERSION__: string;
+declare const __APP_COMMIT_SHA__: string;
+const appVersion = __APP_VERSION__;
+const appCommitSha = __APP_COMMIT_SHA__;
+
 const props = defineProps<{
   tray?: boolean;
   fullWidth?: boolean;
@@ -253,7 +258,7 @@ function exitRoom() {
         </div>
 
         <!-- Logout -->
-        <div class="p-2">
+        <div class="border-b border-gray-700 p-2">
           <button
             type="button"
             class="w-full text-left px-3 py-2 text-sm rounded text-red-400 hover:bg-gray-700 hover:text-red-300"
@@ -261,6 +266,11 @@ function exitRoom() {
           >
             🚪 Exit Room
           </button>
+        </div>
+
+        <!-- Version -->
+        <div class="px-4 py-2 text-xs text-gray-500 text-right">
+          v{{ appVersion }} | {{ appCommitSha ? ` (${appCommitSha})` : ' UNKNOWN / LOCAL' }}
         </div>
       </div>
     </div>

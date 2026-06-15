@@ -552,7 +552,8 @@ watch(() => plotRouteStore.destinationZoneId, (newId) => {
 });
 const showDebug = ref(false);
 const showDebugOverride = ref(false);
-const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+declare const __VERCEL_ENV__: string;
+const isLocal = !__VERCEL_ENV__;
 
 function handleKeyDown(e: KeyboardEvent) {
   if (e.altKey && e.code === 'KeyD') {
