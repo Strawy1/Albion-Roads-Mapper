@@ -372,6 +372,11 @@ onMounted(() => {
       promptsReady.value = true;
     });
   });
+  // If this hideout has been reset to a fresh state (no connections, default handles),
+  // clear any stale dismissal so the hint shows again.
+  if (isRoadsHideout.value && !hasAnyConnection.value && hasOnlyDefaultHandles.value) {
+    undismissHideoutHint();
+  }
 });
 
 const NODE_SIZE = 400;
@@ -427,6 +432,17 @@ function dismissHideoutHint() {
     const ids = readDismissedIds();
     ids.add(props.id);
     localStorage.setItem(HIDEOUT_HINT_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {}
+}
+
+function undismissHideoutHint() {
+  hideoutHintDismissed.value = false;
+  try {
+    const ids = readDismissedIds();
+    if (ids.has(props.id)) {
+      ids.delete(props.id);
+      localStorage.setItem(HIDEOUT_HINT_STORAGE_KEY, JSON.stringify([...ids]));
+    }
   } catch {}
 }
 
