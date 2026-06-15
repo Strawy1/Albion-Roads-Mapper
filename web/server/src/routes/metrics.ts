@@ -117,19 +117,19 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- Map History stats ---
     const { rows: mapHistoryRows } = await app.db.query<{ zone_id: string; total_mentions: string }>(
-      `SELECT zone_id, SUM(ARRAY_LENGTH(times_added, 1)) AS total_mentions
+      `SELECT zone_id, COUNT(DISTINCT room_id) AS total_mentions
        FROM room_node_memory
        GROUP BY zone_id`
     );
 
     const { rows: roomHistoryRows } = await app.db.query<{ room_id: string; total_entries: string }>(
-      `SELECT room_id, SUM(ARRAY_LENGTH(times_added, 1)) AS total_entries
+      `SELECT room_id, COUNT(DISTINCT zone_id) AS total_entries
        FROM room_node_memory
        GROUP BY room_id`
     );
 
     const { rows: totalHistoryRows } = await app.db.query<{ total: string }>(
-      `SELECT SUM(ARRAY_LENGTH(times_added, 1)) AS total FROM room_node_memory`
+      `SELECT COUNT(*) AS total FROM room_node_memory`
     );
     const totalHistoryEntries = parseInt(totalHistoryRows[0]?.total ?? '0', 10);
 
@@ -237,20 +237,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (UTC)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
 
     // --- Map History stats ---
-    lines.push(metric('albionmapper_history_entries_total', 'Total number of room history entries across all maps and rooms', 'gauge', totalHistoryEntries));
+    lines.push(metric('albionmapper_history_entries_total', 'Total number of unique room-map history entries', 'gauge', totalHistoryEntries));
 
     const mapHistorySeries = mapHistoryRows
       .map(r => ({ labels: { zone_id: r.zone_id }, value: parseInt(r.total_mentions ?? '0', 10) }))
       .filter(s => s.value > 0);
     if (mapHistorySeries.length > 0) {
-      lines.push(metricLabeled('albionmapper_map_history_mentions_total', 'Total number of times each map is mentioned in room histories', 'gauge', mapHistorySeries));
+      lines.push(metricLabeled('albionmapper_map_history_mentions_total', 'Total number of unique rooms each map has appeared in', 'gauge', mapHistorySeries));
     }
 
     const roomHistorySeries = roomHistoryRows
       .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.total_entries ?? '0', 10) }))
       .filter(s => s.value > 0);
     if (roomHistorySeries.length > 0) {
-      lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total history size (number of entries) for each room', 'gauge', roomHistorySeries));
+      lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history', 'gauge', roomHistorySeries));
     }
 
     return reply
