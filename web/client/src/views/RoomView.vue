@@ -24,6 +24,7 @@ import TopLeftToolbar from '../components/room/TopLeftToolbar.vue';
 import TopRightToolbar from '../components/room/TopRightToolbar.vue';
 import BottomRightPins from '../components/room/BottomRightPins.vue';
 import MobileRoomSummary from '../components/room/MobileRoomSummary.vue';
+import WebsocketStatusBar from '../components/room/WebsocketStatusBar.vue';
 import { VueFlow, useVueFlow, ConnectionMode, type Node, type Edge, type OnConnectStartParams } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
@@ -91,27 +92,8 @@ interface PingToast {
 }
 const pingToasts = ref<PingToast[]>([]);
 let pingToastCounter = 0;
-const lastUpdateFlash = ref(false);
-let flashTimeout: ReturnType<typeof setTimeout> | null = null;
 const initialUpdateCount = ref(0);
 
-// Flash animation whenever lastUpdate changes
-watch(
-  () => lastUpdate.value?.getTime(),
-  async () => {
-    if (initialUpdateCount.value < 2) {
-      initialUpdateCount.value++;
-      return;
-    }
-    lastUpdateFlash.value = false;
-    if (flashTimeout) clearTimeout(flashTimeout);
-    await nextTick();
-    flashTimeout = setTimeout(() => {
-      lastUpdateFlash.value = true;
-      flashTimeout = setTimeout(() => (lastUpdateFlash.value = false), 2000);
-    }, 50);
-  },
-);
 
 onMounted(() => {
   initializeRoom();
@@ -238,7 +220,6 @@ onUnmounted(() => {
   if (megaToastTimeout) clearTimeout(megaToastTimeout);
   if (megaToastBgTimeout) clearTimeout(megaToastBgTimeout);
   if (pingToastBgTimeout) clearTimeout(pingToastBgTimeout);
-  if (flashTimeout) clearTimeout(flashTimeout);
   pingToasts.value = [];
 });
 
@@ -1277,28 +1258,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
       @update:to-zone-id="handleToZoneChange"
     />
 
-    <!-- WS status bar (always visible, bottom of screen) -->
-    <div class="absolute left-0 right-0 bottom-0 px-3 py-1 text-xs flex items-center justify-center text-center" :class="[Z_INDEX.HEADER, store.wsStatus === 'connected' ? 'frosted-status-connected' : store.wsStatus === 'connecting' ? 'frosted-status-connecting' : store.wsStatus === 'auth_failed' ? 'frosted-status-auth-failed' : 'frosted-status-disconnected']">
-      <div v-if="store.wsStatus === 'connected'">
-        <div>
-        ● Connected <span class="px-1">|</span>
- Last Updated:
-        <span
-          class="status-update-time"
-          :class="{ 'status-update-flash': lastUpdateFlash }"
-        >{{ store.lastUpdate ? formatTime(store.lastUpdate) : '…' }}</span>
-        </div>
-        <div>
-          <span>Active Users - </span>
-          <span>Room: {{ store.watchingCount !== null ? store.watchingCount : '…' }}</span>
-          <span class="px-1">|</span>
-          <span>Sitewide: {{ store.totalConnected !== null ? store.totalConnected : '…' }}</span>
-        </div>
-      </div>
-      <div v-else-if="store.wsStatus === 'connecting'">⟳ Connecting…</div>
-      <div v-else-if="store.wsStatus === 'auth_failed'">⚠ Session expired — redirecting to login…</div>
-      <div v-else>⚠ Disconnected — reconnecting…</div>
-    </div>
+    <WebsocketStatusBar />
 
     <!-- Graph -->
     <div class="absolute inset-0">
@@ -1531,35 +1491,6 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
 </template>
 
 <style scoped>
-/* Status bar: "Last update" time flash */
-.status-update-time {
-  display: inline-block;
-  padding: 0 4px;
-  border-radius: 3px;
-  position: relative;
-}
-
-/* White background that fades to transparent */
-.status-update-time::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 3px;
-  background: white;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.status-update-flash::after {
-  animation: update-flash 2s ease-out forwards;
-}
-
-@keyframes update-flash {
-  0%   { opacity: 0.85; }
-  15%  { opacity: 0.85; }
-  100% { opacity: 0; }
-}
-
 .ping-toast-enter-active {
   animation: ping-toast-in 0.3s ease-out forwards;
 }
