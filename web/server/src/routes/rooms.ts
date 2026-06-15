@@ -194,7 +194,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/rooms/:id/connections — reset (delete all connections in room)
-  app.delete<{ Params: { id: string } }>('/api/rooms/:id/connections', {
+  app.delete<{ Params: { id: string }; Body: { adminPassword?: string } }>('/api/rooms/:id/connections', {
     preHandler: [app.authenticate],
   }, async (request, reply) => {
     const { id } = request.params;
@@ -202,6 +202,8 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     if (jwtPayload.roomId !== id) {
       return reply.status(403).send({ error: 'Forbidden' });
     }
+
+    const { adminPassword } = request.body ?? {};
 
     const client = await app.db.connect();
     try {
@@ -216,7 +218,15 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
         await client.query('ROLLBACK');
         return reply.status(404).send({ error: 'Room not found' });
       }
-      
+
+      if (adminPassword) {
+        const validAdmin = await bcrypt.compare(adminPassword, room.admin_password_hash);
+        if (!validAdmin) {
+          await client.query('ROLLBACK');
+          return reply.status(401).send({ error: 'Invalid admin password' });
+        }
+      }
+
       await client.query('DELETE FROM connections WHERE room_id = $1', [id]);
       await client.query('DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id != $2', [id, room.home_zone_id]);
       await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
@@ -236,13 +246,29 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/rooms/:id/memory — flush all zone memory for a room
-  app.delete<{ Params: { id: string } }>('/api/rooms/:id/memory', {
+  app.delete<{ Params: { id: string }; Body: { adminPassword?: string } }>('/api/rooms/:id/memory', {
     preHandler: [app.authenticate],
   }, async (request, reply) => {
     const { id } = request.params;
     const jwtPayload = request.user as { roomId: string };
     if (jwtPayload.roomId !== id) {
       return reply.status(403).send({ error: 'Forbidden' });
+    }
+
+    const { adminPassword } = request.body ?? {};
+    if (!adminPassword) {
+      return reply.status(400).send({ error: 'Admin password required' });
+    }
+    const { rows } = await app.db.query<{ admin_password_hash: string }>(
+      'SELECT admin_password_hash FROM rooms WHERE id = $1',
+      [id]
+    );
+    if (!rows[0]) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+    const validAdmin = await bcrypt.compare(adminPassword, rows[0].admin_password_hash);
+    if (!validAdmin) {
+      return reply.status(401).send({ error: 'Invalid admin password' });
     }
 
     await app.db.query('DELETE FROM room_node_memory WHERE room_id = $1', [id]);

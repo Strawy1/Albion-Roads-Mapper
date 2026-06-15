@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { Z_INDEX } from '@/constants/Layers';
 import { useRouter } from 'vue-router';
 import { useRoomStore } from '@/stores/useRoomStore';
+import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
 import ChangePasswordModal from './ChangePasswordModal.vue';
@@ -13,6 +14,7 @@ const props = defineProps<{
 }>();
 
 const store = useRoomStore();
+const memoryStore = useRoomMemoryStore();
 const router = useRouter();
 const cogRef = ref<HTMLElement | null>(null);
 
@@ -52,7 +54,7 @@ function onClickOutside(e: MouseEvent) {
 onMounted(() => document.addEventListener('click', onClickOutside));
 onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
 
-async function reset() {
+async function clearRoom() {
   resetting.value = true;
   resetError.value = '';
   try {
@@ -69,33 +71,37 @@ async function reset() {
     }
     open.value = false;
     resetSubForms();
-    track('reset_all_connections');
+    track('clear_room');
   } finally {
     resetting.value = false;
   }
 }
 
-async function resetWithHistory() {
+async function resetWithHistory(adminPassword: string, setError: (msg: string) => void) {
   resetting.value = true;
-  resetError.value = '';
   try {
     const connectionsRes = await fetch(`${API_BASE_URL}/api/rooms/${store.roomId}/connections`, {
       method: 'DELETE',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${store.token}`,
       },
+      body: JSON.stringify({ adminPassword }),
     });
     if (!connectionsRes.ok) {
       const body = await connectionsRes.json() as { error?: string };
-      resetError.value = body.error ?? 'Reset failed';
+      setError(body.error ?? 'Reset failed');
       return;
     }
     await fetch(`${API_BASE_URL}/api/rooms/${store.roomId}/memory`, {
       method: 'DELETE',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${store.token}`,
       },
+      body: JSON.stringify({ adminPassword }),
     });
+    memoryStore.clear();
     open.value = false;
     resetSubForms();
     track('reset_all_connections_with_history');
@@ -257,6 +263,6 @@ function exitRoom() {
       </div>
     </div>
     <ChangePasswordModal v-model="showChangePasswordModal" />
-    <ResetConfirmModal v-model="showResetConfirmModal" @confirmed="reset" @confirmed-with-history="resetWithHistory" @confirmed-delete-room="deleteRoom" />
+    <ResetConfirmModal v-model="showResetConfirmModal" @confirmed-clear-room="clearRoom" @confirmed-with-history="resetWithHistory" @confirmed-delete-room="deleteRoom" />
   </div>
 </template>

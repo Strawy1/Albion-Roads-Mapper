@@ -278,6 +278,139 @@ describe('DELETE /api/rooms/:id', () => {
   });
 });
 
+describe('DELETE /api/rooms/:id/connections', () => {
+  it('returns 204 and deletes connections without admin password (clear room)', async () => {
+    const bcrypt = await import('bcrypt');
+    const roomId = 'test-room-id';
+    const adminHash = await bcrypt.default.hash('admin-pw', 1);
+    const token = app.jwt.sign({ roomId });
+
+    const clientMock = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash, home_zone_id: 'home-zone' }] }) // SELECT
+        .mockResolvedValue({ rows: [], rowCount: 0 }), // remaining queries
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(204);
+    const calls = clientMock.query.mock.calls.map((c: any[]) => c[0]);
+    expect(calls.some((q: string) => q.includes('BEGIN'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('DELETE FROM connections'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('COMMIT'))).toBe(true);
+  });
+
+  it('returns 204 and deletes connections when correct admin password is provided', async () => {
+    const bcrypt = await import('bcrypt');
+    const roomId = 'test-room-id';
+    const adminHash = await bcrypt.default.hash('admin-pw', 1);
+    const token = app.jwt.sign({ roomId });
+
+    const clientMock = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash, home_zone_id: 'home-zone' }] }) // SELECT
+        .mockResolvedValue({ rows: [], rowCount: 0 }), // remaining queries
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'admin-pw' },
+    });
+
+    expect(res.statusCode).toBe(204);
+    const calls = clientMock.query.mock.calls.map((c: any[]) => c[0]);
+    expect(calls.some((q: string) => q.includes('DELETE FROM connections'))).toBe(true);
+    expect(calls.some((q: string) => q.includes('COMMIT'))).toBe(true);
+  });
+
+  it('returns 401 when admin password is provided but wrong', async () => {
+    const bcrypt = await import('bcrypt');
+    const roomId = 'test-room-id';
+    const adminHash = await bcrypt.default.hash('correct-admin', 1);
+    const token = app.jwt.sign({ roomId });
+
+    const clientMock = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash, home_zone_id: 'home-zone' }] }) // SELECT
+        .mockResolvedValue({ rows: [], rowCount: 0 }),
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'wrong-admin' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json<{ error: string }>().error).toMatch(/invalid admin password/i);
+  });
+
+  it('returns 404 when room does not exist', async () => {
+    const roomId = 'ghost-room';
+    const token = app.jwt.sign({ roomId });
+
+    const clientMock = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // SELECT — room not found
+        .mockResolvedValue({ rows: [], rowCount: 0 }),
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ error: string }>().error).toMatch(/room not found/i);
+  });
+
+  it('returns 403 when token belongs to a different room', async () => {
+    const roomId = 'test-room-id';
+    const token = app.jwt.sign({ roomId: 'other-room' });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('returns 401 when no auth token is provided', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/rooms/test-room-id/connections',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+});
+
 describe('Home Zone Node Protection', () => {
   it('should NOT allow changing home zone via PATCH /api/rooms/:id', async () => {
     const roomId = 'test-room-id';
