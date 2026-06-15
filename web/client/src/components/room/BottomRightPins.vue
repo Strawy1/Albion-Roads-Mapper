@@ -162,10 +162,10 @@ function onPlotRouteClick(plotRouteMode?: boolean, hasRoute?: boolean) {
   border: 1px solid #3b82f6;
 }
 
-/* Small phones: push pins up to bottom-18 */
+/* Small phones: push pins up */
 @media (max-width: 560px) {
   .pins-container {
-    bottom: 4.5rem;
+    bottom: 5.5rem;
   }
 }
 </style>

@@ -140,7 +140,7 @@ async function exportNodes() {
           <div class="flex items-center justify-between px-4 py-3">
             <div class="flex items-center gap-3">
               <h2 class="text-base font-semibold">🐛 Debug Tray</h2>
-              <span class="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs font-mono">Total Conns: {{ store.totalConnected !== null ? store.totalConnected : '…' }}</span>
+              <span class="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs font-mono">Total Users: {{ store.totalConnected !== null ? store.totalConnected : '…' }}</span>
             </div>
             <button class="text-gray-400 hover:text-white text-xl leading-none" @click="emit('close')">&times;</button>
           </div>

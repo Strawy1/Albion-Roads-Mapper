@@ -1278,22 +1278,26 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
     />
 
     <!-- WS status bar (always visible, bottom of screen) -->
-    <div class="absolute left-0 right-0 bottom-0 px-3 py-1 text-xs flex items-center justify-center" :class="[Z_INDEX.HEADER, store.wsStatus === 'connected' ? 'frosted-status-connected' : store.wsStatus === 'connecting' ? 'frosted-status-connecting' : store.wsStatus === 'auth_failed' ? 'frosted-status-auth-failed' : 'frosted-status-disconnected']">
-      <span v-if="store.wsStatus === 'connected'">
+    <div class="absolute left-0 right-0 bottom-0 px-3 py-1 text-xs flex items-center justify-center text-center" :class="[Z_INDEX.HEADER, store.wsStatus === 'connected' ? 'frosted-status-connected' : store.wsStatus === 'connecting' ? 'frosted-status-connecting' : store.wsStatus === 'auth_failed' ? 'frosted-status-auth-failed' : 'frosted-status-disconnected']">
+      <div v-if="store.wsStatus === 'connected'">
+        <div>
         ● Connected <span class="px-1">|</span>
  Last Updated:
         <span
           class="status-update-time"
           :class="{ 'status-update-flash': lastUpdateFlash }"
         >{{ store.lastUpdate ? formatTime(store.lastUpdate) : '…' }}</span>
-        <span class="px-1">|</span>
-        <span>Room conns: {{ store.watchingCount !== null ? store.watchingCount : '…' }}</span>
-        <span class="px-1">|</span>
-        <span>Sitewide conns: {{ store.totalConnected !== null ? store.totalConnected : '…' }}</span>
-      </span>
-      <span v-else-if="store.wsStatus === 'connecting'">⟳ Connecting…</span>
-      <span v-else-if="store.wsStatus === 'auth_failed'">⚠ Session expired — redirecting to login…</span>
-      <span v-else>⚠ Disconnected — reconnecting…</span>
+        </div>
+        <div>
+          <span>Active Users - </span>
+          <span>Room: {{ store.watchingCount !== null ? store.watchingCount : '…' }}</span>
+          <span class="px-1">|</span>
+          <span>Sitewide: {{ store.totalConnected !== null ? store.totalConnected : '…' }}</span>
+        </div>
+      </div>
+      <div v-else-if="store.wsStatus === 'connecting'">⟳ Connecting…</div>
+      <div v-else-if="store.wsStatus === 'auth_failed'">⚠ Session expired — redirecting to login…</div>
+      <div v-else>⚠ Disconnected — reconnecting…</div>
     </div>
 
     <!-- Graph -->
@@ -1520,7 +1524,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
       @confirm="handleConfirmOccupied"
     />
 
-    <div class="fixed bottom-8 left-0 right-0 text-center min-[1200px]:left-4 min-[1200px]:right-auto min-[1200px]:text-left pointer-events-none" :class="Z_INDEX.OVERLAY">
+    <div class="fixed bottom-12 left-0 right-0 text-center min-[1200px]:left-4 min-[1200px]:right-auto min-[1200px]:text-left pointer-events-none" :class="Z_INDEX.OVERLAY">
       <CopyrightNotice />
     </div>
   </div>

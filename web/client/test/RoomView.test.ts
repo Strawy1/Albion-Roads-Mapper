@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import RoomView from '../src/views/RoomView.vue';
-import { useRoomStore } from '../src/stores/useRoomStore';
+import { useRoomStore } from '@/stores/useRoomStore';
 import { nextTick } from 'vue';
 
 // Mock VueFlow and router to avoid complex setup
