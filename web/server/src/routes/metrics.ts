@@ -8,9 +8,25 @@ function metric(name: string, help: string, type: 'gauge' | 'counter', value: nu
   return `# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name} ${value}\n`;
 }
 
+/**
+ * Formats a Prometheus metric block with multiple labeled series.
+ */
+function metricLabeled(name: string, help: string, type: 'gauge' | 'counter', series: { labels: Record<string, string>; value: number }[]): string {
+  const labelStr = (labels: Record<string, string>) =>
+    Object.entries(labels)
+      .map(([k, v]) => `${k}="${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`)
+      .join(',');
+  const lines = [`# HELP ${name} ${help}`, `# TYPE ${name} ${type}`];
+  for (const s of series) {
+    lines.push(`${name}{${labelStr(s.labels)}} ${s.value}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
 function isAllowedMetricsIp(ip: string): boolean {
-  // Only allow 10.0.1.232 (Cloudflare tunnel operates on 10.0.5.0/24 which is blocked)
-  return ip === '10.0.1.232';
+  // Allow 10.0.1.0/24; Cloudflare tunnel on 10.0.5.0/24 is blocked
+  const parts = ip.split('.');
+  return parts.length === 4 && parts[0] === '10' && parts[1] === '0' && parts[2] === '1';
 }
 
 export async function metricsRoutes(app: FastifyInstance): Promise<void> {
@@ -84,6 +100,15 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_rooms_active', 'Number of rooms with at least one active WebSocket connection', 'gauge', activeRooms));
     lines.push(metric('albionmapper_rooms_inactive', 'Number of rooms with no active WebSocket connections', 'gauge', inactiveRooms));
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
+
+    // Per-room connection counts
+    const roomSeries = Array.from(roomSockets.entries()).map(([roomId, sockets]) => ({
+      labels: { room_id: roomId },
+      value: sockets.size,
+    }));
+    if (roomSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_connections', 'Number of active WebSocket connections per room', 'gauge', roomSeries));
+    }
 
     // Last-hour connection stats from analytics_hourly_connections
     lines.push(metric('albionmapper_hourly_connections_max', 'Maximum concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourMax));
