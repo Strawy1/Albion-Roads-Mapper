@@ -7,7 +7,7 @@ defineProps<{ ms: number }>();
 
 <template>
   <div
-    class="absolute top-28 md:top-16 left-1/2 -translate-x-1/2 pointer-events-none flex items-center gap-1.5 px-3 py-1 rounded-full text-md font-medium backdrop-blur-md"
+    class="absolute top-28 md:top-16 left-1/2 -translate-x-1/2 pointer-events-none flex items-center gap-1.5 px-6 md:px-3 py-1 rounded-full text-md font-medium backdrop-blur-md whitespace-nowrap"
     :class="[
       Z_INDEX.TOAST,
       ms <= 0
