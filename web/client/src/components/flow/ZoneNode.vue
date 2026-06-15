@@ -1149,12 +1149,17 @@ function lockCore(core: string) {
                 ref="mapFeaturesButtonRef"
                 @click.stop="isMapFeaturesModalOpen = !isMapFeaturesModalOpen"
                 @mousedown.stop
-                :class="['zone-button p-1 pointer-events-auto relative', hasReds ? 'zone-button-reds' : '', featuresRequireUpdate ? 'pulse-prompt-button' : '', Z_INDEX.CONTENT_HIGH]"
+                :class="['zone-button p-1 pointer-events-auto relative', hasReds ? 'zone-button-reds' : '', (featuresRequireUpdate && store.bluePromptsEnabled) ? 'pulse-prompt-button' : '', Z_INDEX.CONTENT_HIGH]"
                 title="Edit Map Features"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
-              <BluePrompt v-if="promptsReady && !isMapFeaturesModalOpen && !isHandleEditorOpen && !isChestModalOpen && showFeatures && activeFeatures.length === 0 && mapFeaturesButtonRef" pointing="down" bounce :target="mapFeaturesButtonRef">Add Features</BluePrompt>
+              <BluePrompt
+                v-if="promptsReady && !isMapFeaturesModalOpen && !isHandleEditorOpen && !isChestModalOpen && showFeatures && activeFeatures.length === 0 && mapFeaturesButtonRef"
+                pointing="up"
+                :offset-y="4"
+                :target="mapFeaturesButtonRef">
+                  Add Map Features</BluePrompt>
             </div>
             <ZoneFeatures 
               :active-features="activeFeatures"

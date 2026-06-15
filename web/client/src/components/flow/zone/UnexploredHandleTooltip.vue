@@ -7,7 +7,13 @@ const emit = defineEmits<{ dismiss: [] }>();
 </script>
 
 <template>
-  <BluePrompt pointing="left" bounce class="pointer-events-auto" :class="[Z_INDEX.HANDLE_OVERLAY]">
+  <BluePrompt
+    pointing="left"
+    class="pointer-events-auto"
+    :class="[Z_INDEX.HANDLE_OVERLAY]"
+    :offset-y="50"
+    :offset-x="50"
+  >
     <span>Link Zone portals!</span>
     <template #actions>
       <TooltipProvider :delay-duration="0">

@@ -221,6 +221,21 @@ function exitRoom() {
           </button>
         </div>
 
+        <!-- Blue Prompts -->
+        <div class="border-b border-gray-700 px-2 py-2">
+          <button
+            type="button"
+            class="w-full text-left px-3 py-1 text-sm rounded text-gray-200 hover:bg-gray-700 flex items-center justify-between"
+            @click="store.setBluePromptsEnabled(!store.bluePromptsEnabled)"
+          >
+            <span class="inline-flex items-center gap-1.5">
+              💡
+              <span class="inline-block bg-blue-600 border-2 border-blue-400 text-white text-sm leading-none px-2 py-1 rounded shadow">Hints</span>
+            </span>
+            <span :class="store.bluePromptsEnabled ? 'text-green-400' : 'text-gray-500'">{{ store.bluePromptsEnabled ? 'On' : 'Off' }}</span>
+          </button>
+        </div>
+
         <!-- Change password -->
         <div class="border-b border-gray-700 p-2">
           <button

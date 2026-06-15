@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import BluePrompt from '@/components/ui/BluePrompt.vue';
+import { useRoomStore } from '@/stores/useRoomStore';
+
+const roomStore = useRoomStore();
 
 defineProps<{
   mapShape?: string;
@@ -32,7 +35,7 @@ defineExpose({
       :class="[
         'zone-button px-3 py-1.5 flex items-center gap-1.5 shadow-lg pointer-events-auto', 
         hasReds ? 'zone-button-reds' : '', 
-        needsCustomHandles || isUnexplored ? 'pulse-prompt-button' : '',
+        (needsCustomHandles || isUnexplored) && roomStore.bluePromptsEnabled ? 'pulse-prompt-button' : '',
       ]"
       @click.stop="$emit('click')"
     >

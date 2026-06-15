@@ -477,6 +477,13 @@ export const useRoomStore = defineStore('room', () => {
     localStorage.setItem('animationsEnabled', String(enabled));
   }
 
+  const bluePromptsEnabled = ref<boolean>(localStorage.getItem('bluePromptsEnabled') !== 'false');
+
+  function setBluePromptsEnabled(enabled: boolean) {
+    bluePromptsEnabled.value = enabled;
+    localStorage.setItem('bluePromptsEnabled', String(enabled));
+  }
+
   const recentlyViewedRooms = ref<RecentRoom[]>(JSON.parse(localStorage.getItem('recentRooms') || '[]').map((r: any) => ({
     id: r.id,
     vanityUrl: r.vanityUrl || r.id,
@@ -569,6 +576,8 @@ export const useRoomStore = defineStore('room', () => {
     setShapeBackgroundOpacity,
     animationsEnabled,
     setAnimationsEnabled,
+    bluePromptsEnabled,
+    setBluePromptsEnabled,
     removeFromRecentRooms,
     importData,
   };
