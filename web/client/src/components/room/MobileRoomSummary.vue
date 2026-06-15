@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import MapHistoryButton from '../flow/zone/MapHistoryButton.vue';
 import { Z_INDEX } from '@/constants/Layers';
 
 type ResourceZone = { zoneId: string; zoneName: string; tier: number; small?: number; large?: number };
@@ -58,7 +59,10 @@ function navigateTo(zoneId: string) {
         class="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-900 rounded-t-xl sticky top-0"
         :class="Z_INDEX.CONTENT_LOW"
       >
-        <h2 class="text-base font-bold uppercase text-gray-400">Room Summary</h2>
+        <div class="flex items-center gap-3">
+          <h2 class="text-base font-bold uppercase text-gray-400">Room Summary</h2>
+          <MapHistoryButton />
+        </div>
         <button class="text-gray-400 hover:text-white text-xl leading-none" @click="emit('close')">&times;</button>
       </div>
 

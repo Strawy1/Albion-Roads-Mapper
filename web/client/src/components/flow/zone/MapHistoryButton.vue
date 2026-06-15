@@ -335,7 +335,9 @@ function getActiveFeatures(features: NodeFeatures | undefined) {
 
 <style scoped>
 .room-memory-btn {
-  @apply w-20 h-12 px-3;
+  @apply px-3;
+  min-width: 5rem;
+  height: 2.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
