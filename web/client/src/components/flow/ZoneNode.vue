@@ -862,7 +862,7 @@ function lockCore(core: string) {
             type="source"
             :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
             :id="handle.id"
-            :ref="handle.id === 'n' ? (el) => { neHandleRef = el as HTMLElement | null } : undefined"
+            :ref="handle.id === 'n' ? (el) => { neHandleRef = (el && (el as any).$el ? (el as any).$el : el) as HTMLElement | null } : undefined"
             :style="{ left: handle.left, top: handle.top }"
             :class="[
               'handle', 
