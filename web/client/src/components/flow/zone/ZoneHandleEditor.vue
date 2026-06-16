@@ -223,9 +223,9 @@ function getHandleFacing(left: string, top: string): string {
         />
 
         <!-- Center Content - Inside Diamond -->
-        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-12" :class="Z_INDEX.UI_OVERLAY">
-          <div class="flex flex-col items-center pointer-events-auto max-w-[280px] bg-gray-800/60 backdrop-blur-xs rounded-lg p-2">
-            <p class="text-gray-300 text-[11px] text-center mb-2 mx-2 leading-tight drop-shadow-md">
+        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" :class="Z_INDEX.UI_OVERLAY">
+          <div class="flex flex-col items-center pointer-events-auto max-w-[280px] bg-gray-700/60 backdrop-blur-xs drop-shadow-xl rounded-lg p-2">
+            <p class="text-gray-300 text-[11px] text-center mb-2 leading-tight drop-shadow-md">
               <template v-if="isToggleMode">
                 <template v-if="!isHideout">
                   Press on a handle to mark the portal as missing.<br>
