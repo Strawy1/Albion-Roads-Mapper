@@ -11,7 +11,7 @@ import ZoneNode from '../components/flow/ZoneNode.vue';
 import NonRoadsNode from '../components/flow/NonRoadsNode.vue';
 import ConnectionEdge from '../components/flow/ConnectionEdge.vue';
 import ConnectionLine from '../components/flow/ConnectionLine.vue';
-import TipButton from '../components/TipButton.vue';
+import BottomLeftToolbar from '../components/room/BottomLeftToolbar.vue';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import MegaToast from '../components/common/MegaToast.vue';
 import ConfirmationModal from '../components/common/ConfirmationModal.vue';
@@ -1410,8 +1410,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         </button>
       </div>
     </Transition>
-    <!-- Ko-fi button -->
-    <TipButton />
+    <!-- Bottom-left toolbar (Ko-fi + Discord) -->
+    <BottomLeftToolbar />
     
     <ConfirmationModal
       v-model="showConfirmationModal"
