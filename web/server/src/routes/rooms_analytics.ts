@@ -4,7 +4,7 @@ import {
   incrementRoomDaily,
   incrementRoomAlltime,
   recalculateRoomCounts,
-  utcDateString,
+  londonDateString,
 } from '../analytics.js';
 
 export function trackRoomCreated(db: Pool): void {
@@ -29,7 +29,7 @@ export function trackMemoryWipedSingle(db: Pool): void {
 
 export function trackRoomDeleted(db: Pool): void {
   incrementGlobal(db, { rooms_deleted: 1 });
-  recalculateRoomCounts(db, utcDateString());
+  recalculateRoomCounts(db, londonDateString());
 }
 
 export function trackRoomModified(db: Pool, roomId: string): void {

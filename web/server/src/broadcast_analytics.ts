@@ -1,4 +1,4 @@
-import { utcDateString } from './analytics.js';
+import { londonDateString } from './analytics.js';
 
 // In-memory analytics state — flushed to DB each minute by analyticsCron
 // roomId → date → Set of token fingerprints
@@ -26,7 +26,7 @@ export function recordSocketAnalytics(
   roomCount: number,
   totalCount: number,
 ): void {
-  const today = utcDateString();
+  const today = londonDateString();
 
   if (token) {
     const fp = tokenFingerprint(token);

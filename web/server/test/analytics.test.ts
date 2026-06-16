@@ -769,9 +769,9 @@ describe('Analytics — node position updates via WebSocket', () => {
 // analytics helper unit tests
 // ---------------------------------------------------------------------------
 describe('Analytics helpers', () => {
-  it('utcDateString returns YYYY-MM-DD format', async () => {
-    const { utcDateString } = await import('../src/analytics.js');
-    const result = utcDateString(new Date('2026-06-13T15:30:00Z'));
+  it('londonDateString returns YYYY-MM-DD format in London time', async () => {
+    const { londonDateString } = await import('../src/analytics.js');
+    const result = londonDateString(new Date('2026-06-13T15:30:00Z'));
     expect(result).toBe('2026-06-13');
   });
 
@@ -859,7 +859,9 @@ describe('analyticsCron — runAnalyticsFlush', () => {
     const { runAnalyticsFlush } = await import('../src/analyticsCron.js');
     const { clearAnalyticsDate } = await import('../src/broadcast_analytics.js');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const { londonDateString } = await import('../src/analytics.js');
+
+    const today = londonDateString();
 
     // Clean state
     clearAnalyticsDate(today);

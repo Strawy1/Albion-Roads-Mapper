@@ -40,10 +40,6 @@ export function londonDateString(d: Date = new Date()): string {
   }).format(d).split('/').reverse().join('-');
 }
 
-/** Returns today's date as a YYYY-MM-DD string in UTC. */
-export function utcDateString(d: Date = new Date()): string {
-  return d.toISOString().slice(0, 10);
-}
 
 /**
  * Increments one or more counters on the global daily row for today.
