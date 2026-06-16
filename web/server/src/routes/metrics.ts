@@ -153,8 +153,8 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const totalRoomsAborted  = parseInt(cleanupAlltimeRows[0]?.rooms_aborted  ?? '0', 10);
     const totalRoomsAbandoned = parseInt(cleanupAlltimeRows[0]?.rooms_abandoned ?? '0', 10);
 
-    const { rows: alltimeRoomRows } = await app.db.query<{ room_id: string; tokens_issued: string }>(
-      'SELECT room_id, tokens_issued FROM analytics_room_alltime WHERE tokens_issued > 0',
+    const { rows: alltimeRoomRows } = await app.db.query<{ room_id: string; tokens_issued: string; data_updates: string }>(
+      'SELECT room_id, tokens_issued, data_updates FROM analytics_room_alltime WHERE tokens_issued > 0 OR data_updates > 0',
     );
 
     // --- Map History stats ---
@@ -266,15 +266,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- Global cumulative stats ---
     lines.push(metric('albionmapper_tokens_issued_total', 'Total number of authenticated tokens issued since tracking began', 'gauge', totalTokensIssued));
-    lines.push(metric('albionmapper_room_data_updates_alltime', 'Total number of room data update events since tracking began', 'gauge', totalRoomDataUpdates));
+    lines.push(metric('albionmapper_alltime_data_updates_total', 'Total number of room data update events across all rooms since tracking began', 'gauge', totalRoomDataUpdates));
 
     // Per-room cumulative stats
-    const roomTokensIssuedSeries = alltimeRoomRows.map(r => ({
-      labels: { room_id: r.room_id },
-      value: parseInt(r.tokens_issued ?? '0', 10),
-    }));
+    const roomTokensIssuedSeries = alltimeRoomRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.tokens_issued ?? '0', 10) }))
+      .filter(s => s.value > 0);
     if (roomTokensIssuedSeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_tokens_issued_total', 'Total number of authenticated tokens issued per room', 'gauge', roomTokensIssuedSeries));
+    }
+    const roomDataUpdatesAlltimeSeries = alltimeRoomRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (roomDataUpdatesAlltimeSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_data_updates_alltime', 'Total number of room data update events per room since tracking began', 'gauge', roomDataUpdatesAlltimeSeries));
     }
 
     // Per-room daily stats for today
