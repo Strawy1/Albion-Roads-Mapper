@@ -182,6 +182,16 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     );
     const totalHistoryEntries = parseInt(totalHistoryRows[0]?.total ?? '0', 10);
 
+    // --- Latest created rooms (top 10 by created_at) ---
+    const { rows: latestRoomRows } = await app.db.query<{ room_id: string; created_at: Date; created_at_london: string }>(
+      `SELECT id AS room_id,
+              created_at,
+              to_char(created_at AT TIME ZONE 'Europe/London', 'YYYY-MM-DD"T"HH24:MI:SS') AS created_at_london
+       FROM rooms
+       ORDER BY created_at DESC
+       LIMIT 10`,
+    );
+
     const lines: string[] = [];
 
     // --- Live rooms (rooms with active WebSocket connections right now) ---
@@ -346,6 +356,15 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       .filter(s => s.value > 0);
     if (roomHistorySeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history (excluding home zone)', 'gauge', roomHistorySeries));
+    }
+
+    // --- Latest created rooms (top 10) ---
+    const latestRoomSeries = latestRoomRows.map(r => ({
+      labels: { room_id: r.room_id, created_at: r.created_at_london },
+      value: Math.floor(new Date(r.created_at).getTime() / 1000),
+    }));
+    if (latestRoomSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_latest_rooms_created', 'Latest 10 rooms created, with creation time in Europe/London as a label and value as unix epoch seconds', 'gauge', latestRoomSeries));
     }
 
     return reply
