@@ -33,9 +33,6 @@ export function trackRoomDeleted(db: Pool): void {
 }
 
 export function trackRoomModified(db: Pool, roomId: string): void {
-  // rooms_modified is now recalculated as COUNT(DISTINCT room_id) in analytics_room_daily for today.
-  // We just write the per-room daily/alltime data_updates; recalculateRoomCounts (called inside
-  // incrementRoomDaily) will keep rooms_modified in sync automatically.
   // room_data_updates counts every individual data modification event, regardless of room.
   incrementGlobal(db, { room_data_updates: 1 });
   incrementRoomDaily(db, roomId, { data_updates: 1 });
