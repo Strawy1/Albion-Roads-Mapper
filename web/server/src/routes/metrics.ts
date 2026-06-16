@@ -139,10 +139,11 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const alltimePeak = parseInt(alltimeRows[0]?.alltime_peak ?? '0', 10);
     const alltimeAvg = parseFloat(alltimeRows[0]?.alltime_avg ?? '0');
 
-    const { rows: alltimeGlobalRows } = await app.db.query<{ tokens_issued: string }>(
-      'SELECT SUM(tokens_issued) AS tokens_issued FROM analytics_global_daily',
+    const { rows: alltimeGlobalRows } = await app.db.query<{ tokens_issued: string; room_data_updates: string }>(
+      'SELECT SUM(tokens_issued) AS tokens_issued, SUM(room_data_updates) AS room_data_updates FROM analytics_global_daily',
     );
     const totalTokensIssued = parseInt(alltimeGlobalRows[0]?.tokens_issued ?? '0', 10);
+    const totalRoomDataUpdates = parseInt(alltimeGlobalRows[0]?.room_data_updates ?? '0', 10);
 
     // --- All-time room cleanup stats ---
     const { rows: cleanupAlltimeRows } = await app.db.query<{
@@ -265,6 +266,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- Global cumulative stats ---
     lines.push(metric('albionmapper_tokens_issued_total', 'Total number of authenticated tokens issued since tracking began', 'gauge', totalTokensIssued));
+    lines.push(metric('albionmapper_room_data_updates_alltime', 'Total number of room data update events since tracking began', 'gauge', totalRoomDataUpdates));
 
     // Per-room cumulative stats
     const roomTokensIssuedSeries = alltimeRoomRows.map(r => ({
