@@ -2,6 +2,11 @@
 
 cd "$(dirname "$0")/.."
 
+if ! ls media/*.mp4 &>/dev/null; then
+  echo "Error: No .mp4 files found in the /media folder. Cancelling build."
+  exit 1
+fi
+
 if [ "$1" == "test" ]; then
   IMAGE_TAG="maelstromeous/applications:dig-roadmap-testing"
   BUILD_MSG="Docker test build completed"
