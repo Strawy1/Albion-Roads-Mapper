@@ -121,6 +121,21 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const daily = dailyRows[0];
 
     // --- All-time cumulative stats ---
+    const { rows: alltimeRows } = await app.db.query<{
+      alltime_peak: string;
+      alltime_avg: string;
+    }>(
+      `SELECT
+         COALESCE(MAX(max_connections), 0) AS alltime_peak,
+         COALESCE(
+           SUM(avg_connections * sample_count) / NULLIF(SUM(sample_count), 0),
+           0
+         ) AS alltime_avg
+       FROM analytics_hourly_connections`
+    );
+    const alltimePeak = parseInt(alltimeRows[0]?.alltime_peak ?? '0', 10);
+    const alltimeAvg = parseFloat(alltimeRows[0]?.alltime_avg ?? '0');
+
     const { rows: alltimeGlobalRows } = await app.db.query<{ tokens_issued: string }>(
       'SELECT SUM(tokens_issued) AS tokens_issued FROM analytics_global_daily',
     );
@@ -208,6 +223,10 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_hourly_connections_max', 'Maximum concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourMax));
     lines.push(metric('albionmapper_hourly_connections_min', 'Minimum concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourMin));
     lines.push(metric('albionmapper_hourly_connections_avg', 'Average concurrent WebSocket connections observed in the most recent recorded hour bucket', 'gauge', lastHourAvg));
+
+    // All-time records
+    lines.push(metric('albionmapper_alltime_peak_concurrent', 'All-time peak concurrent WebSocket connections since tracking began', 'gauge', alltimePeak));
+    lines.push(metric('albionmapper_alltime_avg_concurrent', 'All-time sample-weighted average concurrent WebSocket connections since tracking began', 'gauge', alltimeAvg));
 
     // All hourly buckets as labelled series for hour-of-day activity chart.
     // Label is the Europe/London hour (0–23) so Grafana can avg across multiple days.
