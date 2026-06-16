@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { db, initDb } from './db.js';
 import { startExpiryCleanup } from './expiry.js';
 import { startAnalyticsCron } from './analyticsCron.js';
+import { startRoomCleanup } from './roomCleanup.js';
 
 const PORT = parseInt(process.env['PORT'] ?? '3001', 10);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
@@ -20,10 +21,12 @@ async function main() {
 
   const cleanup = startExpiryCleanup(db);
   const analyticsCron = startAnalyticsCron(db);
+  const roomCleanup = startRoomCleanup(db);
 
   app.addHook('onClose', async () => {
     clearInterval(cleanup);
     clearInterval(analyticsCron);
+    clearInterval(roomCleanup);
     await db.end();
   });
 

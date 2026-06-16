@@ -43,6 +43,8 @@ describe('GET /metrics', () => {
       'albionmapper_daily_rooms_modified_total',
       'albionmapper_daily_rooms_reset_total',
       'albionmapper_daily_rooms_deleted_total',
+      'albionmapper_daily_rooms_aborted_total',
+      'albionmapper_daily_rooms_abandoned_total',
       'albionmapper_daily_memory_wiped_full_total',
       'albionmapper_daily_memory_wiped_single_total',
       'albionmapper_daily_passwords_rotated_total',
@@ -91,8 +93,8 @@ describe('GET /metrics', () => {
   it('contains correct HELP text for active and expired rooms', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;
-    expect(body).toContain('# HELP albionmapper_rooms_active Number of rooms with at least one non-expired connection (not all expired)');
-    expect(body).toContain('# HELP albionmapper_rooms_expired Number of rooms where all connections are expired');
+    expect(body).toContain('# HELP albionmapper_rooms_active Number of rooms with at least one non-expired connection');
+    expect(body).toContain('# HELP albionmapper_rooms_expired Number of rooms where all connections have expired');
   });
 
   it('contains correct HELP text for Map History stats', async () => {

@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import CreateRoomModal from '../components/CreateRoomModal.vue';
+import { useRouter } from 'vue-router';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import RecentlyViewedRooms from '../components/RecentlyViewedRooms.vue';
 
-const route = useRoute();
-
-const showCreate = ref(false);
+const router = useRouter();
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const currentTime = ref(0);
@@ -105,26 +102,13 @@ const getChapterProgress = (chapter: Chapter) => {
 
 const videoSrc = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1-1.mp4`;
 
-function openCreateRoom() {
-  showCreate.value = true;
-}
-
 watch(activeChapterName, (name) => {
   dropdownValue.value = name;
-});
-
-watch(() => route.query.create, (val) => {
-  if (val === 'true') {
-    openCreateRoom();
-  }
 });
 
 onMounted(() => {
   if (videoRef.value) {
     startAnimation();
-  }
-  if (route.query.create === 'true') {
-    openCreateRoom();
   }
 });
 </script>Improved the landing page a little bit
@@ -157,7 +141,7 @@ onMounted(() => {
     <div class="flex flex-col items-center gap-6 mb-4 mt-4">
         <button
           class="px-10 py-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 border border-blue-400 hover:border-blue-300 font-bold text-xl transition-colors duration-500 btn-pulsate"
-          @click="openCreateRoom()"
+          @click="router.push('/create')"
         >
           Create Room
         </button>
@@ -238,7 +222,6 @@ onMounted(() => {
       />
     </div>
   </div>
-  <CreateRoomModal v-if="showCreate" @close="showCreate = false" />
   <div class="fixed bottom-2 left-0 right-0 text-center pointer-events-none">
     <CopyrightNotice />
   </div>

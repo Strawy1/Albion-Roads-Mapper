@@ -5,6 +5,8 @@ export interface GlobalDailyCounters {
   rooms_modified?: number;
   rooms_reset?: number;
   rooms_deleted?: number;
+  rooms_aborted?: number;
+  rooms_abandoned?: number;
   memory_wiped_full?: number;
   memory_wiped_single?: number;
   passwords_rotated?: number;
@@ -13,6 +15,11 @@ export interface GlobalDailyCounters {
   room_data_updates?: number;
   routes_plotted?: number;
   tokens_issued?: number;
+}
+
+export interface GlobalAlltimeCounters {
+  rooms_aborted?: number;
+  rooms_abandoned?: number;
 }
 
 export interface RoomDailyCounters {
@@ -43,6 +50,31 @@ export function londonDateString(d: Date = new Date()): string {
   }).format(d).split('/').reverse().join('-');
 }
 
+
+/**
+ * Increments one or more counters on the all-time global row (id = 1).
+ * Creates the row if it doesn't exist yet.
+ * Fire-and-forget — never throws.
+ */
+export function incrementGlobalAlltime(db: Pool, counters: GlobalAlltimeCounters): void {
+  const entries = Object.entries(counters).filter(([, v]) => v && v > 0);
+  if (entries.length === 0) return;
+
+  const setClauses = entries
+    .map(([col]) => `${col} = analytics_global_alltime.${col} + EXCLUDED.${col}`)
+    .join(', ');
+  const cols = ['id', ...entries.map(([col]) => col)].join(', ');
+  const placeholders = ['1', ...entries.map((_, i) => `$${i + 1}`)].join(', ');
+  const values = entries.map(([, v]) => v);
+
+  void db
+    .query(
+      `INSERT INTO analytics_global_alltime (${cols}) VALUES (${placeholders})
+       ON CONFLICT (id) DO UPDATE SET ${setClauses}`,
+      values,
+    )
+    .catch((err) => console.error('[analytics] incrementGlobalAlltime error:', err));
+}
 
 /**
  * Increments one or more counters on the global daily row for today.

@@ -240,10 +240,17 @@ describe('Analytics — memory wipes', () => {
     const roomId = 'test-room';
     const token = app.jwt.sign({ roomId });
 
+    const bcrypt = await import('bcrypt');
+    const adminHash = await bcrypt.default.hash('admin-pw', 1);
+
+    // Provide admin_password_hash so bcrypt.compare succeeds
+    mockDb.query.mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash }] });
+
     const res = await app.inject({
       method: 'DELETE',
       url: `/api/rooms/${roomId}/memory`,
       headers: { Authorization: `Bearer ${token}` },
+      payload: { adminPassword: 'admin-pw' },
     });
     expect(res.statusCode).toBe(204);
 

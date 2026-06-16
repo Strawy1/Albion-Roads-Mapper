@@ -98,6 +98,8 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       rooms_modified: string;
       rooms_reset: string;
       rooms_deleted: string;
+      rooms_aborted: string;
+      rooms_abandoned: string;
       memory_wiped_full: string;
       memory_wiped_single: string;
       passwords_rotated: string;
@@ -111,6 +113,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     }>(
       `SELECT
          rooms_created, rooms_modified, rooms_reset, rooms_deleted,
+         rooms_aborted, rooms_abandoned,
          memory_wiped_full, memory_wiped_single, passwords_rotated,
          peak_concurrent, unique_tokens_active,
          zones_added, non_roads_zones_added, room_data_updates, routes_plotted, tokens_issued
@@ -140,6 +143,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       'SELECT SUM(tokens_issued) AS tokens_issued FROM analytics_global_daily',
     );
     const totalTokensIssued = parseInt(alltimeGlobalRows[0]?.tokens_issued ?? '0', 10);
+
+    // --- All-time room cleanup stats ---
+    const { rows: cleanupAlltimeRows } = await app.db.query<{
+      rooms_aborted: string;
+      rooms_abandoned: string;
+    }>('SELECT rooms_aborted, rooms_abandoned FROM analytics_global_alltime WHERE id = 1');
+    const totalRoomsAborted  = parseInt(cleanupAlltimeRows[0]?.rooms_aborted  ?? '0', 10);
+    const totalRoomsAbandoned = parseInt(cleanupAlltimeRows[0]?.rooms_abandoned ?? '0', 10);
 
     const { rows: alltimeRoomRows } = await app.db.query<{ room_id: string; tokens_issued: string }>(
       'SELECT room_id, tokens_issued FROM analytics_room_alltime WHERE tokens_issued > 0',
@@ -282,6 +293,8 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_daily_rooms_modified_total', 'Rooms with at least one data modification today (Europe/London)', 'gauge', parseInt(daily?.rooms_modified ?? '0', 10)));
     lines.push(metric('albionmapper_daily_rooms_reset_total', 'Rooms reset today (Europe/London)', 'gauge', parseInt(daily?.rooms_reset ?? '0', 10)));
     lines.push(metric('albionmapper_daily_rooms_deleted_total', 'Rooms deleted today (Europe/London)', 'gauge', parseInt(daily?.rooms_deleted ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_rooms_aborted_total', 'Rooms auto-deleted today for being created but never used (Europe/London)', 'gauge', parseInt(daily?.rooms_aborted ?? '0', 10)));
+    lines.push(metric('albionmapper_daily_rooms_abandoned_total', 'Rooms auto-deleted today for being abandoned after modification (Europe/London)', 'gauge', parseInt(daily?.rooms_abandoned ?? '0', 10)));
     lines.push(metric('albionmapper_daily_memory_wiped_full_total', 'Full memory wipes performed today (Europe/London)', 'gauge', parseInt(daily?.memory_wiped_full ?? '0', 10)));
     lines.push(metric('albionmapper_daily_memory_wiped_single_total', 'Single memory wipes performed today (Europe/London)', 'gauge', parseInt(daily?.memory_wiped_single ?? '0', 10)));
     lines.push(metric('albionmapper_daily_passwords_rotated_total', 'Password rotations performed today (Europe/London)', 'gauge', parseInt(daily?.passwords_rotated ?? '0', 10)));
@@ -292,6 +305,10 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_daily_room_data_updates_total', 'Total room data update events today (Europe/London)', 'gauge', parseInt(daily?.room_data_updates ?? '0', 10)));
     lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (Europe/London)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
     lines.push(metric('albionmapper_daily_tokens_issued_total', 'Tokens issued today (Europe/London)', 'gauge', parseInt(daily?.tokens_issued ?? '0', 10)));
+
+    // --- All-time room cleanup stats ---
+    lines.push(metric('albionmapper_rooms_aborted_total', 'All-time total rooms auto-deleted for being created but never used', 'gauge', totalRoomsAborted));
+    lines.push(metric('albionmapper_rooms_abandoned_total', 'All-time total rooms auto-deleted for being abandoned after modification', 'gauge', totalRoomsAbandoned));
 
     // --- Map History stats ---
     lines.push(metric('albionmapper_history_entries_total', 'Total number of unique room-map history entries (excluding home zones)', 'gauge', totalHistoryEntries));

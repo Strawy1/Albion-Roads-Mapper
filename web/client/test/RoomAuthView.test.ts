@@ -36,6 +36,65 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+describe('RoomAuthView — room not found', () => {
+  it('shows the not-found state and auto-deletion message when ?reason=room_not_found', async () => {
+    mockRouteQuery.mockReturnValue({ reason: 'room_not_found' });
+
+    const wrapper = mount(RoomAuthView, {
+      props: { id: 'test-room' },
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('Room not found!');
+    expect(wrapper.text()).toContain('automatically deleted');
+    expect(wrapper.text()).toContain('recreate it under the same link');
+
+    wrapper.unmount();
+  });
+
+  it('shows the owner-deleted banner when ?reason=room_deleted', async () => {
+    mockRouteQuery.mockReturnValue({ reason: 'room_deleted' });
+
+    const wrapper = mount(RoomAuthView, {
+      props: { id: 'test-room' },
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('Room not found!');
+    expect(wrapper.text()).toContain('Room was deleted!');
+    expect(wrapper.text()).toContain('permanently deleted this room');
+    expect(wrapper.text()).not.toContain('automatically deleted');
+
+    wrapper.unmount();
+  });
+
+  it('shows the not-found state and auto-deletion message when the room 404s directly', async () => {
+    mockRouteQuery.mockReturnValue({});
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      json: () => Promise.resolve({}),
+    } as Response);
+
+    const wrapper = mount(RoomAuthView, {
+      props: { id: 'missing-room' },
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('Room not found!');
+    expect(wrapper.text()).toContain('automatically deleted');
+    expect(wrapper.text()).toContain('recreate it under the same link');
+
+    wrapper.unmount();
+  });
+});
+
 describe('RoomAuthView — session_expired banner', () => {
   it('shows the session expired banner when ?reason=session_expired is in the query', async () => {
     mockRouteQuery.mockReturnValue({ reason: 'session_expired' });

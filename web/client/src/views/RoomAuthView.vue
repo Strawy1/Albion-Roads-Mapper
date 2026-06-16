@@ -12,7 +12,6 @@ const store = useRoomStore();
 
 const passwordRotatedBanner = computed(() => route.query.reason === 'password_rotated');
 const roomDeletedBanner = computed(() => route.query.reason === 'room_deleted');
-const roomNotFoundBanner = computed(() => route.query.reason === 'room_not_found');
 const sessionExpiredBanner = computed(() => route.query.reason === 'session_expired');
 
 const password = ref('');
@@ -22,8 +21,8 @@ const roomNotFound = ref(false);
 const checkingRoom = ref(true);
 
 onMounted(async () => {
-  // If the room was deleted or not found, show the not-found state immediately
-  if (roomDeletedBanner.value || roomNotFoundBanner.value) {
+  // If the room was deleted or not found via query param, show the not-found state immediately
+  if (roomDeletedBanner.value || route.query.reason === 'room_not_found') {
     store.removeFromRecentRooms(props.id);
     roomNotFound.value = true;
     checkingRoom.value = false;
@@ -89,20 +88,22 @@ async function authenticate() {
     <div v-if="roomNotFound" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
       <div class="flex items-center gap-2 mb-3">
         <span class="text-red-400 text-2xl">⚠️</span>
-        <h2 class="text-xl font-semibold text-red-400">Room no longer exists!</h2>
+        <h2 class="text-xl font-semibold text-red-400">Room not found!</h2>
       </div>
       <div v-if="roomDeletedBanner" class="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
         <strong>Room was deleted!</strong> The room owner permanently deleted this room.
       </div>
-      <div v-else-if="roomNotFoundBanner" class="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-        <strong>Map Room / Page not found!</strong> Please double check the link!
-      </div>
+      <p v-else class="text-gray-400 text-sm mb-4">
+        Rooms that have not been modified for more than 5 days are automatically deleted.
+        It may be the case this has happened to your room.
+        When rooms are deleted, the link is freed up, so you can recreate it under the same link.
+      </p>
       <p class="text-gray-400 text-sm mb-5">
         If this room was in your recently visited list, it has now been removed.
       </p>
       <button
         class="w-full px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 font-medium mb-3"
-        @click="router.push('/?create=true')"
+        @click="router.push({ path: '/create', query: { slug: id } })"
       >
         Create a New Room
       </button>
@@ -143,7 +144,7 @@ async function authenticate() {
       <hr class="my-4 border-gray-700" />
       <button
         class="w-full px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 font-medium"
-        @click="router.push('/?create=true')"
+        @click="router.push({ path: '/create', query: { slug: id } })"
       >
         Create a new Room
       </button>
