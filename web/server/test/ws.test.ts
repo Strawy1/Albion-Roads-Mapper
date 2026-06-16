@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { setupTestApp } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
+
+/** Build a HS256 JWT whose `exp` is set in the past so it is already expired. */
+function makeExpiredToken(secret: string, roomId: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const nowSec = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(
+    JSON.stringify({ roomId, iat: nowSec - 7200, exp: nowSec - 3600 }),
+  ).toString('base64url');
+  const signingInput = `${header}.${payload}`;
+  const signature = createHmac('sha256', secret).update(signingInput).digest('base64url');
+  return `${signingInput}.${signature}`;
+}
 
 const VALID_ZONE_A = 'adrens-hill';
 const VALID_ZONE_B = 'anklesnag-mire';
@@ -343,5 +356,54 @@ describe('WebSocket authentication', () => {
     expect(roomDeletedMsg).toBeDefined();
 
     socket.close();
+  });
+
+  it('closes with 4401 when auth token roomId does not match the WebSocket room', async () => {
+    // Token is a valid JWT but its roomId claim is for a different room
+    const wrongRoomToken = app.jwt.sign({ roomId: 'some-other-room' });
+
+    await app.listen({ port: 0 });
+
+    const { socket } = await connectWs(roomId);
+    const closeCode = await new Promise<number>((resolve) => {
+      socket.on('close', (code) => resolve(code));
+      socket.send(JSON.stringify({ type: 'auth', token: wrongRoomToken }));
+    });
+
+    expect(closeCode).toBe(4401);
+  });
+
+  it('sends session_expired message and closes with 4401 when an action is attempted after the session token has expired', async () => {
+    // Authenticate with a token that expires in 1 second
+    const shortLivedToken = app.jwt.sign({ roomId }, { expiresIn: 1 });
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory
+
+    await app.listen({ port: 0 });
+
+    const { socket } = await connectWs(roomId);
+    const messages: unknown[] = [];
+
+    // Authenticate while the token is still valid
+    socket.send(JSON.stringify({ type: 'auth', token: shortLivedToken }));
+    await new Promise((r) => setTimeout(r, 200)); // wait for auth_ok + sync
+
+    // Wait for the token to expire
+    await new Promise((r) => setTimeout(r, 1100));
+
+    // Now attempt an action — the server should detect the expired token
+    const closeCode = await new Promise<number>((resolve) => {
+      socket.on('message', (data) => messages.push(JSON.parse(data.toString())));
+      socket.on('close', (code) => resolve(code));
+      socket.send(JSON.stringify({ type: 'update_plot_route', plottedRoute: [VALID_ZONE_A] }));
+    });
+
+    expect(closeCode).toBe(4401);
+    const expiredMsg = messages.find((m) => (m as { type: string }).type === 'session_expired') as { type: string; reason: string } | undefined;
+    expect(expiredMsg).toBeDefined();
+    expect(expiredMsg?.reason).toBe('Session expired, please log in again');
   });
 });

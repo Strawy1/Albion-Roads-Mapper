@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, nextTick } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import type { Connection, ServerMessage, NodePosition, NodeFeatures, CustomHandle, RoomMemoryEntry } from 'shared';
 import { inferRotationFromHandles, getShapeHandlePositions, ZONE_BY_ID } from 'shared';
 import { API_BASE_URL } from '@/utils/api';
@@ -9,7 +9,7 @@ import { useRoomMemoryStore } from './useRoomMemoryStore';
 import { usePlotRouteStore } from './usePlotRouteStore';
 
 export type WsStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
-export type DisconnectReason = 'password_rotated' | 'room_deleted' | 'room_not_found' | null;
+export type DisconnectReason = 'password_rotated' | 'room_deleted' | 'room_not_found' | 'session_expired' | null;
 
 export const useRoomStore = defineStore('room', () => {
   const connections = ref<Connection[]>([]);
@@ -21,7 +21,6 @@ export const useRoomStore = defineStore('room', () => {
   const lastPing = ref<{zoneName: string, nodeId?: string} | null>(null);
   const watchingCount = ref<number | null>(null);
   const totalConnected = ref<number | null>(null);
-  const token = ref<string>('');
   const roomId = ref<string>('');
   const isConnecting = ref(false);
   const disconnectReason = ref<DisconnectReason>(null);
@@ -65,12 +64,22 @@ export const useRoomStore = defineStore('room', () => {
     return ancestors.some(a => (a.isExpired ?? false) || (new Date(a.expiresAt).getTime() - currentTime) <= 0);
   }
 
+  /** Always reads the live token from localStorage — never cached, so any deletion is immediately visible. */
+  function getToken(): string {
+    return roomId.value ? (localStorage.getItem(`token:${roomId.value}`) ?? '') : '';
+  }
+
   function setCredentials(id: string, jwt: string) {
     roomId.value = id;
-    token.value = jwt;
+    localStorage.setItem(`token:${id}`, jwt);
   }
 
   function send(msg: any) {
+    if (!getToken()) {
+      console.warn('[RoomStore] send() BLOCKED — token missing from localStorage, triggering session_expired flow');
+      applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+      return;
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
     } else {
@@ -226,6 +235,15 @@ export const useRoomStore = defineStore('room', () => {
         ws = null;
         break;
 
+      case 'session_expired':
+        // The JWT has expired or is invalid — clear the token and redirect to auth
+        localStorage.removeItem(`token:${roomId.value}`);
+        disconnectReason.value = 'session_expired';
+        wsStatus.value = 'auth_failed';
+        ws?.close();
+        ws = null;
+        break;
+
       case 'error':
         // Handle fatal server errors — treat "Room not found" as a hard redirect
         if (msg.message === 'Room not found') {
@@ -284,7 +302,11 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function connect() {
-    if (!roomId.value || !token.value) return;
+    if (!roomId.value) return;
+    if (!getToken()) {
+      applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+      return;
+    }
     if (ws && ws.readyState === WebSocket.OPEN) return;
 
     wsStatus.value = 'connecting';
@@ -293,7 +315,13 @@ export const useRoomStore = defineStore('room', () => {
     ws = new WebSocket(url.toString());
 
     ws.addEventListener('open', () => {
-      ws!.send(JSON.stringify({ type: 'auth', token: token.value }));
+      const currentToken = getToken();
+      if (!currentToken) {
+        ws?.close();
+        applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+        return;
+      }
+      ws!.send(JSON.stringify({ type: 'auth', token: currentToken }));
     });
 
     ws.addEventListener('message', (event) => {
@@ -343,7 +371,6 @@ export const useRoomStore = defineStore('room', () => {
     roomTitle.value = '';
     nodePositions.value = [];
     roomId.value = '';
-    token.value = '';
     watchingCount.value = null;
     totalConnected.value = null;
     useRoomMemoryStore().clear();
@@ -372,20 +399,16 @@ export const useRoomStore = defineStore('room', () => {
         explored: p.explored || existing.explored,
       };
     });
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: merged }));
-      nodePositions.value = merged; // Optimistic update
-      track('move_node');
-    }
+    send({ type: 'update_node_positions', nodePositions: merged });
+    nodePositions.value = merged; // Optimistic update
+    track('move_node');
   }
 
   function resetNodePositions() {
     nodePositions.value = []; // Optimistic update
     lastUpdate.value = new Date();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: [], updateLastUpdated: true }));
-      track('reset_node_positions');
-    }
+    send({ type: 'update_node_positions', nodePositions: [], updateLastUpdated: true });
+    track('reset_node_positions');
   }
 
   function markNodeExplored(zoneId: string) {
@@ -396,9 +419,7 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], explored: true };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true }));
-    }
+    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
   }
 
   function updateNodeFeatures(zoneId: string, features: NodeFeatures) {
@@ -409,10 +430,8 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], features: featuresWithTimestamp, explored: true };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true }));
-      track('update_node_features');
-    }
+    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
+    track('update_node_features');
   }
 
   function updateNodeCustomHandles(zoneId: string, customHandles: CustomHandle[]) {
@@ -424,10 +443,8 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], customHandles, features: featuresWithTimestamp, explored: true };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true }));
-      track('update_node_handles');
-    }
+    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
+    track('update_node_handles');
   }
 
   function resetZonePortals(zoneId: string) {
@@ -437,10 +454,8 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], rotation: 0, customHandles: [] };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true }));
-      track('reset_zone_portals');
-    }
+    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
+    track('reset_zone_portals');
   }
 
   function updateNodeRotation(zoneId: string, rotation: number) {
@@ -450,10 +465,8 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], rotation, explored: true };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true }));
-      track('update_node_rotation');
-    }
+    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
+    track('update_node_rotation');
   }
 
   // Recently Viewed Rooms
@@ -512,7 +525,7 @@ export const useRoomStore = defineStore('room', () => {
     homeZoneId: string,
     roomHistory?: RoomMemoryEntry[]
   }) {
-    if (!roomId.value || !token.value) {
+    if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
     }
 
@@ -520,7 +533,7 @@ export const useRoomStore = defineStore('room', () => {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token.value}`
+        'Authorization': `Bearer ${getToken()}`
       },
       body: JSON.stringify(data)
     });
@@ -548,7 +561,7 @@ export const useRoomStore = defineStore('room', () => {
     rotationErrors,
     clearRotationError,
     totalConnected,
-    token,
+    token: computed(getToken),
     roomId,
     isConnecting,
     disconnectReason,

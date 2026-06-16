@@ -170,6 +170,89 @@ describe('useRoomStore', () => {
     });
   });
 
+  describe('session_expired message', () => {
+    it('sets wsStatus to auth_failed when session_expired is received', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'some-token');
+
+      store.applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+
+      expect(store.wsStatus).toBe('auth_failed');
+    });
+
+    it('sets disconnectReason to session_expired when session_expired is received', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'some-token');
+
+      store.applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+
+      expect(store.disconnectReason).toBe('session_expired');
+    });
+
+    it('removes the stored token from localStorage when session_expired is received', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'some-token');
+
+      store.applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+
+      expect(localStorage.getItem('token:room1')).toBeNull();
+    });
+  });
+
+  describe('token live-read from localStorage', () => {
+    it('setCredentials writes the token to localStorage so token computed reflects it', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'my-jwt');
+      expect(localStorage.getItem('token:room1')).toBe('my-jwt');
+      expect(store.token).toBe('my-jwt');
+    });
+
+    it('token computed returns empty string when localStorage entry is absent', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'my-jwt');
+      localStorage.removeItem('token:room1');
+      expect(store.token).toBe('');
+    });
+
+    it('send() triggers session_expired flow when the token has been removed from localStorage', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'my-jwt');
+
+      // Simulate token deletion (e.g. user cleared storage in another tab or admin action)
+      localStorage.removeItem('token:room1');
+
+      store.send({ type: 'update_plot_route', plottedRoute: [] });
+
+      expect(store.wsStatus).toBe('auth_failed');
+      expect(store.disconnectReason).toBe('session_expired');
+      expect(localStorage.getItem('token:room1')).toBeNull();
+    });
+
+    it('send() blocks update_node_positions when the token has been removed from localStorage', () => {
+      const store = useRoomStore();
+      store.setCredentials('room1', 'my-jwt');
+
+      localStorage.removeItem('token:room1');
+
+      store.send({ type: 'update_node_positions', nodePositions: [] });
+
+      expect(store.wsStatus).toBe('auth_failed');
+      expect(store.disconnectReason).toBe('session_expired');
+    });
+
+    it('connect() triggers session_expired flow when the token is absent from localStorage', () => {
+      const store = useRoomStore();
+      // Set roomId without a token in localStorage
+      store.setCredentials('room1', 'my-jwt');
+      localStorage.removeItem('token:room1');
+
+      store.connect();
+
+      expect(store.wsStatus).toBe('auth_failed');
+      expect(store.disconnectReason).toBe('session_expired');
+    });
+  });
+
   it('marks an edge as isolated when parent connection expires', () => {
     const store = useRoomStore();
     const now = Date.now();

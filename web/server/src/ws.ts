@@ -33,10 +33,32 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
     (socket, request) => {
       const roomId = (request.params as { id: string }).id;
       let authenticated = false;
+      let sessionToken: string | null = null;
 
       const send = (msg: ServerMessage) => {
         if (socket.readyState === socket.OPEN) {
           socket.send(JSON.stringify(msg));
+        }
+      };
+
+      /**
+       * Verifies that the stored session token is still valid and belongs to this room.
+       * Sends a `session_expired` message and closes the socket with 4401 on failure.
+       * Returns true if the session is valid, false otherwise.
+       */
+      const verifySession = (): boolean => {
+        try {
+          const payload = app.jwt.verify(sessionToken!) as { roomId: string };
+          if (payload.roomId !== roomId) {
+            send({ type: 'session_expired', reason: 'Session expired, please log in again' });
+            socket.close(4401, 'Session expired');
+            return false;
+          }
+          return true;
+        } catch {
+          send({ type: 'session_expired', reason: 'Session expired, please log in again' });
+          socket.close(4401, 'Session expired');
+          return false;
         }
       };
 
@@ -77,6 +99,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
 
             clearTimeout(authTimeout);
             authenticated = true;
+            sessionToken = msg.token;
             addSocket(roomId, socket, msg.token);
 
             send({ type: 'auth_ok' });
@@ -159,7 +182,9 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
         }
 
         if (msg.type === 'update_node_positions') {
+          if (!authenticated) return;
           if (!msg.nodePositions) return;
+          if (!verifySession()) return;
 
           // Deduplicate nodePositions by zoneId to prevent unique constraint violations
           const deduplicated = Array.from(
@@ -291,6 +316,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
 
         if (msg.type === 'update_plot_route') {
           if (!authenticated) return;
+          if (!verifySession()) return;
           const plottedRoute = Array.isArray(msg.plottedRoute) ? msg.plottedRoute : [];
           const destinationZoneId = msg.destinationZoneId;
           await app.db.query(

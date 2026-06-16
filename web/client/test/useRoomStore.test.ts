@@ -44,8 +44,7 @@ describe('useRoomStore', () => {
 
   it('updateNodeCustomHandles should set lastUpdatedAt on node features', () => {
     const store = useRoomStore();
-    store.roomId = 'room1';
-    store.token = 'token1';
+    store.setCredentials('room1', 'token1');
     store.nodePositions = [{ zoneId: 'z1', x: 0, y: 0 }];
 
     const before = Date.now();
@@ -62,8 +61,7 @@ describe('useRoomStore', () => {
     const store = useRoomStore();
     
     // Setup initial state
-    store.roomId = 'room1';
-    store.token = 'token1';
+    store.setCredentials('room1', 'token1');
     store.nodePositions = [
       { zoneId: 'z1', x: 0, y: 0 },
       { zoneId: 'z2', x: 10, y: 10 }
@@ -140,8 +138,7 @@ describe('useRoomStore', () => {
       removeEventListener() {}
     };
 
-    store.roomId = 'room1';
-    store.token = 'token1';
+    store.setCredentials('room1', 'token1');
     store.connect();
     
     closeHandler({ code: 4401 });

@@ -13,6 +13,7 @@ const store = useRoomStore();
 const passwordRotatedBanner = computed(() => route.query.reason === 'password_rotated');
 const roomDeletedBanner = computed(() => route.query.reason === 'room_deleted');
 const roomNotFoundBanner = computed(() => route.query.reason === 'room_not_found');
+const sessionExpiredBanner = computed(() => route.query.reason === 'session_expired');
 
 const password = ref('');
 const authError = ref('');
@@ -116,10 +117,14 @@ async function authenticate() {
     <!-- Normal auth form -->
     <div v-else-if="!checkingRoom" class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm">
       <h2 class="text-xl font-semibold mb-4">Enter Room Password</h2>
-      <p class="text-gray-400 text-sm mb-4">Room: <code class="text-indigo-300">{{ id }}</code></p>
-      <div v-if="passwordRotatedBanner" class="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
+      <div v-if="sessionExpiredBanner" class="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
+        <strong>Session expired.</strong> Please log in again to continue.
+      </div>
+      <div v-else-if="passwordRotatedBanner" class="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
         <strong>Room password has been rotated.</strong> Please re-enter the new password to continue.
       </div>
+      <p class="text-gray-400 text-sm mb-4">Room: <code class="text-indigo-300">{{ id }}</code></p>
+
       <input
         v-model="password"
         type="password"
