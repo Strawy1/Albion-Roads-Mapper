@@ -212,6 +212,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
        GROUP BY rnp.room_id`,
     );
 
+    const { rows: zoneInRoomsRows } = await app.db.query<{ zone_id: string; room_count: string }>(
+      `SELECT rnp.zone_id, COUNT(DISTINCT rnp.room_id) AS room_count
+       FROM room_node_positions rnp
+       JOIN rooms r ON r.id = rnp.room_id
+       WHERE rnp.zone_id != r.home_zone_id
+       GROUP BY rnp.zone_id`,
+    );
+
     // --- Active rooms (DB-level room state) ---
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
     lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection (live now)', 'gauge', liveRooms));
@@ -227,6 +235,12 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       .filter(s => s.value > 0);
     if (perRoomZoneSeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_zones_total', 'Total number of zones entered per room (excluding home zone)', 'gauge', perRoomZoneSeries));
+    }
+    const zoneInRoomsSeries = zoneInRoomsRows
+      .map(r => ({ labels: { zone_id: r.zone_id }, value: parseInt(r.room_count ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (zoneInRoomsSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_zone_in_rooms_total', 'Number of distinct rooms each zone currently appears in (excluding home zones)', 'gauge', zoneInRoomsSeries));
     }
 
     // --- Hourly connection stats ---
