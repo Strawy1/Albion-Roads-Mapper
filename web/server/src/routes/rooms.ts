@@ -19,6 +19,7 @@ import {
   trackMemoryWipedSingle,
   trackRoomDeleted,
   trackRoomModified,
+  trackTokenIssued,
 } from './rooms_analytics.js';
 
 const BCRYPT_ROUNDS = 12;
@@ -144,6 +145,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const token = app.jwt.sign({ roomId: room.id, passwordVersion: room.password_version ?? 1 }, { expiresIn: '7d' });
+    trackTokenIssued(app.db, room.id);
     return reply.send({ token });
   });
 

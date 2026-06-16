@@ -48,6 +48,12 @@ export function trackRoutePlotted(db: Pool, roomId: string): void {
   incrementRoomAlltime(db, roomId, { routes_plotted: 1 });
 }
 
+export function trackTokenIssued(db: Pool, roomId: string): void {
+  incrementGlobal(db, { tokens_issued: 1 });
+  incrementRoomDaily(db, roomId, { tokens_issued: 1 });
+  incrementRoomAlltime(db, roomId, { tokens_issued: 1 });
+}
+
 /**
  * Tracks a newly discovered zone for a room, split by roads vs non-roads.
  * @param isRoads - true when the zone type is 'roads' or 'roadsHideout'
