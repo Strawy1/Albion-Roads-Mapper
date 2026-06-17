@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import ActiveCoreSummary from './ActiveCoreSummary.vue';
+import ChainIdPill from '../../common/ChainIdPill.vue';
 
 interface ZoneFeatureInfo {
   zoneId: string;
@@ -301,6 +302,7 @@ function handleSelect(zoneId: string) {
               <span class="text-sm font-medium truncate flex-1 group-hover:text-white">
                 {{ item.zoneName }}
               </span>
+              <ChainIdPill :zone-id="item.zoneId" small />
               <span v-if="item.count" class="shrink-0 text-xs font-bold text-gray-300 bg-gray-950 border border-gray-700 rounded px-1.5 py-0.5 leading-none">{{ item.count }}</span>
             </button>
           </div>

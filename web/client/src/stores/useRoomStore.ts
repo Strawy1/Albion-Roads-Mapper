@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, nextTick } from 'vue';
 import type { Connection, ServerMessage, NodePosition, NodeFeatures, CustomHandle, RoomMemoryEntry, RoomChain } from 'shared';
-import { inferRotationFromHandles, getShapeHandlePositions, ZONE_BY_ID } from 'shared';
+import { inferRotationFromHandles, getShapeHandlePositions, ZONE_BY_ID, PRIMARY_CHAIN_COLOR } from 'shared';
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
 import { treeQuery } from '@/utils/treeQuery';
@@ -18,23 +18,37 @@ export const useRoomStore = defineStore('room', () => {
   const chainSourceZoneIds = computed(() => new Set(chains.value.map(c => c.sourceZoneId)));
   const nodePositions = ref<NodePosition[]>([]);
 
-  // Friendly ID for a chain: primary (sourceZoneId === homeZoneId) is always 1;
-  // remaining chains are numbered in the order they appear in `chains` (which the
-  // server returns ordered by created_at ASC).
+  // Friendly ID for a chain: now persisted on the server as `chainNumber`. The
+  // map below stays for legacy callers and as a fallback if a chain row hasn't
+  // been migrated yet (it'll synthesize an ID by insertion order).
   const chainFriendlyIdMap = computed(() => {
     const map = new Map<string, number>();
     const primary = chains.value.find(c => c.sourceZoneId === homeZoneId.value);
-    if (primary) map.set(primary.id, 1);
+    if (primary) map.set(primary.id, primary.chainNumber ?? 1);
     let next = 2;
     for (const c of chains.value) {
       if (map.has(c.id)) continue;
-      map.set(c.id, next++);
+      map.set(c.id, c.chainNumber ?? next++);
     }
     return map;
   });
   function chainFriendlyId(chainId: string | undefined | null): number | null {
     if (!chainId) return null;
+    const direct = chains.value.find(c => c.id === chainId)?.chainNumber;
+    if (typeof direct === 'number') return direct;
     return chainFriendlyIdMap.value.get(chainId) ?? null;
+  }
+  function chainColorForZone(zoneId: string | undefined | null): string | null {
+    if (!zoneId) return null;
+    const np = nodePositions.value.find(n => n.zoneId === zoneId);
+    if (np?.chainId) {
+      const c = chains.value.find(ch => ch.id === np.chainId);
+      if (c?.chainColor) return c.chainColor;
+    }
+    // Fallback to primary chain colour (or the palette default) so the pill
+    // still has a sensible colour while data is loading or for unchained nodes.
+    const primary = chains.value.find(c => c.sourceZoneId === homeZoneId.value);
+    return primary?.chainColor ?? PRIMARY_CHAIN_COLOR;
   }
   function chainForZone(zoneId: string | undefined | null): RoomChain | null {
     if (!zoneId) return null;
@@ -299,7 +313,16 @@ export const useRoomStore = defineStore('room', () => {
       case 'chain_added':
         if (!chains.value.find(c => c.id === msg.chain.id)) {
           chains.value = [...chains.value, msg.chain];
+        } else {
+          // The eager-add in addChain() may have inserted a stub already; merge
+          // in any server-authoritative fields (e.g. final chainNumber/color).
+          chains.value = chains.value.map(c => c.id === msg.chain.id ? { ...c, ...msg.chain } : c);
         }
+        lastUpdate.value = new Date();
+        break;
+
+      case 'chain_updated':
+        chains.value = chains.value.map(c => c.id === msg.chain.id ? { ...c, ...msg.chain } : c);
         lastUpdate.value = new Date();
         break;
 
@@ -660,6 +683,16 @@ export const useRoomStore = defineStore('room', () => {
       throw new Error(message || `Failed to add chain (HTTP ${response.status})`);
     }
 
+    // Eagerly merge the new chain into our local state from the HTTP response
+    // so the friendly ID / colour reflect immediately, without waiting for the
+    // chain_added broadcast (which can race with UI rendering).
+    try {
+      const body = await response.clone().json() as { chain?: RoomChain };
+      if (body?.chain && !chains.value.find(c => c.id === body.chain!.id)) {
+        chains.value = [...chains.value, body.chain];
+      }
+    } catch { /* ignore JSON parse issues; broadcast will catch up */ }
+
     // Place the newly created chain's source zone at a random location 200px
     // away from the primary chain's home zone. The server inserts it at (0,0);
     // we override that with a random offset around the primary home node.
@@ -695,6 +728,33 @@ export const useRoomStore = defineStore('room', () => {
     } catch (e) {
       console.warn('Failed to place new chain zone near primary home:', e);
     }
+  }
+
+  async function updateChainColor(chainId: string, chainColor: string) {
+    if (!roomId.value || !getToken()) {
+      throw new Error('Not authenticated');
+    }
+    const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains/${chainId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({ chainColor }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      let message = text;
+      try { message = JSON.parse(text).error ?? text; } catch { /* not JSON */ }
+      throw new Error(message || `Failed to update chain colour (HTTP ${response.status})`);
+    }
+    // Eagerly merge the new colour so the pill updates immediately.
+    try {
+      const body = await response.clone().json() as { chain?: RoomChain };
+      if (body?.chain) {
+        chains.value = chains.value.map(c => c.id === body.chain!.id ? { ...c, ...body.chain } : c);
+      }
+    } catch { /* broadcast will catch up */ }
   }
 
   async function removeChain(chainId: string) {
@@ -740,6 +800,7 @@ export const useRoomStore = defineStore('room', () => {
     chainSourceZoneIds,
     chainFriendlyId,
     chainFriendlyIdForZone,
+    chainColorForZone,
     chainTooltipForZone,
     chainManagementOpen,
     openChainManagement,
@@ -770,5 +831,6 @@ export const useRoomStore = defineStore('room', () => {
     importData,
     addChain,
     removeChain,
+    updateChainColor,
   };
 });

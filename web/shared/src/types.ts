@@ -246,7 +246,44 @@ export const AddChainBodySchema = z.object({
   sourceZoneId: z.string().min(1),
 });
 
-export type RoomChain = { id: string; sourceZoneId: string };
+export type RoomChain = {
+  id: string;
+  sourceZoneId: string;
+  chainNumber: number;
+  chainColor: string;
+};
+
+// Default palette for chains. Index 0 is reserved for the primary chain;
+// subsequent chains cycle through indices 1..N. Kept in sync with the
+// `1777245947015_add-chain-number-and-color.js` migration.
+export const CHAIN_COLOR_PALETTE = [
+  '#10b981', // primary — emerald
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#f59e0b', // orange
+  '#22c55e', // green
+  '#a78bfa', // light purple
+  '#06b6d4', // cyan
+  '#ffffff', // white
+] as const;
+
+export const PRIMARY_CHAIN_COLOR = CHAIN_COLOR_PALETTE[0];
+
+// Hex colour validator used for the PATCH /chains/:chainId/color endpoint
+// and shared between client + server.
+export const ChainColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
+export const UpdateChainBodySchema = z.object({
+  chainColor: ChainColorSchema,
+});
+
+// Pick a default colour for a chain at the given 1-based chain number.
+export function defaultChainColor(chainNumber: number): string {
+  if (chainNumber <= 1) return CHAIN_COLOR_PALETTE[0];
+  const cycleSize = CHAIN_COLOR_PALETTE.length - 1; // exclude the primary slot
+  const idx = 1 + ((chainNumber - 2) % cycleSize);
+  return CHAIN_COLOR_PALETTE[idx];
+}
 
 export const ResourceEntrySchema = z.object({
   type: z.enum(['fibre', 'leather', 'ore', 'stone', 'wood']),
@@ -355,6 +392,7 @@ export type ServerMessage =
   | { type: 'force_reload' }
   | { type: 'chain_added'; chain: RoomChain }
   | { type: 'chain_removed'; chainId: string; removedZoneIds: string[]; removedConnectionIds: string[] }
+  | { type: 'chain_updated'; chain: RoomChain }
   | { type: 'session_expired'; reason: string }
   | { type: 'error'; message: string };
 

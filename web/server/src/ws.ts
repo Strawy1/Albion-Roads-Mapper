@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
-import { ZONE_BY_ID, type Connection, type ClientMessage, type ServerMessage, type NodePosition, type RoomMemoryEntry } from 'shared';
+import { ZONE_BY_ID, PRIMARY_CHAIN_COLOR, type Connection, type ClientMessage, type ServerMessage, type NodePosition, type RoomMemoryEntry } from 'shared';
 import { addSocket, removeSocket, broadcast, getTotalSocketCount } from './broadcast.js';
 import { trackRoomModified, trackRoutePlotted } from './routes/rooms_analytics.js';
 import { recordPolo, getWatchingCount } from './marcopolo.js';
@@ -122,8 +122,8 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
                 await migrationClient.query('BEGIN');
                 const chainId = nanoid();
                 await migrationClient.query(
-                  'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
-                  [chainId, roomId, room.home_zone_id, new Date().toISOString()]
+                  'INSERT INTO room_chains (id, room_id, source_zone_id, created_at, chain_number, chain_color) VALUES ($1, $2, $3, $4, $5, $6)',
+                  [chainId, roomId, room.home_zone_id, new Date().toISOString(), 1, PRIMARY_CHAIN_COLOR]
                 );
                 await migrationClient.query(
                   'UPDATE connections SET chain_id = $1 WHERE room_id = $2 AND chain_id IS NULL',
@@ -148,11 +148,17 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
               return;
             }
 
-            const { rows: chainRows } = await app.db.query<{ id: string; source_zone_id: string }>(
-              'SELECT id, source_zone_id FROM room_chains WHERE room_id = $1 ORDER BY created_at ASC',
+            const { rows: chainRows } = await app.db.query<{ id: string; source_zone_id: string; chain_number: number | null; chain_color: string | null }>(
+              'SELECT id, source_zone_id, chain_number, chain_color FROM room_chains WHERE room_id = $1 ORDER BY chain_number ASC NULLS LAST, created_at ASC',
               [roomId]
             );
-            const chains = chainRows.map((row) => ({ id: row.id, sourceZoneId: row.source_zone_id }));
+            const chains = chainRows.map((row, idx) => ({
+              id: row.id,
+              sourceZoneId: row.source_zone_id,
+              // Defensive fallbacks in case the migration hasn't backfilled yet.
+              chainNumber: row.chain_number ?? idx + 1,
+              chainColor: row.chain_color ?? PRIMARY_CHAIN_COLOR,
+            }));
 
             const { rows: rows } = await app.db.query<DbConnection>(
               'SELECT * FROM connections WHERE room_id = $1',

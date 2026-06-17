@@ -17,6 +17,7 @@ import ZoneHandleEditorButton from './zone/ZoneHandleEditorButton.vue';
 import PingButton from './zone/PingButton.vue';
 import RoomMemoryButton from './zone/RoomMemoryButton.vue';
 import BluePrompt from '@/components/ui/BluePrompt.vue';
+import ChainIdPill from '@/components/common/ChainIdPill.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
@@ -960,26 +961,7 @@ function lockCore(core: string) {
   <div class="zone-node relative" ref="zoneNodeRef" :class="{ 'ghost-node': props.data.isGhost }" @mousedown="onNodeMouseDown">
     <!-- Chain ID pill at the very top of the node.
          Always shown when the zone belongs to any chain (including the only/primary one). -->
-    <TooltipProvider :delay-duration="0" v-if="store.chainFriendlyIdForZone(props.id) !== null">
-      <TooltipRoot>
-        <TooltipTrigger asChild>
-          <div
-            class="chain-id-pill absolute left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gray-900/90 border border-blue-500/60 text-blue-300 text-sm font-semibold flex items-center gap-1 shadow whitespace-nowrap cursor-pointer hover:bg-gray-800/95 hover:border-blue-400 transition-colors"
-            style="z-index: 30;"
-            @click.stop="store.openChainManagement()"
-            @mousedown.stop
-          >
-            <span aria-hidden="true">⛓</span>
-            <span>{{ store.chainFriendlyIdForZone(props.id) }}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipPortal>
-          <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]">
-            {{ store.chainTooltipForZone(props.id) }}
-          </TooltipContent>
-        </TooltipPortal>
-      </TooltipRoot>
-    </TooltipProvider>
+    <ChainIdPill :zone-id="props.id" :position-style="{'z-index': '30' }" />
     <div :class="[isConnecting ? 'connecting-mode' : '']">
         <template v-if="!isHandleEditorOpen && !isMapFeaturesModalOpen && !isChestModalOpen" v-for="handle in handles" :key="handle.id">
           <div

@@ -7,8 +7,11 @@ import {
   AuthRoomBodySchema,
   ChangePasswordBodySchema,
   AddChainBodySchema,
+  UpdateChainBodySchema,
   ImportRoomBodySchema,
   ZONE_BY_ID,
+  defaultChainColor,
+  PRIMARY_CHAIN_COLOR,
 } from 'shared';
 import { broadcast } from '../broadcast.js';
 import { getInitialFeatures } from '../utils/nodeFeatures.js';
@@ -97,8 +100,8 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       // Seed the primary chain for the new room
       const primaryChainId = nanoid();
       await client.query(
-        'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
-        [primaryChainId, id, homeZoneId, createdAt]
+        'INSERT INTO room_chains (id, room_id, source_zone_id, created_at, chain_number, chain_color) VALUES ($1, $2, $3, $4, $5, $6)',
+        [primaryChainId, id, homeZoneId, createdAt, 1, PRIMARY_CHAIN_COLOR]
       );
 
       await client.query(`
@@ -239,14 +242,26 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     const chainId = nanoid();
     const createdAt = new Date().toISOString();
     let insertedNode = false;
+    let chainNumber = 1;
+    let chainColor: string = PRIMARY_CHAIN_COLOR;
 
     const client = await app.db.connect();
     try {
       await client.query('BEGIN');
 
+      // Compute the next chain_number for this room (MAX + 1, defaulting to
+      // 1 for the very first chain — though primary is normally seeded at
+      // room creation, room_reset/imports may leave gaps).
+      const { rows: maxRows } = await client.query<{ max: number | null }>(
+        'SELECT MAX(chain_number) AS max FROM room_chains WHERE room_id = $1',
+        [id]
+      );
+      chainNumber = (maxRows[0]?.max ?? 0) + 1;
+      chainColor = defaultChainColor(chainNumber);
+
       await client.query(
-        'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
-        [chainId, id, sourceZoneId, createdAt]
+        'INSERT INTO room_chains (id, room_id, source_zone_id, created_at, chain_number, chain_color) VALUES ($1, $2, $3, $4, $5, $6)',
+        [chainId, id, sourceZoneId, createdAt, chainNumber, chainColor]
       );
 
       if (existingNode.length === 0) {
@@ -275,7 +290,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     }
     client.release();
 
-    broadcast(id, { type: 'chain_added', chain: { id: chainId, sourceZoneId } });
+    broadcast(id, { type: 'chain_added', chain: { id: chainId, sourceZoneId, chainNumber, chainColor } });
 
     if (insertedNode) {
       const { rows: nodePosRows } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean }>(
@@ -296,7 +311,45 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
     trackRoomModified(app.db, id);
 
-    return reply.status(201).send({ chain: { id: chainId, sourceZoneId } });
+    return reply.status(201).send({ chain: { id: chainId, sourceZoneId, chainNumber, chainColor } });
+  });
+
+  // PATCH /api/rooms/:id/chains/:chainId — update mutable chain fields (currently colour).
+  app.patch<{ Params: { id: string; chainId: string } }>('/api/rooms/:id/chains/:chainId', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id, chainId } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    const parsed = UpdateChainBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+
+    const { chainColor } = parsed.data;
+
+    const { rows } = await app.db.query<{ id: string; source_zone_id: string; chain_number: number; chain_color: string }>(
+      `UPDATE room_chains SET chain_color = $1
+       WHERE id = $2 AND room_id = $3
+       RETURNING id, source_zone_id, chain_number, chain_color`,
+      [chainColor, chainId, id]
+    );
+    if (!rows[0]) {
+      return reply.status(404).send({ error: 'Chain not found' });
+    }
+
+    const chain = {
+      id: rows[0].id,
+      sourceZoneId: rows[0].source_zone_id,
+      chainNumber: rows[0].chain_number,
+      chainColor: rows[0].chain_color,
+    };
+    broadcast(id, { type: 'chain_updated', chain });
+    trackRoomModified(app.db, id);
+
+    return reply.send({ chain });
   });
 
   // DELETE /api/rooms/:id/chains/:chainId — remove a chain and all its zones/connections
@@ -642,10 +695,12 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
       // Insert chains (primary first for chronological consistency).
       const createdAt = new Date().toISOString();
+      let importChainNumber = 0;
       for (const source of orderedSources) {
+        importChainNumber += 1;
         await client.query(
-          'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
-          [chainIdBySource.get(source), id, source, createdAt]
+          'INSERT INTO room_chains (id, room_id, source_zone_id, created_at, chain_number, chain_color) VALUES ($1, $2, $3, $4, $5, $6)',
+          [chainIdBySource.get(source), id, source, createdAt, importChainNumber, defaultChainColor(importChainNumber)]
         );
       }
 

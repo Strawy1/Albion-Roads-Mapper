@@ -12,7 +12,8 @@ import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { deleteConnection, deleteNode } from '@/utils/roomOperations';
 import { Z_INDEX } from '@/constants/Layers';
 import { storeToRefs } from 'pinia';
-import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
+import { TooltipProvider } from 'reka-ui';
+import ChainIdPill from '@/components/common/ChainIdPill.vue';
 import PingButton from './zone/PingButton.vue';
 
 const props = defineProps<NodeProps<{ 
@@ -174,28 +175,7 @@ const handles = computed(() => {
 
 <template>
   <div class="non-roads-node relative" :class="{ 'ghost-node': props.data.isGhost }">
-    <!-- Chain ID pill at the very top of the node, above the diamond's top tip.
-         Always shown when the zone belongs to any chain (including the only/primary one). -->
-    <TooltipProvider :delay-duration="0" v-if="store.chainFriendlyIdForZone(props.id) !== null">
-      <TooltipRoot>
-        <TooltipTrigger asChild>
-          <div
-            class="chain-id-pill absolute left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gray-900/90 border border-blue-500/60 text-blue-300 text-sm font-semibold flex items-center gap-1 shadow whitespace-nowrap cursor-pointer hover:bg-gray-800/95 hover:border-blue-400 transition-colors"
-            style="z-index: 30;"
-            @click.stop="store.openChainManagement()"
-            @mousedown.stop
-          >
-            <span aria-hidden="true">⛓</span>
-            <span>{{ store.chainFriendlyIdForZone(props.id) }}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipPortal>
-          <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]">
-            {{ store.chainTooltipForZone(props.id) }}
-          </TooltipContent>
-        </TooltipPortal>
-      </TooltipRoot>
-    </TooltipProvider>
+    <ChainIdPill :zone-id="props.id" :position-style="{  'z-index': '30' }" />
     <div :class="[isConnecting ? 'connecting-mode' : '']">
         <template v-for="handle in handles" :key="handle.id">
           <Handle

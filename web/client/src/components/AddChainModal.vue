@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { useRoomStore } from '../stores/useRoomStore';
 import { track } from '@vercel/analytics';
 import { Z_INDEX } from '@/constants/Layers';
-import { ZONE_BY_ID } from 'shared';
+import { ZONE_BY_ID, CHAIN_COLOR_PALETTE } from 'shared';
 import ZoneCombobox from './ZoneCombobox.vue';
 
 defineProps<{
@@ -22,8 +22,23 @@ const success = ref(false);
 const saving = ref(false);
 const removingChainId = ref<string | null>(null);
 
+// When non-null, the colour-picker popover is shown above that chain row.
+const colourPickerChainId = ref<string | null>(null);
+
 const chains = computed(() => store.chains);
 const primaryHomeZoneId = computed(() => store.homeZoneId);
+
+// The colour palette offered by the picker. Re-uses the shared palette
+// where possible.
+const PICKER_COLOURS: { name: string; hex: string }[] = [
+  { name: 'Red', hex: '#ef4444' },
+  { name: 'Orange', hex: '#f59e0b' },
+  { name: 'Green', hex: '#22c55e' },
+  { name: 'Blue', hex: '#3b82f6' },
+  { name: 'Cyan', hex: '#06b6d4' },
+  { name: 'Light purple', hex: '#a78bfa' },
+  { name: 'White', hex: '#ffffff' },
+];
 
 function zoneName(zoneId: string): string {
   return ZONE_BY_ID.get(zoneId)?.name ?? zoneId;
@@ -34,6 +49,23 @@ function close() {
   sourceZoneId.value = '';
   error.value = '';
   success.value = false;
+  colourPickerChainId.value = null;
+}
+
+function toggleColourPicker(chainId: string) {
+  colourPickerChainId.value = colourPickerChainId.value === chainId ? null : chainId;
+}
+
+async function chooseColour(chainId: string, hex: string) {
+  error.value = '';
+  try {
+    await store.updateChainColor(chainId, hex);
+    track('chain_color_changed');
+  } catch (e: any) {
+    error.value = e?.message ?? 'Failed to update chain colour';
+  } finally {
+    colourPickerChainId.value = null;
+  }
 }
 
 async function save() {
@@ -73,6 +105,10 @@ async function removeChain(chainId: string, sourceZoneId: string) {
     removingChainId.value = null;
   }
 }
+
+function chainPillColour(chain: { chainColor?: string }): string {
+  return chain.chainColor ?? CHAIN_COLOR_PALETTE[0];
+}
 </script>
 
 <template>
@@ -95,17 +131,33 @@ async function removeChain(chainId: string, sourceZoneId: string) {
             <li
               v-for="chain in chains"
               :key="chain.id"
-              class="flex items-center justify-between gap-2 bg-gray-800 border border-gray-700 rounded px-3 py-2"
+              class="relative flex items-center justify-between gap-2 bg-gray-800 border border-gray-700 rounded px-3 py-2"
             >
+              <!-- Colour picker popover, anchored above the chain row. -->
+              <div
+                v-if="colourPickerChainId === chain.id"
+                class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 bg-gray-950 border border-gray-700 rounded-lg shadow-lg p-2 flex items-center justify-center gap-2 z-10 w-max"
+                @click.stop
+              >
+                <button
+                  v-for="c in PICKER_COLOURS"
+                  :key="c.hex"
+                  :title="c.name"
+                  class="w-6 h-6 rounded-full border-2 border-gray-700 hover:border-white transition-colors"
+                  :style="{ backgroundColor: c.hex }"
+                  @click="chooseColour(chain.id, c.hex)"
+                ></button>
+              </div>
+
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-white truncate">{{ zoneName(chain.sourceZoneId) }}</span>
-                <span
-                  v-if="store.chainFriendlyId(chain.id) !== null"
-                  class="text-xs flex-shrink-0 rounded px-1.5 py-0.5 border inline-flex items-center gap-1"
-                  :class="chain.sourceZoneId === primaryHomeZoneId
-                    ? 'text-emerald-400 border-emerald-500/50'
-                    : 'text-blue-300 border-blue-500/50'"
-                ><span aria-hidden="true">⛓</span><span>{{ store.chainFriendlyId(chain.id) }}</span></span>
+                <button
+                  type="button"
+                  class="text-xs flex-shrink-0 rounded px-1.5 py-0.5 border inline-flex items-center gap-1 cursor-pointer hover:bg-gray-700 transition-colors"
+                  :style="{ color: chainPillColour(chain), borderColor: chainPillColour(chain) }"
+                  :title="`Change colour for chain #${store.chainFriendlyId(chain.id) ?? '?'}`"
+                  @click.stop="toggleColourPicker(chain.id)"
+                ><span aria-hidden="true">⛓</span><span>{{ store.chainFriendlyId(chain.id) ?? '?' }}</span></button>
               </div>
               <button
                 v-if="chain.sourceZoneId !== primaryHomeZoneId"
