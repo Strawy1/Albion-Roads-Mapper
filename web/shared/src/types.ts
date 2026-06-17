@@ -277,6 +277,10 @@ export const UpdateChainBodySchema = z.object({
   chainColor: ChainColorSchema,
 });
 
+export const RelocateChainBodySchema = z.object({
+  sourceZoneId: z.string().min(1),
+});
+
 // Pick a default colour for a chain at the given 1-based chain number.
 export function defaultChainColor(chainNumber: number): string {
   if (chainNumber <= 1) return CHAIN_COLOR_PALETTE[0];
@@ -393,6 +397,7 @@ export type ServerMessage =
   | { type: 'chain_added'; chain: RoomChain }
   | { type: 'chain_removed'; chainId: string; removedZoneIds: string[]; removedConnectionIds: string[] }
   | { type: 'chain_updated'; chain: RoomChain }
+  | { type: 'chain_relocated'; chain: RoomChain; removedZoneIds: string[]; removedConnectionIds: string[]; newHomeZoneId?: string; newSourceNodePosition: NodePosition }
   | { type: 'session_expired'; reason: string }
   | { type: 'error'; message: string };
 

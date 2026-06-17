@@ -258,3 +258,112 @@ describe('DELETE /api/rooms/:id/chains/:chainId', () => {
     expect(payload.removedZoneIds).toEqual([OTHER_ROADS_ZONE, 'some-other-zone']);
   });
 });
+
+describe('POST /api/rooms/:id/chains/:chainId/relocate', () => {
+  const NEW_SOURCE_ZONE = ZONE_ID; // any valid catalogue zone different from the current source
+  const OLD_SOURCE = OTHER_ROADS_ZONE;
+  const ORPHAN_ZONE = 'some-other-zone'; // a zone connected to the chain but whose chain_id is NULL
+
+  it('wipes the chain (including zones with NULL chain_id reachable via connections) and broadcasts chain_relocated', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID, passwordVersion: 1 });
+
+    // 1. password version check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ password_version: 1 }], rowCount: 1 });
+    // 2. room lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: ZONE_ID }], rowCount: 1 });
+    // 3. chain lookup
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ id: 'chain-to-relocate', source_zone_id: OLD_SOURCE, chain_number: 2, chain_color: '#3b82f6' }],
+      rowCount: 1,
+    });
+    // 4. existingNode lookup for the *new* source: not yet in any chain
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const txClient = {
+      query: vi.fn()
+        // BEGIN
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        // SELECT connections — includes a connection to an orphan zone whose
+        // chain_id was never set on its room_node_positions row.
+        .mockResolvedValueOnce({
+          rows: [
+            { id: 'conn-a', from_zone_id: OLD_SOURCE, to_zone_id: ORPHAN_ZONE },
+          ],
+          rowCount: 1,
+        })
+        // SELECT room_node_positions WHERE chain_id = $2 — only the source is tagged
+        .mockResolvedValueOnce({ rows: [{ zone_id: OLD_SOURCE }], rowCount: 1 })
+        // SELECT x, y FROM room_node_positions WHERE zone_id = old source (for relocate-in-place)
+        .mockResolvedValueOnce({ rows: [{ x: 123, y: -45 }], rowCount: 1 })
+        // DELETE connections ... RETURNING id (both the chain-tagged conn and any
+        // touching the orphan zone get dropped)
+        .mockResolvedValueOnce({ rows: [{ id: 'conn-a' }], rowCount: 1 })
+        // DELETE room_node_positions WHERE zone_id = ANY(...)
+        .mockResolvedValueOnce({ rows: [], rowCount: 2 })
+        // DELETE room_node_memory
+        .mockResolvedValueOnce({ rows: [], rowCount: 2 })
+        // INSERT new source node position
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        // INSERT room_node_memory ON CONFLICT
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        // UPDATE room_chains SET source_zone_id
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        // UPDATE rooms.updated_at
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        // COMMIT
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+      release: vi.fn(),
+    };
+    mockDb.connect = vi.fn().mockReturnValue(txClient);
+
+    const broadcastMock = vi.mocked(broadcast);
+    broadcastMock.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${ROOM_ID}/chains/chain-to-relocate/relocate`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { sourceZoneId: NEW_SOURCE_ZONE },
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    // Find the DELETE FROM connections call — the SQL should also key off zone
+    // membership, otherwise orphan rows with chain_id NULL would survive.
+    const deleteConnCall = txClient.query.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string'
+        && /DELETE FROM connections/i.test(call[0])
+        && /from_zone_id = ANY|to_zone_id = ANY/i.test(call[0])
+    );
+    expect(deleteConnCall, 'relocate should delete connections by both chain_id AND zone membership').toBeDefined();
+    // The zone-id list passed to the DELETE must include the orphan zone.
+    const zoneIdsArg = deleteConnCall![1][2] as string[] | null;
+    expect(zoneIdsArg).toBeTruthy();
+    expect(zoneIdsArg).toContain(ORPHAN_ZONE);
+    expect(zoneIdsArg).toContain(OLD_SOURCE);
+    expect(zoneIdsArg).not.toContain(NEW_SOURCE_ZONE);
+
+    // The DELETE FROM room_node_positions must be the zone-ANY variant (not the
+    // chain_id-only variant which would leave the orphan position behind).
+    const deletePosCall = txClient.query.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string'
+        && /DELETE FROM room_node_positions/i.test(call[0])
+        && /zone_id = ANY/i.test(call[0])
+    );
+    expect(deletePosCall, 'relocate should delete node positions by zone-id list').toBeDefined();
+
+    const chainRelocatedCall = broadcastMock.mock.calls.find(
+      (call: any[]) => call[0] === ROOM_ID && call[1]?.type === 'chain_relocated'
+    );
+    expect(chainRelocatedCall).toBeDefined();
+    const payload = chainRelocatedCall![1] as any;
+    expect(payload.chain.sourceZoneId).toBe(NEW_SOURCE_ZONE);
+    // The new source must be placed at the old source's position, not (0,0).
+    expect(payload.newSourceNodePosition.x).toBe(123);
+    expect(payload.newSourceNodePosition.y).toBe(-45);
+    expect(payload.removedZoneIds).toContain(ORPHAN_ZONE);
+    expect(payload.removedZoneIds).toContain(OLD_SOURCE);
+    expect(payload.removedZoneIds).not.toContain(NEW_SOURCE_ZONE);
+    expect(payload.removedConnectionIds).toContain('conn-a');
+  });
+});

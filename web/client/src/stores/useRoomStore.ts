@@ -326,6 +326,29 @@ export const useRoomStore = defineStore('room', () => {
         lastUpdate.value = new Date();
         break;
 
+      case 'chain_relocated': {
+        chains.value = chains.value.map(c => c.id === msg.chain.id ? { ...c, ...msg.chain } : c);
+        const removedZones = new Set(msg.removedZoneIds);
+        const removedConns = new Set(msg.removedConnectionIds);
+        if (removedConns.size > 0) {
+          connections.value = connections.value.filter(c => !removedConns.has(c.id));
+        }
+        // Drop every wiped node, then add the freshly-created source node row.
+        nodePositions.value = nodePositions.value.filter(p => !removedZones.has(p.zoneId));
+        nodePositions.value = [...nodePositions.value, msg.newSourceNodePosition];
+        try {
+          const memoryStore = useRoomMemoryStore();
+          for (const zoneId of removedZones) {
+            memoryStore.applyMemoryDeleted(zoneId);
+          }
+        } catch { /* memory store optional */ }
+        if (msg.newHomeZoneId) {
+          homeZoneId.value = msg.newHomeZoneId;
+        }
+        lastUpdate.value = new Date();
+        break;
+      }
+
       case 'chain_removed': {
         chains.value = chains.value.filter(c => c.id !== msg.chainId);
         const removedZones = new Set(msg.removedZoneIds);
@@ -757,6 +780,26 @@ export const useRoomStore = defineStore('room', () => {
     } catch { /* broadcast will catch up */ }
   }
 
+  async function relocateChain(chainId: string, newSourceZoneId: string) {
+    if (!roomId.value || !getToken()) {
+      throw new Error('Not authenticated');
+    }
+    const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains/${chainId}/relocate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({ sourceZoneId: newSourceZoneId }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      let message = text;
+      try { message = JSON.parse(text).error ?? text; } catch { /* not JSON */ }
+      throw new Error(message || `Failed to relocate chain (HTTP ${response.status})`);
+    }
+  }
+
   async function removeChain(chainId: string) {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
@@ -801,6 +844,7 @@ export const useRoomStore = defineStore('room', () => {
     chainFriendlyId,
     chainFriendlyIdForZone,
     chainColorForZone,
+    chainForZone,
     chainTooltipForZone,
     chainManagementOpen,
     openChainManagement,
@@ -832,5 +876,6 @@ export const useRoomStore = defineStore('room', () => {
     addChain,
     removeChain,
     updateChainColor,
+    relocateChain,
   };
 });

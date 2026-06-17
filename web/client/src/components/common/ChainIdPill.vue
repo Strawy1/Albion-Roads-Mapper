@@ -8,6 +8,7 @@ import {
   TooltipPortal,
 } from 'reka-ui';
 import { useRoomStore } from '@/stores/useRoomStore';
+import { Z_INDEX } from '@/constants/Layers';
 
 const props = withDefaults(defineProps<{
   zoneId: string;
@@ -34,6 +35,10 @@ const pillStyle = computed<Record<string, string>>(() => {
     typeof props.positionStyle === 'string'
       ? {}
       : { ...(props.positionStyle ?? {}) };
+  // Strip any caller-provided z-index — z-layering is owned by Layers.ts via
+  // the CHAIN_ID_PILL class so the pill consistently sits above the overlay.
+  delete base.zIndex;
+  delete (base as Record<string, string>)['z-index'];
   const colour = store.chainColorForZone(props.zoneId);
   if (colour) {
     base.color = colour;
@@ -50,6 +55,7 @@ const pillStyle = computed<Record<string, string>>(() => {
         <div
           :class="[
             'chain-id-pill rounded-full bg-gray-900/90 border font-semibold flex items-center gap-1 shadow whitespace-nowrap cursor-pointer hover:bg-gray-800/95 transition-colors',
+            Z_INDEX.CHAIN_ID_PILL,
             props.positionStyle && typeof props.positionStyle !== 'string' && Object.keys(props.positionStyle).length ? 'absolute left-1/2 -translate-x-1/2' : 'inline-flex',
             props.small ? 'px-1.5 py-0.5 text-[10px] mt-0.5' : 'px-2 py-0.5 text-sm',
           ]"

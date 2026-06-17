@@ -10,6 +10,7 @@ import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, getHandleFacing } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
 import TagExtras from "@/components/common/TagExtras.vue";
+import ChainIdPill from "@/components/common/ChainIdPill.vue";
 
 const props = defineProps<{}>();
 
@@ -125,6 +126,21 @@ const connectedToFromZone = computed(() => {
   return store.connections
     .filter((c) => !c.isExpired && (c.fromZoneId === fromZoneId.value || c.toZoneId === fromZoneId.value))
     .map((c) => (c.fromZoneId === fromZoneId.value ? c.toZoneId : c.fromZoneId));
+});
+
+// Zones that already belong to a different chain than the "From" zone — these
+// must not be selectable as a connection target (a chain is a closed graph).
+const wrongChainZoneIds = computed<string[]>(() => {
+  if (!fromZoneId.value) return [];
+  const fromChain = store.chainForZone(fromZoneId.value);
+  if (!fromChain) return [];
+  const ids: string[] = [];
+  for (const n of store.nodePositions) {
+    if (n.zoneId === fromZoneId.value) continue;
+    const otherChain = store.chainForZone(n.zoneId);
+    if (otherChain && otherChain.id !== fromChain.id) ids.push(n.zoneId);
+  }
+  return ids;
 });
 
 function isPortalOccupied(zoneId: string, handleId: string | null) {
@@ -364,6 +380,7 @@ defineExpose({
                 <div class="flex items-center gap-2 py-2.5 md:py-2 opacity-100 min-w-0">
                   <span class="flex-1 text-white text-base leading-none">{{ fromZone?.name ?? fromZoneId }}</span>
                   <TagExtras :zone-id="fromZoneId" />
+                  <ChainIdPill v-if="fromZoneId && fromZoneId !== store.homeZoneId" :zone-id="fromZoneId" small />
                   <TagZone v-if="fromZone" :type="fromZone.type" :category="fromZone.category" :map-shape="fromZone.mapShape" :zone-name="fromZone.name" :proximity-to="fromZone.proximityTo" />
                   <TagTier v-if="fromZone" :tier="fromZone.tier" :type="fromZone.type" />
                 </div>
@@ -380,6 +397,7 @@ defineExpose({
                     placeholder="To zone…"
                     :excluded-ids="[fromZoneId]"
                     :disabled-ids="connectedToFromZone"
+                    :wrong-chain-ids="wrongChainZoneIds"
                     :smart-already-added="true"
                     already-added-placement="bottom"
                     data-testid="to-combobox"

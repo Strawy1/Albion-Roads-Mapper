@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
   placeholder?: string;
   excludedIds?: string[];
   disabledIds?: string[];
+  wrongChainIds?: string[];
   showAlreadyAdded?: boolean;
   smartAlreadyAdded?: boolean;
   alreadyAddedPlacement?: 'top' | 'bottom';
@@ -67,6 +68,8 @@ const mappedZoneIds = computed<Set<string>>(() => {
 });
 
 const disabledIdsSet = computed<Set<string>>(() => new Set(props.disabledIds ?? []));
+const wrongChainIdsSet = computed<Set<string>>(() => new Set(props.wrongChainIds ?? []));
+const isUnselectable = (id: string) => disabledIdsSet.value.has(id) || wrongChainIdsSet.value.has(id);
 
 const filteredZones = computed<Zone[]>(() => {
   const q = query.value.toLowerCase().trim();
@@ -124,7 +127,7 @@ defineExpose({
   getTestFilteredZones: () => filteredZones.value,
   triggerTabKeydown: () => {
     // Ensure singleResultId is in sync before firing Tab (watch is async in tests)
-    const nonDisabled = filteredZones.value.filter((z) => !disabledIdsSet.value.has(z.id));
+    const nonDisabled = filteredZones.value.filter((z) => !isUnselectable(z.id));
     singleResultId.value = nonDisabled.length === 1 ? nonDisabled[0].id : null;
     const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
     onWrapperKeydown(e);
@@ -133,7 +136,7 @@ defineExpose({
 
 // Track a single non-disabled result so Tab can accept it even before reka-ui highlights it
 watch(filteredZones, (zones) => {
-  const nonDisabled = zones.filter((z) => !disabledIdsSet.value.has(z.id));
+  const nonDisabled = zones.filter((z) => !isUnselectable(z.id));
   singleResultId.value = nonDisabled.length === 1 ? nonDisabled[0].id : null;
 });
 
@@ -145,6 +148,7 @@ function displayValue(id: unknown): string {
 
 function onSelect(val: string | null) {
   if (val !== null) {
+    if (isUnselectable(val)) return;
     emit('update:modelValue', val);
     emit('select');
     query.value = '';
@@ -171,7 +175,7 @@ function onInputBlur(_e: FocusEvent) {
   // arrow-key navigation and single-result Tab. Enter is already handled by
   // reka-ui's own onSelect path.
   const id = highlightedId.value ?? singleResultId.value;
-  if (id) {
+  if (id && !isUnselectable(id)) {
     emit('update:modelValue', id);
     query.value = '';
     highlightedId.value = null;
@@ -186,7 +190,7 @@ function onInputBlur(_e: FocusEvent) {
 function onWrapperKeydown(e: KeyboardEvent) {
   if (e.key !== 'Tab' && e.key !== 'Enter') return;
   const id = highlightedId.value ?? (e.key === 'Tab' ? singleResultId.value : null);
-  if (!id) return;
+  if (!id || isUnselectable(id)) return;
   e.preventDefault();
   emit('update:modelValue', id);
   query.value = '';
@@ -263,15 +267,18 @@ function onWrapperKeydown(e: KeyboardEvent) {
             v-for="zone in filteredZones"
             :key="zone.id"
             :value="zone.id"
-            :disabled="disabledIdsSet.has(zone.id)"
+            :disabled="isUnselectable(zone.id)"
             class="flex items-center gap-2 px-3 py-2 text-sm transition-colors"
             :class="[
-              disabledIdsSet.has(zone.id)
-                ? 'opacity-50 cursor-not-allowed text-white bg-green-900/40'
-                : (mappedZoneIds.has(zone.id) && zone.id !== modelValue
-                    ? 'text-white cursor-pointer bg-green-900/40 hover:bg-green-900/60 data-[highlighted]:bg-gray-700'
-                    : 'text-white cursor-pointer hover:bg-gray-700 data-[highlighted]:bg-gray-700')
+              wrongChainIdsSet.has(zone.id)
+                ? 'opacity-50 cursor-not-allowed text-gray-400'
+                : disabledIdsSet.has(zone.id)
+                  ? 'opacity-50 cursor-not-allowed text-white bg-green-900/40'
+                  : (mappedZoneIds.has(zone.id) && zone.id !== modelValue
+                      ? 'text-white cursor-pointer bg-green-900/40 hover:bg-green-900/60 data-[highlighted]:bg-gray-700'
+                      : 'text-white cursor-pointer hover:bg-gray-700 data-[highlighted]:bg-gray-700')
             ]"
+            :title="wrongChainIdsSet.has(zone.id) ? 'This zone belongs to a different chain' : undefined"
           >
             <ZoneComboItem :zone="zone" />
             <span v-if="disabledIdsSet.has(zone.id)" class="shrink-0 text-green-400">✓</span>

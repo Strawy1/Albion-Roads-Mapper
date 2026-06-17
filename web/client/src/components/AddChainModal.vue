@@ -21,9 +21,13 @@ const error = ref('');
 const success = ref(false);
 const saving = ref(false);
 const removingChainId = ref<string | null>(null);
+const relocatingChainId = ref<string | null>(null);
 
 // When non-null, the colour-picker popover is shown above that chain row.
 const colourPickerChainId = ref<string | null>(null);
+// When non-null, the relocate zone-picker row is shown for that chain.
+const relocatePickerChainId = ref<string | null>(null);
+const relocateTargetZoneId = ref('');
 
 const chains = computed(() => store.chains);
 const primaryHomeZoneId = computed(() => store.homeZoneId);
@@ -50,6 +54,47 @@ function close() {
   error.value = '';
   success.value = false;
   colourPickerChainId.value = null;
+  relocatePickerChainId.value = null;
+  relocateTargetZoneId.value = '';
+}
+
+function toggleRelocatePicker(chainId: string) {
+  if (relocatePickerChainId.value === chainId) {
+    relocatePickerChainId.value = null;
+    relocateTargetZoneId.value = '';
+  } else {
+    relocatePickerChainId.value = chainId;
+    relocateTargetZoneId.value = '';
+    colourPickerChainId.value = null;
+  }
+}
+
+async function confirmRelocate(chainId: string, currentSourceZoneId: string) {
+  if (!relocateTargetZoneId.value) {
+    error.value = 'Choose a new home zone';
+    return;
+  }
+  if (relocateTargetZoneId.value === currentSourceZoneId) {
+    error.value = 'New home zone must be different from the current one';
+    return;
+  }
+  const targetName = zoneName(relocateTargetZoneId.value);
+  const currentName = zoneName(currentSourceZoneId);
+  if (!confirm(`Relocate this chain's home from "${currentName}" to "${targetName}"?\n\nThis will DELETE every zone and connection currently in the chain. This cannot be undone.`)) {
+    return;
+  }
+  relocatingChainId.value = chainId;
+  error.value = '';
+  try {
+    await store.relocateChain(chainId, relocateTargetZoneId.value);
+    track('relocate_chain');
+    relocatePickerChainId.value = null;
+    relocateTargetZoneId.value = '';
+  } catch (e: any) {
+    error.value = e?.message ?? 'Failed to relocate chain';
+  } finally {
+    relocatingChainId.value = null;
+  }
 }
 
 function toggleColourPicker(chainId: string) {
@@ -123,7 +168,8 @@ function chainPillColour(chain: { chainColor?: string }): string {
       <h2 class="text-xl font-semibold mb-4 text-white">Chains</h2>
 
       <div class="flex flex-col gap-4">
-        <p class="text-xs text-gray-500">Chains are a means to create multiple seperated groups of zones, each having a source zone. This is useful in the case you're exploring outwards from Black Zones into Roads.</p>
+        <p class="text-xs text-gray-400">Chains are a means to create multiple separated groups of zones, each having a source zone. This is useful in the case you're exploring outwards from Black Zones into Roads.</p>
+        <p class="text-xs text-gray-400"><span class="text-red-500">Two chains of zones <strong>cannot</strong> be linked together.</span> This is to prevent weird behaviour when we are plotting routes and deleting chains of connections.</p>
         <!-- Existing chains list -->
         <div>
           <label class="block text-sm text-gray-400 mb-2">Current chains</label>
@@ -131,8 +177,9 @@ function chainPillColour(chain: { chainColor?: string }): string {
             <li
               v-for="chain in chains"
               :key="chain.id"
-              class="relative flex items-center justify-between gap-2 bg-gray-800 border border-gray-700 rounded px-3 py-2"
+              class="relative flex flex-col gap-2 bg-gray-800 border border-gray-700 rounded px-3 py-2"
             >
+            <div class="flex items-center justify-between gap-2">
               <!-- Colour picker popover, anchored above the chain row. -->
               <div
                 v-if="colourPickerChainId === chain.id"
@@ -159,23 +206,54 @@ function chainPillColour(chain: { chainColor?: string }): string {
                   @click.stop="toggleColourPicker(chain.id)"
                 ><span aria-hidden="true">⛓</span><span>{{ store.chainFriendlyId(chain.id) ?? '?' }}</span></button>
               </div>
-              <button
-                v-if="chain.sourceZoneId !== primaryHomeZoneId"
-                :disabled="removingChainId === chain.id"
-                class="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                title="Delete this chain and all of its zones"
-                @click="removeChain(chain.id, chain.sourceZoneId)"
-              >
-                {{ removingChainId === chain.id ? 'Deleting…' : '🗑 Delete' }}
-              </button>
-              <span
-                v-else
-                class="text-[10px] text-gray-500 flex-shrink-0"
-                title="The primary chain cannot be deleted"
-              >cannot delete</span>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <button
+                  :disabled="relocatingChainId === chain.id"
+                  class="px-2 py-1 rounded bg-orange-600 hover:bg-orange-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1"
+                  title="Relocate this chain's home zone (wipes the chain)"
+                  @click="toggleRelocatePicker(chain.id)"
+                >
+                  <span aria-hidden="true">↪</span>
+                  <span>{{ relocatingChainId === chain.id ? 'Moving…' : 'Relocate' }}</span>
+                </button>
+                <button
+                  v-if="chain.sourceZoneId !== primaryHomeZoneId"
+                  :disabled="removingChainId === chain.id"
+                  class="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Delete this chain and all of its zones"
+                  @click="removeChain(chain.id, chain.sourceZoneId)"
+                >
+                  {{ removingChainId === chain.id ? 'Deleting…' : '🗑 Delete' }}
+                </button>
+              </div>
+            </div>
+            <div
+              v-if="relocatePickerChainId === chain.id"
+              class="flex flex-col gap-2 border-t border-gray-700 pt-2"
+            >
+              <p class="text-xs text-orange-300">
+                ⚠ Relocating will delete every zone and connection currently in this chain.
+              </p>
+              <ZoneCombobox
+                v-model="relocateTargetZoneId"
+                placeholder="Search new home zone…"
+                :show-already-added="false"
+              />
+              <div class="flex gap-2 justify-end">
+                <button
+                  class="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium transition-colors"
+                  @click="toggleRelocatePicker(chain.id)"
+                >Cancel</button>
+                <button
+                  :disabled="!relocateTargetZoneId || relocatingChainId === chain.id"
+                  class="px-2 py-1 rounded bg-orange-600 hover:bg-orange-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  @click="confirmRelocate(chain.id, chain.sourceZoneId)"
+                >Move chain</button>
+              </div>
+            </div>
             </li>
           </ul>
-          <p v-else class="text-sm text-gray-500 italic">No chains yet.</p>
+          <p v-else class="text-sm text-red-500">NO CHAINS! THIS SHOULD NOT BE POSSIBLE! CONTACT THE DEV!!!!</p>
         </div>
 
         <hr class="border-gray-700" />

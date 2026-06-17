@@ -8,6 +8,7 @@ import {
   ChangePasswordBodySchema,
   AddChainBodySchema,
   UpdateChainBodySchema,
+  RelocateChainBodySchema,
   ImportRoomBodySchema,
   ZONE_BY_ID,
   defaultChainColor,
@@ -350,6 +351,179 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     trackRoomModified(app.db, id);
 
     return reply.send({ chain });
+  });
+
+  // POST /api/rooms/:id/chains/:chainId/relocate — wipe the chain and move its
+  // source to a new zone. Deletes all connections, non-source node positions
+  // and zone memory belonging to the chain, then sets the new source zone.
+  // For the primary chain, also updates `rooms.home_zone_id`.
+  app.post<{ Params: { id: string; chainId: string } }>('/api/rooms/:id/chains/:chainId/relocate', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id, chainId } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    const parsed = RelocateChainBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+    const { sourceZoneId: newSourceZoneId } = parsed.data;
+
+    const zone = ZONE_BY_ID.get(newSourceZoneId);
+    if (!zone) {
+      return reply.status(400).send({ error: 'sourceZoneId not found in zone catalogue' });
+    }
+
+    const { rows: roomRows } = await app.db.query<{ home_zone_id: string }>(
+      'SELECT home_zone_id FROM rooms WHERE id = $1',
+      [id]
+    );
+    const room = roomRows[0];
+    if (!room) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    const { rows: chainRows } = await app.db.query<{ id: string; source_zone_id: string; chain_number: number; chain_color: string }>(
+      'SELECT id, source_zone_id, chain_number, chain_color FROM room_chains WHERE id = $1 AND room_id = $2',
+      [chainId, id]
+    );
+    const chain = chainRows[0];
+    if (!chain) {
+      return reply.status(404).send({ error: 'Chain not found' });
+    }
+    const isPrimary = chain.source_zone_id === room.home_zone_id;
+
+    // Reject if the new source zone already belongs to a *different* chain
+    const { rows: existingNode } = await app.db.query<{ chain_id: string | null }>(
+      'SELECT chain_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+      [id, newSourceZoneId]
+    );
+    if (existingNode[0] && existingNode[0].chain_id && existingNode[0].chain_id !== chainId) {
+      return reply.status(409).send({ error: 'Zone is already part of an existing chain' });
+    }
+
+    let removedZoneIds: string[] = [];
+    let removedConnectionIds: string[] = [];
+    let newSourceX = 0;
+    let newSourceY = 0;
+    const updatedAt = new Date().toISOString();
+
+    const client = await app.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Collect every connection that belongs to this chain (by chain_id),
+      // plus include the zones each touches — this is what lets us catch
+      // "isolated" zones whose `room_node_positions.chain_id` is NULL but
+      // which were reachable via the chain's connection graph.
+      const { rows: connRows } = await client.query<{ id: string; from_zone_id: string; to_zone_id: string }>(
+        'SELECT id, from_zone_id, to_zone_id FROM connections WHERE room_id = $1 AND chain_id = $2',
+        [id, chainId]
+      );
+
+      const { rows: posRows } = await client.query<{ zone_id: string }>(
+        'SELECT zone_id FROM room_node_positions WHERE room_id = $1 AND chain_id = $2',
+        [id, chainId]
+      );
+      // Remember the old source zone's position so the new source can be
+      // placed instantly at the same spot (avoiding a jarring (0,0) jump).
+      const { rows: oldSourceRows } = await client.query<{ x: number; y: number }>(
+        'SELECT x, y FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+        [id, chain.source_zone_id]
+      );
+      newSourceX = oldSourceRows[0]?.x ?? 0;
+      newSourceY = oldSourceRows[0]?.y ?? 0;
+      const zoneSet = new Set<string>();
+      for (const r of posRows) zoneSet.add(r.zone_id);
+      for (const c of connRows) { zoneSet.add(c.from_zone_id); zoneSet.add(c.to_zone_id); }
+      zoneSet.add(chain.source_zone_id);
+      // Don't delete the new source zone (it would be re-inserted below anyway).
+      zoneSet.delete(newSourceZoneId);
+      removedZoneIds = Array.from(zoneSet);
+
+      // Delete connections by chain_id AND by zone membership, so orphan rows
+      // (chain_id NULL) connecting these zones also get cleaned up.
+      const { rows: deletedConns } = await client.query<{ id: string }>(
+        `DELETE FROM connections
+         WHERE room_id = $1
+           AND (chain_id = $2
+                OR ($3::text[] IS NOT NULL AND (from_zone_id = ANY($3::text[]) OR to_zone_id = ANY($3::text[]))))
+         RETURNING id`,
+        [id, chainId, removedZoneIds.length > 0 ? removedZoneIds : null]
+      );
+      removedConnectionIds = deletedConns.map((r) => r.id);
+
+      if (removedZoneIds.length > 0) {
+        await client.query(
+          'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = ANY($2::text[])',
+          [id, removedZoneIds]
+        );
+        await client.query(
+          'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = ANY($2::text[])',
+          [id, removedZoneIds]
+        );
+      }
+
+      // Insert the new source node position at the *old* source's coords so the
+      // relocation is visually instant (no jump to origin).
+      await client.query(
+        'INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, rotation, chain_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [id, newSourceZoneId, newSourceX, newSourceY, JSON.stringify(getInitialFeatures(newSourceZoneId)), JSON.stringify(null), 0, chainId]
+      );
+      await client.query(
+        'INSERT INTO room_node_memory (room_id, zone_id, features, times_added, rotation) VALUES ($1, $2, $3, ARRAY[$4::timestamptz], $5) ON CONFLICT (room_id, zone_id) DO NOTHING',
+        [id, newSourceZoneId, JSON.stringify(getInitialFeatures(newSourceZoneId)), updatedAt, 0]
+      );
+
+      await client.query(
+        'UPDATE room_chains SET source_zone_id = $1 WHERE id = $2 AND room_id = $3',
+        [newSourceZoneId, chainId, id]
+      );
+
+      if (isPrimary) {
+        await client.query('UPDATE rooms SET home_zone_id = $1 WHERE id = $2', [newSourceZoneId, id]);
+      }
+
+      await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [updatedAt, id]);
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      client.release();
+      throw e;
+    }
+    client.release();
+
+    const updatedChain = {
+      id: chain.id,
+      sourceZoneId: newSourceZoneId,
+      chainNumber: chain.chain_number,
+      chainColor: chain.chain_color,
+    };
+    const newSourceNodePosition = {
+      zoneId: newSourceZoneId,
+      x: newSourceX,
+      y: newSourceY,
+      features: getInitialFeatures(newSourceZoneId),
+      customHandles: undefined,
+      rotation: 0,
+      explored: false,
+      chainId,
+    };
+
+    broadcast(id, {
+      type: 'chain_relocated',
+      chain: updatedChain,
+      removedZoneIds,
+      removedConnectionIds,
+      newHomeZoneId: isPrimary ? newSourceZoneId : undefined,
+      newSourceNodePosition,
+    });
+    trackRoomModified(app.db, id);
+
+    return reply.send({ chain: updatedChain, newSourceNodePosition, newHomeZoneId: isPrimary ? newSourceZoneId : undefined });
   });
 
   // DELETE /api/rooms/:id/chains/:chainId — remove a chain and all its zones/connections
