@@ -33,6 +33,7 @@ export async function buildApp(options: AppOptions) {
     origin: [
       'https://albion-mapper-client.vercel.app',
       'https://albion-mapper-client-git-beta-maelstromeous-projects.vercel.app',
+      /^https:\/\/albion-roads-mapper-[a-z0-9]+-maelstromeous-projects\.vercel\.app$/,
       'http://10.0.5.2',
       'https://10.0.5.2',
       /^http:\/\/localhost(:\d+)?$/,
