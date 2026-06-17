@@ -130,7 +130,7 @@ async function createRoom() {
       </div>
       <div class="flex flex-col gap-4">
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Title (Optional)</label>
+          <label class="block text-sm text-white mb-1">Title (Optional)</label>
           <input
             v-model="createTitle"
             type="text"
@@ -140,7 +140,7 @@ async function createRoom() {
           />
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Vanity URL (Optional)</label>
+          <label class="block text-sm text-white mb-1">Vanity URL (Optional)</label>
           <input
             v-model="createVanityUrl"
             type="text"
@@ -164,7 +164,7 @@ async function createRoom() {
           </div>
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Password</label>
+          <label class="block text-sm text-white mb-1">Password</label>
           <input
             v-model="createPassword"
             type="password"
@@ -183,8 +183,12 @@ async function createRoom() {
           <p class="text-xs text-yellow-600 mt-1">Keep this safe, otherwise you cannot change the room's password!</p>
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Home Zone</label>
+          <label class="block text-sm text-white mb-1">Home Zone</label>
+
           <ZoneCombobox :key="createFormKey" v-model="createHomeZoneId" placeholder="Search home zone…" />
+          <div class="mt-3 mb-2 text-gray-400 text-xs">
+            <span class="text-xs bg-blue-900 border border-blue-500 rounded px-2 py-1 mr-1 text-white outline-none">New</span> You are able to choose <strong>any</strong> zone as the home!
+          </div>
         </div>
         <p v-if="createError" class="text-red-400 text-sm">{{ createError }}</p>
         <button
