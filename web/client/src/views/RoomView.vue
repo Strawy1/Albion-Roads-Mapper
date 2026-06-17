@@ -15,6 +15,7 @@ import BottomLeftToolbar from '../components/room/BottomLeftToolbar.vue';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import MegaToast from '../components/common/MegaToast.vue';
 import ConfirmationModal from '../components/common/ConfirmationModal.vue';
+import AddChainModal from '../components/AddChainModal.vue';
 import TitleSegment from '../components/room/TitleSegment.vue';
 import TopToolbar from '../components/room/TopToolbar.vue';
 import RouteBottleneckPill from '../components/room/RouteBottleneckPill.vue';
@@ -65,6 +66,7 @@ const confirmationModalText = ref("");
 const pendingConnection = ref<any>(null);
 const showOccupiedModal = ref(false);
 const pendingOccupiedConnection = ref<{ params: any; occupiedConn: any } | null>(null);
+const showAddChainModal = ref(false);
 
 function isRoads(zoneId: string): boolean {
   const zone = ZONE_BY_ID.get(zoneId);
@@ -356,7 +358,8 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
         position: { x: pos.x, y: pos.y },
         draggable: true,
         data: {
-          isHome: pos.zoneId === homeZoneId.value,
+          isChainSource: store.chainSourceZoneIds.has(pos.zoneId),
+          chainId: pos.chainId,
           tier: zone?.tier ?? 0,
           zoneName: zone?.name ?? pos.zoneId,
           type: zone?.type ?? 'other',
@@ -568,7 +571,7 @@ const showMobileSummary = ref(false);
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 function onNodeClick(event: any) {
-  if (plotRouteStore.isPlotRouteMode && !event.node.data.isHome && !event.node.data.isGhost) {
+  if (plotRouteStore.isPlotRouteMode && event.node.id !== store.homeZoneId && !event.node.data.isGhost) {
     plotRouteStore.selectDestination(store.homeZoneId, event.node.id, store.connections);
   }
 }
@@ -1195,7 +1198,7 @@ function handleConnectEnd(event?: MouseEvent) {
          isGhost: true,
          features: {},
          tier: 0,
-         isHome: false,
+         isChainSource: false,
        },
        selectable: false,
        draggable: false,
@@ -1243,7 +1246,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
 <template>
   <div class="h-dvh relative bg-gray-950 text-white">
     <TitleSegment :room-title="roomTitle" :class="Z_INDEX.UI_OVERLAY" @logout="exitRoom" @fit-view="fitView({ padding: 0.2, duration: 300 })" />
-    <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" />
+    <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" @add-chain="showAddChainModal = true" />
+    <AddChainModal v-model="showAddChainModal" />
 
     <ReportForm
       ref="reportForm"

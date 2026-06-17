@@ -34,6 +34,11 @@
   animation: ping-glow-home 6s ease-out forwards;
 }
 
+/* Persistent marker for chain-source (root) nodes, applied via :class="props.data.isChainSource && 'home-glow'" */
+.home-glow {
+  filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.65));
+}
+
 @keyframes ping-glow {
   0% { filter: drop-shadow(0 0 0px rgba(59, 130, 246, 0)); }
   50% { filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.9)); }
@@ -41,7 +46,7 @@
 }
 
 @keyframes ping-glow-home {
-  0% { filter: none; }
+  0% { filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.65)); }
   50% { filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.9)); }
-  100% { filter: none; }
+  100% { filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.65)); }
 }

@@ -27,7 +27,7 @@ import { onClickOutside, useRafFn } from '@vueuse/core';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<NodeProps<{ 
-  isHome: boolean; 
+  isChainSource: boolean; 
   tier: number; 
   zoneName: string; 
   type: string; 
@@ -78,11 +78,11 @@ const now = inject<Ref<number>>('globalNow', ref(Date.now()));
 const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
 const isExpired = computed(() => store.isNodeExpired(props.id, now.value));
 const isRestricted = computed(() => isIsolated.value || isExpired.value);
-const isUnexplored = computed(() => !props.data.isHome && !props.data.isGhost && !props.data.explored);
+const isUnexplored = computed(() => !props.data.isChainSource && !props.data.isGhost && !props.data.explored);
 
 const isRoadsHideout = computed(() => props.data.type === 'roadsHideout');
 const isHovered = ref(false);
-const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isHome && !props.data.isGhost && isHovered.value);
+const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isChainSource && !props.data.isGhost && isHovered.value);
 const isRouteDestination = computed(() => plotRouteStore.destinationZoneId === props.id && plotRouteStore.hasRoute);
 const hasCustomHandles = computed(() => (props.data.customHandles?.length ?? 0) > 0);
 const needsCustomHandles = computed(() => isRoadsHideout.value && !hasCustomHandles.value);
@@ -692,7 +692,7 @@ const diamondOuterClass = computed(() => {
 
   if (hasReds.value) {
     classes.push('bg-red-500/80');
-  } else if (props.data.isHome && !hasReds.value) {
+  } else if (props.data.isChainSource && !hasReds.value) {
     classes.push('bg-green-500');
   } else {
     classes.push(getBorderBgClass(props.data.type));
@@ -1010,7 +1010,7 @@ function lockCore(core: string) {
         class="text-white text-xs text-center min-w-[400px] min-h-[400px] relative transition-all duration-300"
         :class="[
           hasReds ? 'red-glow' : '',
-          props.data.isHome ? 'home-glow' : '',
+          props.data.isChainSource ? 'home-glow' : '',
           props.data.highlighted ? 'goto-glow-animation' : '',
           isPinged ? 'ping-animation' : '',
           props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',
@@ -1157,7 +1157,7 @@ function lockCore(core: string) {
             <ZoneHeader
               :id="props.id" 
               :zone-name="props.data.zoneName" 
-              :is-home="props.data.isHome" 
+              :is-chain-source="props.data.isChainSource" 
               :type="props.data.type as ZoneType" 
               :category="props.data.category"
               :map-shape="props.data.mapShape"
@@ -1252,7 +1252,7 @@ function lockCore(core: string) {
       >Pull on this handle to add a zone</BluePrompt>
 
       <!-- Room Memory Button (bottom tip) -->
-      <div class="absolute left-1/2 -translate-x-1/2 bottom-5 flex items-center justify-center" :class="Z_INDEX.CONTENT_LOW" v-if="!props.data.isHome">
+      <div class="absolute left-1/2 -translate-x-1/2 bottom-5 flex items-center justify-center" :class="Z_INDEX.CONTENT_LOW" v-if="!props.data.isChainSource">
         <RoomMemoryButton :entry="memoryEntry ?? null" :zone-name="props.data.zoneName || props.id" :zone-id="props.id" :has-rotation-error="store.rotationErrors.includes(props.id)" />
       </div>
       

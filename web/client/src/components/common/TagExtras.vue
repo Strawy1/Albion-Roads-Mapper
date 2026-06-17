@@ -35,7 +35,7 @@ function formatLastSeen(isoDate: string): string {
       </TooltipTrigger>
       <TooltipPortal>
         <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]">
-          <template v-if="isHomeZone">Your hideout zone</template>
+          <template v-if="isHomeZone">Your home zone</template>
           <template v-else>Last seen: {{ formatLastSeen(memoryEntry!.timesAdded[memoryEntry!.timesAdded.length - 1]) }}</template>
         </TooltipContent>
       </TooltipPortal>

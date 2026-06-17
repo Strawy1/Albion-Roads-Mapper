@@ -196,7 +196,7 @@ async function createRoom() {
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-1">Home Zone</label>
-          <ZoneCombobox :key="createFormKey" v-model="createHomeZoneId" placeholder="Search home zone…" only-roads-hideout />
+          <ZoneCombobox :key="createFormKey" v-model="createHomeZoneId" placeholder="Search home zone…" />
         </div>
         <p v-if="createError" class="text-red-400 text-sm">{{ createError }}</p>
         <button

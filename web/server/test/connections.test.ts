@@ -20,6 +20,8 @@ beforeEach(() => {
 describe('POST /api/rooms/:id/connections', () => {
   it('creates a connection and returns it', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT connection
     
@@ -41,6 +43,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects same-zone connections', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -54,6 +58,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects unknown fromZoneId', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -67,6 +73,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects unknown toZoneId', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -80,6 +88,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects secondsRemaining = 0', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -92,6 +102,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects secondsRemaining > 86400', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -104,6 +116,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects connection that creates a cycle', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     // Return an existing connection: VALID_ZONE_B -> VALID_ZONE_A
     mockDb.query.mockResolvedValueOnce({ rows: [{ 
       id: 'conn-1', 
@@ -131,6 +145,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects connection when source handle is already occupied', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [{
       id: 'conn-existing',
       room_id: roomId,
@@ -155,6 +171,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects connection when fromHandleId is disabled', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-1', left: '50%', top: '0%', disabled: true }] }] }); // from-zone handles
 
@@ -170,6 +188,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects connection when toHandleId is disabled', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-from', left: '50%', top: '0%' }] }] }); // from-zone handles (not disabled)
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-2', left: '50%', top: '100%', disabled: true }] }] }); // to-zone handles
@@ -187,6 +207,8 @@ describe('POST /api/rooms/:id/connections', () => {
   it('instantly creates a connection between two existing nodes using preexisting handle and time details', async () => {
     // Simulates the "replace occupied" flow: no targetPosition, specific handles, secondsRemaining derived from old connection
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // toZoneId chain lookup (same chain)
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check (old ones already deleted)
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-src', left: '50%', top: '0%' }] }] }); // from-zone handles
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-dst', left: '50%', top: '100%' }] }] }); // to-zone handles
@@ -216,6 +238,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('allows connection when handles exist but are not disabled', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-from', left: '50%', top: '0%' }] }] }); // from-zone handles
     mockDb.query.mockResolvedValueOnce({ rows: [{ custom_handles: [{ id: 'handle-to', left: '50%', top: '100%' }] }] }); // to-zone handles
@@ -244,6 +268,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects when slots is missing', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -257,6 +283,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('rejects when slots is an invalid value', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     const res = await app.inject({
       method: 'POST',
@@ -270,6 +298,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('creates a connection with slots=7 and stores it in node features', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory check (no existing memory)
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position (target)
@@ -296,6 +326,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
   it('creates a connection with slots=20 and stores it in node features', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory check (no existing memory)
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position (target)
@@ -332,6 +364,8 @@ describe('POST /api/rooms/:id/connections', () => {
     ];
 
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ features: { slots: 7 }, custom_handles: staleHandles }] }); // memory check
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position
@@ -382,6 +416,8 @@ describe('POST /api/rooms/:id/connections', () => {
     ];
 
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ features: { slots: 7 }, custom_handles: movedHandles }] }); // memory check
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position
@@ -433,6 +469,8 @@ describe('POST /api/rooms/:id/connections', () => {
     ];
 
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ features: { slots: 7 }, custom_handles: staleHandles }] }); // memory check
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position
@@ -490,6 +528,8 @@ describe('POST /api/rooms/:id/connections', () => {
     ];
 
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ features: { slots: 7 }, custom_handles: staleHandles }] }); // memory check (returns stale)
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position
@@ -546,6 +586,8 @@ describe('POST /api/rooms/:id/connections', () => {
     ];
 
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rows: [{ features: { slots: 7 }, custom_handles: rotatedHandles, rotation: 2 }] }); // memory check
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position
@@ -591,6 +633,8 @@ describe('POST /api/rooms/:id/connections', () => {
     mockDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
     mockDb.query
       .mockResolvedValueOnce({ rows: [{ id: roomId }] }) // SELECT id FROM rooms
+      .mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }) // fromZoneId chain lookup
+      .mockResolvedValueOnce({ rows: [] }) // toZoneId chain lookup
       .mockResolvedValueOnce({ rows: [] }) // SELECT * FROM connections
       .mockResolvedValueOnce({ rows: [] }) // memoryCheck
       .mockResolvedValueOnce({ rows: [] }) // INSERT room_node_positions
@@ -617,6 +661,8 @@ describe('POST /api/rooms/:id/connections', () => {
     mockDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
     mockDb.query
       .mockResolvedValueOnce({ rows: [{ id: roomId }] }) // SELECT id FROM rooms
+      .mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }) // fromZoneId chain lookup
+      .mockResolvedValueOnce({ rows: [] }) // toZoneId chain lookup
       .mockResolvedValueOnce({ rows: [] }) // SELECT * FROM connections
       .mockResolvedValueOnce({ rows: [{
         features: { resources: ['ore'] },
@@ -665,6 +711,8 @@ describe('POST /api/rooms/:id/connections', () => {
 
     // Mock room check
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // SELECT id FROM rooms
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     // Mock connections check (no cycles)
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // SELECT * FROM connections
     // Mock memory check (no existing memory)
@@ -837,13 +885,15 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
     // Query 3: SELECT from rooms
     mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: zoneA }] });
-    // Loop for zoneA (skipped)
+    // Query 4: SELECT source_zone_id FROM room_chains
+    mockDb.query.mockResolvedValueOnce({ rows: [{ source_zone_id: zoneA }] });
+    // Loop for zoneA (skipped, chain source)
     // Loop for zoneB:
-    // Query 4: SELECT 1 FROM connections
+    // Query 5: SELECT 1 FROM connections
     mockDb.query.mockResolvedValueOnce({ rows: [] });
-    // Query 5: DELETE FROM room_node_positions
+    // Query 6: DELETE FROM room_node_positions
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-    // Query 6: SELECT from room_node_positions (for broadcast)
+    // Query 7: SELECT from room_node_positions (for broadcast)
     mockDb.query.mockResolvedValueOnce({ rows: [] });
 
     const res = await app.inject({
@@ -852,6 +902,46 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(204);
+  });
+
+  it('protects a secondary chain source from being deleted as an orphan', async () => {
+    // Scenario from the issue: a secondary chain has only one connection,
+    // from its source (zoneB) to a downstream zone (zoneA-like). Deleting
+    // that connection must NOT delete the chain-source node, only the
+    // downstream zone.
+    const sourceZone = VALID_ZONE_B; // secondary chain source
+    const downstreamZone = 'cetitos-aiayrom'; // unrelated downstream zone
+    const homeZone = VALID_ZONE_A; // primary chain home
+    const connId = 'conn-secondary';
+
+    // SELECT from connections
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: connId, from_zone_id: sourceZone, to_zone_id: downstreamZone }] });
+    // DELETE from connections
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+    // SELECT from rooms — different primary home
+    mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: homeZone }] });
+    // SELECT source_zone_id FROM room_chains — primary + secondary
+    mockDb.query.mockResolvedValueOnce({ rows: [{ source_zone_id: homeZone }, { source_zone_id: sourceZone }] });
+    // Loop: zoneB (sourceZone) → SKIPPED because it's a chain source.
+    // Loop: downstreamZone → orphan check + delete
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // SELECT 1 FROM connections — none
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM room_node_positions
+    // SELECT from room_node_positions (for broadcast)
+    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: sourceZone, x: 0, y: 0, features: {}, custom_handles: null, chain_id: 'chain-secondary' }] });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections/${connId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(204);
+
+    // Assert: no DELETE was issued for the chain-source zone, only for the downstream zone.
+    const deletePositionCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_positions')
+    );
+    expect(deletePositionCalls).toHaveLength(1);
+    expect(deletePositionCalls[0][1]).toEqual([roomId, downstreamZone]);
   });
 });
 
@@ -902,6 +992,8 @@ describe('DELETE /api/rooms/:id/connections (Reset)', () => {
 describe('Connection lastUpdatedAt refresh', () => {
   it('updates lastUpdatedAt for source and target zones on POST', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections check
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT node position (target)
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE node position (source)
@@ -954,5 +1046,38 @@ describe('Connection lastUpdatedAt refresh', () => {
     expect(updateCall).toBeDefined();
     expect(updateCall[1]).toContain(VALID_ZONE_A);
     expect(updateCall[1]).toContain(VALID_ZONE_B);
+  });
+});
+
+describe('Cross-chain rejection', () => {
+  it('rejects a connection whose target zone belongs to a different chain', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'chain-A' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'chain-B' }] }); // toZoneId chain lookup (different chain)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fromZoneId: VALID_ZONE_A, toZoneId: VALID_ZONE_B, secondsRemaining: 1800, slots: 7 },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/different chains/i);
+  });
+
+  it('rejects a connection whose source zone has no chain (orphaned)', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // fromZoneId chain lookup — no row
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fromZoneId: VALID_ZONE_A, toZoneId: VALID_ZONE_B, secondsRemaining: 1800, slots: 7 },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/not part of any chain/i);
   });
 });

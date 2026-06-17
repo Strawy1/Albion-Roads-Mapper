@@ -105,14 +105,15 @@ describe('POST /api/rooms', () => {
     expect(res.json<{ error: string }>().error).toMatch(/zone catalogue/i);
   });
 
-  it('rejects when homeZoneId is not a roads home', async () => {
+  it('accepts any catalogue zone as homeZoneId (relaxed from roads-hideout-only)', async () => {
+    // After the multi-chain refactor, a room may be rooted at any zone in the catalogue,
+    // not only roads hideouts. Only zones missing from the catalogue are rejected.
     const res = await app.inject({
       method: 'POST',
       url: '/api/rooms',
       payload: { password: 'secret', adminPassword: 'admin', homeZoneId: 'willow-wood', vanityUrl: 'my-room' },
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ error: string }>().error).toMatch(/not a valid roads home/i);
+    expect([201, 409]).toContain(res.statusCode);
   });
 });
 

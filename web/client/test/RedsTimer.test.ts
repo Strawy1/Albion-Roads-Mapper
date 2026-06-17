@@ -12,7 +12,7 @@ describe('Reds Timer Logic', () => {
         type: 'zone',
         data: {
           type: 'roads',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Test Zone',
           features

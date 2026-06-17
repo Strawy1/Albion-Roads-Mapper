@@ -18,6 +18,7 @@ const emit = defineEmits<{
   (e: 'openDebug'): void;
   (e: 'plotRoute'): void;
   (e: 'clearRoute'): void;
+  (e: 'addChain'): void;
 }>();
 
 const searchActive = ref(false);
@@ -63,6 +64,24 @@ function onPlotRouteClick() {
             class="bg-black/90 text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]"
             :side="tooltipSide"
           >Fit view</TooltipContent>
+        </TooltipPortal>
+      </TooltipRoot>
+    </TooltipProvider>
+
+    <!-- Add Chain button: next to fit-view -->
+    <TooltipProvider :delay-duration="0">
+      <TooltipRoot>
+        <TooltipTrigger as-child>
+          <button
+            class="add-chain-btn w-12 h-12 items-center justify-center rounded-full frosted-button text-xl shadow-lg transition-colors flex-shrink-0"
+            @click="emit('addChain')"
+          >⛓️</button>
+        </TooltipTrigger>
+        <TooltipPortal>
+          <TooltipContent
+            class="bg-black/90 text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]"
+            :side="tooltipSide"
+          >Add chain</TooltipContent>
         </TooltipPortal>
       </TooltipRoot>
     </TooltipProvider>
@@ -122,6 +141,21 @@ function onPlotRouteClick() {
 }
 @media (min-width: 768px) and (min-height: 501px) {
   .fit-view-btn {
+    display: flex;
+  }
+}
+
+/* Add-chain button: matches fit-view visibility rules */
+.add-chain-btn {
+  display: none;
+}
+@media (min-width: 768px) and (min-height: 501px) {
+  .add-chain-btn {
+    display: flex;
+  }
+}
+@media (max-width: 1200px) and (max-height: 500px) {
+  .add-chain-btn {
     display: flex;
   }
 }

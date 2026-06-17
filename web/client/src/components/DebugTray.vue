@@ -41,6 +41,33 @@ const debugEdges = computed(() =>
   ),
 );
 
+// Group zones by their stored chainId (server now stamps every node with its
+// chain_id and surfaces it in the sync payload). Primary chain first.
+const chainGroups = computed(() => {
+  const ordered = [...store.chains].sort((a, b) => {
+    if (a.sourceZoneId === store.homeZoneId) return -1;
+    if (b.sourceZoneId === store.homeZoneId) return 1;
+    return a.sourceZoneId.localeCompare(b.sourceZoneId);
+  });
+  return ordered.map(chain => {
+    const zones = store.nodePositions
+      .filter(p => p.chainId === chain.id)
+      .map(p => p.zoneId)
+      // Source zone first, rest alphabetical for stable ordering.
+      .sort((a, b) => {
+        if (a === chain.sourceZoneId) return -1;
+        if (b === chain.sourceZoneId) return 1;
+        return a.localeCompare(b);
+      });
+    return {
+      id: chain.id,
+      sourceZoneId: chain.sourceZoneId,
+      isPrimary: chain.sourceZoneId === store.homeZoneId,
+      zones,
+    };
+  });
+});
+
 async function addDemo() {
   const demoData = [
     { from: 'touos-ataglos', to: 'qiient-in-odetum', minutes: 64 },
@@ -116,6 +143,7 @@ async function exportNodes() {
     connections: store.connections,
     homeZoneId: store.homeZoneId,
     nodePositions: store.nodePositions,
+    chains: store.chains,
     roomHistory: Array.from(memoryStore.memory.values())
   }, null, 2);
   try {
@@ -160,6 +188,36 @@ async function exportNodes() {
               <details v-for="(node, index) in debugNodes" :key="index" :class="['rounded', (node as any).id === store.homeZoneId ? 'bg-green-950' : 'bg-gray-950']">
                 <summary class="p-2 cursor-pointer">{{ (node as any).id || `Node ${index}` }}</summary>
                 <pre class="p-2 overflow-x-auto whitespace-pre-wrap break-all">{{ JSON.stringify(node, null, 2) }}</pre>
+              </details>
+            </div>
+          </details>
+          <details class="bg-gray-800 rounded-lg">
+            <summary class="p-3 font-sans font-bold cursor-pointer">Chains ({{ chainGroups.length }})</summary>
+            <div class="p-3 space-y-2">
+              <div v-if="chainGroups.length === 0" class="text-gray-500 text-xs p-2">No chains.</div>
+              <details
+                v-for="chain in chainGroups"
+                :key="chain.id"
+                :class="['rounded', chain.isPrimary ? 'bg-green-950' : 'bg-gray-950']"
+                open
+              >
+                <summary class="p-2 cursor-pointer flex items-center justify-between gap-2">
+                  <span class="truncate">
+                    <span class="text-gray-400">{{ chain.isPrimary ? '★ primary' : 'chain' }}</span>
+                    · root <span class="text-white">{{ chain.sourceZoneId }}</span>
+                    <span class="text-gray-500">({{ chain.zones.length }} zone{{ chain.zones.length === 1 ? '' : 's' }})</span>
+                  </span>
+                  <span class="text-gray-600 text-[10px] shrink-0">{{ chain.id }}</span>
+                </summary>
+                <ul class="p-2 pl-4 space-y-0.5">
+                  <li
+                    v-for="zoneId in chain.zones"
+                    :key="zoneId"
+                    :class="zoneId === chain.sourceZoneId ? 'text-green-300' : 'text-gray-300'"
+                  >
+                    {{ zoneId === chain.sourceZoneId ? '⛓️ ' : '• ' }}{{ zoneId }}
+                  </li>
+                </ul>
               </details>
             </div>
           </details>

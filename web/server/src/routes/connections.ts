@@ -19,6 +19,7 @@ interface DbConnection {
   expires_at: string;
   reported_at: string;
   reported_by: string | null;
+  chain_id: string | null;
 }
 
 function dbRowToConnection(row: DbConnection): Connection {
@@ -32,6 +33,7 @@ function dbRowToConnection(row: DbConnection): Connection {
     expiresAt: row.expires_at,
     reportedAt: row.reported_at,
     reportedBy: row.reported_by ?? undefined,
+    chainId: row.chain_id ?? undefined,
   };
 }
 
@@ -101,6 +103,25 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
 
     if (!ZONE_BY_ID.has(toZoneId)) {
       return reply.status(400).send({ error: 'toZoneId not found in zone catalogue' });
+    }
+
+    // Resolve chain membership for fromZoneId; it must already be on the map and tagged with a chain.
+    const { rows: fromChainRows } = await app.db.query<{ chain_id: string | null }>(
+      'SELECT chain_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+      [id, fromZoneId]
+    );
+    if (fromChainRows.length === 0 || !fromChainRows[0].chain_id) {
+      return reply.status(400).send({ error: 'Source zone is not part of any chain in this room' });
+    }
+    const sourceChainId = fromChainRows[0].chain_id;
+
+    // Reject cross-chain bridges: if toZoneId already exists on the map under a different chain.
+    const { rows: toChainRows } = await app.db.query<{ chain_id: string | null }>(
+      'SELECT chain_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+      [id, toZoneId]
+    );
+    if (toChainRows[0] && toChainRows[0].chain_id && toChainRows[0].chain_id !== sourceChainId) {
+      return reply.status(400).send({ error: 'Connections may not bridge two different chains' });
     }
 
     const { rows: dbConnections } = await app.db.query<DbConnection>(
@@ -198,10 +219,10 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       }
 
       await app.db.query(`
-        INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, explored, rotation)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (room_id, zone_id) DO UPDATE SET x = EXCLUDED.x, y = EXCLUDED.y, features = EXCLUDED.features, custom_handles = EXCLUDED.custom_handles, rotation = EXCLUDED.rotation
-      `, [id, toZoneId, targetPosition.x, targetPosition.y, JSON.stringify(initialFeatures), JSON.stringify(initialHandles), false, initialRotation]);
+        INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, explored, rotation, chain_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (room_id, zone_id) DO UPDATE SET x = EXCLUDED.x, y = EXCLUDED.y, features = EXCLUDED.features, custom_handles = EXCLUDED.custom_handles, rotation = EXCLUDED.rotation, chain_id = COALESCE(room_node_positions.chain_id, EXCLUDED.chain_id)
+      `, [id, toZoneId, targetPosition.x, targetPosition.y, JSON.stringify(initialFeatures), JSON.stringify(initialHandles), false, initialRotation, sourceChainId]);
 
       if (isNewNonRoadsZone) {
         trackZoneAdded(app.db, id, false); // non-roads zone newly discovered
@@ -276,19 +297,20 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       WHERE room_id = $2 AND zone_id = $3
     `, [JSON.stringify(lastUpdateMs), id, fromZoneId]);
 
-    const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number }>(
-      'SELECT zone_id, x, y, features, custom_handles, rotation FROM room_node_positions WHERE room_id = $1',
+    const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; chain_id: string | null }>(
+      'SELECT zone_id, x, y, features, custom_handles, rotation, chain_id FROM room_node_positions WHERE room_id = $1',
       [id]
     );
-    const nodePositions = positions.map(p => ({ 
-      zoneId: p.zone_id, 
-      x: p.x, 
+    const nodePositions = positions.map(p => ({
+      zoneId: p.zone_id,
+      x: p.x,
       y: p.y,
       features: p.features,
       customHandles: p.custom_handles,
       rotation: p.rotation,
+      chainId: p.chain_id ?? undefined,
     }));
-    
+
     broadcast(id, { type: 'node_positions_updated', nodePositions });
     trackRoomModified(app.db, id);
 
@@ -297,9 +319,9 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
     const expiresAt = new Date(now.getTime() + secondsRemaining * 1000).toISOString();
 
     await app.db.query(`
-      INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [connId, id, fromZoneId, toZoneId, fromHandleId ?? null, toHandleId ?? null, expiresAt, reportedAt, reportedBy ?? null]);
+      INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [connId, id, fromZoneId, toZoneId, fromHandleId ?? null, toHandleId ?? null, expiresAt, reportedAt, reportedBy ?? null, sourceChainId]);
 
     const connection: Connection = {
       id: connId,
@@ -311,6 +333,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       expiresAt,
       reportedAt,
       reportedBy: reportedBy ?? undefined,
+      chainId: sourceChainId,
     };
 
     broadcast(id, { type: 'connection_added', connection });
@@ -350,11 +373,18 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       );
       const room = rooms[0];
 
+      const { rows: chainRows } = await app.db.query<{ source_zone_id: string }>(
+        'SELECT source_zone_id FROM room_chains WHERE room_id = $1',
+        [id]
+      );
+      const chainSourceZoneIds = new Set<string>(chainRows.map(r => r.source_zone_id));
+      if (room?.home_zone_id) chainSourceZoneIds.add(room.home_zone_id);
+
       const zonesToCheck = [conn.from_zone_id, conn.to_zone_id];
       let positionsUpdated = false;
 
       for (const zoneId of zonesToCheck) {
-        if (zoneId === room.home_zone_id) continue;
+        if (chainSourceZoneIds.has(zoneId)) continue;
 
         const { rows: connections } = await app.db.query(
           'SELECT 1 FROM connections WHERE room_id = $1 AND (from_zone_id = $2 OR to_zone_id = $2)',
@@ -372,16 +402,17 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       broadcast(id, { type: 'connection_removed', connectionId: connId });
 
       if (positionsUpdated) {
-        const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any }>(
-          'SELECT zone_id, x, y, features, custom_handles FROM room_node_positions WHERE room_id = $1',
+        const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; chain_id: string | null }>(
+          'SELECT zone_id, x, y, features, custom_handles, chain_id FROM room_node_positions WHERE room_id = $1',
           [id]
         );
-        const nodePositions = positions.map(p => ({ 
-          zoneId: p.zone_id, 
-          x: p.x, 
+        const nodePositions = positions.map(p => ({
+          zoneId: p.zone_id,
+          x: p.x,
           y: p.y,
           features: p.features,
-          customHandles: p.custom_handles 
+          customHandles: p.custom_handles,
+          chainId: p.chain_id ?? undefined,
         }));
         
         broadcast(id, { type: 'node_positions_updated', nodePositions });
@@ -419,13 +450,21 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'Cannot delete the home zone' });
       }
 
+      const { rows: chainSourceRows } = await app.db.query(
+        'SELECT 1 FROM room_chains WHERE room_id = $1 AND source_zone_id = $2',
+        [id, zoneId]
+      );
+      if (chainSourceRows.length > 0) {
+        return reply.status(400).send({ error: 'Cannot delete a chain source zone' });
+      }
+
       await app.db.query(
         'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
         [id, zoneId]
       );
 
-      const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number }>(
-        'SELECT zone_id, x, y, features, custom_handles, rotation FROM room_node_positions WHERE room_id = $1',
+      const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; chain_id: string | null }>(
+        'SELECT zone_id, x, y, features, custom_handles, rotation, chain_id FROM room_node_positions WHERE room_id = $1',
         [id]
       );
       const nodePositions = positions.map(p => ({
@@ -435,6 +474,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         features: p.features,
         customHandles: p.custom_handles,
         rotation: p.rotation,
+        chainId: p.chain_id ?? undefined,
       }));
 
       broadcast(id, { type: 'node_positions_updated', nodePositions });
@@ -521,8 +561,8 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
           WHERE room_id = $2 AND zone_id IN ($3, $4)
         `, [JSON.stringify(lastUpdateMs), actualId, conn.from_zone_id, conn.to_zone_id]);
 
-        const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number }>(
-          'SELECT zone_id, x, y, features, custom_handles, rotation FROM room_node_positions WHERE room_id = $1',
+        const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; chain_id: string | null }>(
+          'SELECT zone_id, x, y, features, custom_handles, rotation, chain_id FROM room_node_positions WHERE room_id = $1',
           [actualId]
         );
         const nodePositions = positions.map(p => ({
@@ -532,6 +572,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
           features: p.features,
           customHandles: p.custom_handles,
           rotation: p.rotation,
+          chainId: p.chain_id ?? undefined,
         }));
 
         broadcast(actualId, { type: 'node_positions_updated', nodePositions });

@@ -48,14 +48,14 @@ const BASE_PROPS = {
   events: {} as any,
 };
 
-function mountZoneNode(id: string, isHome: boolean, now: number) {
+function mountZoneNode(id: string, isChainSource: boolean, now: number) {
   return mount(ZoneNode as any, {
     props: {
       ...BASE_PROPS,
       id,
       data: {
         type: 'roads',
-        isHome,
+        isChainSource,
         tier: 5,
         zoneName: 'Test Zone',
       },

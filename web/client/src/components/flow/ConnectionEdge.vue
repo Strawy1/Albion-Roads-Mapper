@@ -217,7 +217,7 @@ const isTargetUnexplored = computed(() => {
   if (props.targetNode?.type === 'non-roads') return false;
   const d = props.targetNode?.data as any;
   if (!d) return false;
-  if (d.isHome || d.isGhost) return false;
+  if (d.isChainSource || d.isGhost) return false;
   if (props.data?.connection?.toHandleId === 'center') return true;
   return !d.explored;
 });

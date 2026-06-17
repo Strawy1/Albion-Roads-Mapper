@@ -24,7 +24,7 @@ describe('Node Deletion', () => {
         type: 'non-roads',
         data: {
           type: 'royalBlue',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Test Zone',
           features: {},
@@ -71,7 +71,7 @@ describe('Node Deletion', () => {
           zoneName: 'Test Zone',
           features: {},
           type: 'royalBlue',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
         },
         selected: false,

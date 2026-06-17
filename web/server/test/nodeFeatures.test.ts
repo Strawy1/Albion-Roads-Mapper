@@ -79,8 +79,10 @@ describe('Auto-pre-population in routes', () => {
     const roomId = 'test-room-id';
     const token = app.jwt.sign({ roomId });
 
-    // Mock room existence
+    // Mock room existence + chain lookups
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain
 
     await app.inject({
       method: 'POST',
@@ -128,6 +130,8 @@ describe('Auto-pre-population in routes', () => {
     // Mock: room exists, connections check (empty), memory check returns an entry with features+handles
     mockDb.query
       .mockResolvedValueOnce({ rows: [{ id: roomId }] })                          // room lookup
+      .mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] })           // fromZoneId chain lookup
+      .mockResolvedValueOnce({ rows: [] })                                        // toZoneId chain lookup
       .mockResolvedValueOnce({ rows: [] })                                        // connections check (cycle detection)
       .mockResolvedValueOnce({ rows: [{ features: memoryFeatures, custom_handles: memoryHandles }] }) // memory check
       .mockResolvedValue({ rows: [], rowCount: 0 });                              // all subsequent queries

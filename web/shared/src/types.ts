@@ -56,6 +56,7 @@ export interface Connection {
   isExpired?: boolean;
   startHandle?: HandleCoordinates;
   endHandle?: HandleCoordinates;
+  chainId?: string;
 }
 
 export interface NodePosition {
@@ -68,6 +69,7 @@ export interface NodePosition {
   rotation?: number;
   proximityTo?: string;
   explored?: boolean;
+  chainId?: string;
 }
 
 export interface CustomHandle {
@@ -183,6 +185,7 @@ export const ConnectionSchema = z.object({
   expiresAt: z.string().datetime(),
   reportedAt: z.string().datetime(),
   reportedBy: z.string().optional(),
+  chainId: z.string().nullable().optional(),
   startHandle: z.object({
     position: z.object({ x: z.number(), y: z.number() }),
   }).optional(),
@@ -239,6 +242,12 @@ export const ChangePasswordBodySchema = z.object({
   adminPassword: z.string().min(1),
 });
 
+export const AddChainBodySchema = z.object({
+  sourceZoneId: z.string().min(1),
+});
+
+export type RoomChain = { id: string; sourceZoneId: string };
+
 export const ResourceEntrySchema = z.object({
   type: z.enum(['fibre', 'leather', 'ore', 'stone', 'wood']),
   small: z.number().optional(),
@@ -288,6 +297,7 @@ export const NodePositionSchema = z.object({
   customHandles: z.array(CustomHandleSchema).nullable().optional(),
   rotation: z.number().optional(),
   explored: z.boolean().optional(),
+  chainId: z.string().nullable().optional(),
 });
 
 export const RoomMemoryEntrySchema = z.object({
@@ -311,16 +321,21 @@ export const ImportRoomBodySchema = z.object({
       expiresAt: z.string().datetime(),
       reportedAt: z.string().datetime().optional(),
       reportedBy: z.string().optional(),
+      chainId: z.string().nullable().optional(),
   })),
   nodePositions: z.array(NodePositionSchema),
   roomHistory: z.array(RoomMemoryEntrySchema).optional(),
+  chains: z.array(z.object({
+    id: z.string().optional(),
+    sourceZoneId: z.string(),
+  })).optional(),
 });
 
 // ── WebSocket message types ───────────────────────────────────────────────────
 
 export type ServerMessage =
   | { type: 'auth_ok' }
-  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[] }
+  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; chains?: RoomChain[] }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
   | { type: 'connection_removed'; connectionId: string }
@@ -337,6 +352,9 @@ export type ServerMessage =
   | { type: 'plot_route_updated'; plottedRoute: string[]; destinationZoneId?: string }
   | { type: 'password_rotated' }
   | { type: 'room_deleted' }
+  | { type: 'force_reload' }
+  | { type: 'chain_added'; chain: RoomChain }
+  | { type: 'chain_removed'; chainId: string; removedZoneIds: string[]; removedConnectionIds: string[] }
   | { type: 'session_expired'; reason: string }
   | { type: 'error'; message: string };
 

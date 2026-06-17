@@ -6,6 +6,7 @@ import {
   CreateRoomBodySchema,
   AuthRoomBodySchema,
   ChangePasswordBodySchema,
+  AddChainBodySchema,
   ImportRoomBodySchema,
   ZONE_BY_ID,
 } from 'shared';
@@ -71,10 +72,6 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: 'homeZoneId not found in zone catalogue' });
     }
 
-    if (!zone.isRoadsHome) {
-      return reply.status(400).send({ error: 'homeZoneId is not a valid roads home' });
-    }
-
     const id = vanityUrl;
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const adminPasswordHash = await bcrypt.hash(adminPassword, BCRYPT_ROUNDS);
@@ -93,14 +90,21 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       }
 
       await client.query(`
-        INSERT INTO rooms (id, password_hash, admin_password_hash, home_zone_id, title, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO rooms (id, password_hash, admin_password_hash, home_zone_id, title, created_at, chain_migrated)
+        VALUES ($1, $2, $3, $4, $5, $6, true)
       `, [id, passwordHash, adminPasswordHash, homeZoneId, title || null, createdAt]);
 
+      // Seed the primary chain for the new room
+      const primaryChainId = nanoid();
+      await client.query(
+        'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
+        [primaryChainId, id, homeZoneId, createdAt]
+      );
+
       await client.query(`
-        INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, rotation)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [id, homeZoneId, 0, 0, JSON.stringify(getInitialFeatures(homeZoneId)), JSON.stringify(null), 0]);
+        INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, rotation, chain_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [id, homeZoneId, 0, 0, JSON.stringify(getInitialFeatures(homeZoneId)), JSON.stringify(null), 0, primaryChainId]);
 
       await client.query(`
         INSERT INTO room_node_memory (room_id, zone_id, features, times_added, rotation)
@@ -193,6 +197,181 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     trackPasswordRotated(app.db);
 
     return reply.send({ ok: true });
+  });
+
+  // POST /api/rooms/:id/chains — add a new chain rooted at sourceZoneId
+  app.post<{ Params: { id: string } }>('/api/rooms/:id/chains', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    const parsed = AddChainBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+    const { sourceZoneId } = parsed.data;
+
+    const zone = ZONE_BY_ID.get(sourceZoneId);
+    if (!zone) {
+      return reply.status(400).send({ error: 'sourceZoneId not found in zone catalogue' });
+    }
+
+    const { rows: roomRows } = await app.db.query<{ id: string }>(
+      'SELECT id FROM rooms WHERE id = $1',
+      [id]
+    );
+    if (!roomRows[0]) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    // Reject if this zone already belongs to a chain in this room
+    const { rows: existingNode } = await app.db.query<{ chain_id: string | null }>(
+      'SELECT chain_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+      [id, sourceZoneId]
+    );
+    if (existingNode[0] && existingNode[0].chain_id) {
+      return reply.status(409).send({ error: 'Zone is already part of an existing chain' });
+    }
+
+    const chainId = nanoid();
+    const createdAt = new Date().toISOString();
+    let insertedNode = false;
+
+    const client = await app.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(
+        'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
+        [chainId, id, sourceZoneId, createdAt]
+      );
+
+      if (existingNode.length === 0) {
+        await client.query(
+          'INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, rotation, chain_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [id, sourceZoneId, 0, 0, JSON.stringify(getInitialFeatures(sourceZoneId)), JSON.stringify(null), 0, chainId]
+        );
+        await client.query(
+          'INSERT INTO room_node_memory (room_id, zone_id, features, times_added, rotation) VALUES ($1, $2, $3, ARRAY[$4::timestamptz], $5) ON CONFLICT (room_id, zone_id) DO NOTHING',
+          [id, sourceZoneId, JSON.stringify(getInitialFeatures(sourceZoneId)), createdAt, 0]
+        );
+        insertedNode = true;
+      } else {
+        // Backfill chain_id on the existing isolated node row
+        await client.query(
+          'UPDATE room_node_positions SET chain_id = $1 WHERE room_id = $2 AND zone_id = $3',
+          [chainId, id, sourceZoneId]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      client.release();
+      throw e;
+    }
+    client.release();
+
+    broadcast(id, { type: 'chain_added', chain: { id: chainId, sourceZoneId } });
+
+    if (insertedNode) {
+      const { rows: nodePosRows } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean }>(
+        'SELECT zone_id, x, y, features, custom_handles, rotation, explored FROM room_node_positions WHERE room_id = $1',
+        [id]
+      );
+      const nodePositions = nodePosRows.map((row) => ({
+        zoneId: row.zone_id,
+        x: row.x,
+        y: row.y,
+        features: row.features,
+        customHandles: row.custom_handles,
+        rotation: row.rotation ?? 0,
+        explored: row.explored ?? false,
+      }));
+      broadcast(id, { type: 'node_positions_updated', nodePositions });
+    }
+
+    trackRoomModified(app.db, id);
+
+    return reply.status(201).send({ chain: { id: chainId, sourceZoneId } });
+  });
+
+  // DELETE /api/rooms/:id/chains/:chainId — remove a chain and all its zones/connections
+  app.delete<{ Params: { id: string; chainId: string } }>('/api/rooms/:id/chains/:chainId', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id, chainId } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+
+    const { rows: roomRows } = await app.db.query<{ home_zone_id: string }>(
+      'SELECT home_zone_id FROM rooms WHERE id = $1',
+      [id]
+    );
+    const room = roomRows[0];
+    if (!room) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    const { rows: chainRows } = await app.db.query<{ id: string; source_zone_id: string }>(
+      'SELECT id, source_zone_id FROM room_chains WHERE id = $1 AND room_id = $2',
+      [chainId, id]
+    );
+    const chain = chainRows[0];
+    if (!chain) {
+      return reply.status(404).send({ error: 'Chain not found' });
+    }
+    if (chain.source_zone_id === room.home_zone_id) {
+      return reply.status(400).send({ error: 'Cannot delete the primary chain' });
+    }
+
+    let removedZoneIds: string[] = [];
+    let removedConnectionIds: string[] = [];
+
+    const client = await app.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { rows: connRows } = await client.query<{ id: string }>(
+        'SELECT id FROM connections WHERE room_id = $1 AND chain_id = $2',
+        [id, chainId]
+      );
+      removedConnectionIds = connRows.map((r) => r.id);
+
+      const { rows: posRows } = await client.query<{ zone_id: string }>(
+        'SELECT zone_id FROM room_node_positions WHERE room_id = $1 AND chain_id = $2',
+        [id, chainId]
+      );
+      removedZoneIds = posRows.map((r) => r.zone_id);
+
+      await client.query('DELETE FROM connections WHERE room_id = $1 AND chain_id = $2', [id, chainId]);
+      await client.query('DELETE FROM room_node_positions WHERE room_id = $1 AND chain_id = $2', [id, chainId]);
+      if (removedZoneIds.length > 0) {
+        await client.query(
+          'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = ANY($2::text[])',
+          [id, removedZoneIds]
+        );
+      }
+      await client.query('DELETE FROM room_chains WHERE id = $1 AND room_id = $2', [chainId, id]);
+      await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      client.release();
+      throw e;
+    }
+    client.release();
+
+    broadcast(id, { type: 'chain_removed', chainId, removedZoneIds, removedConnectionIds });
+    trackRoomModified(app.db, id);
+
+    return reply.status(204).send();
   });
 
   // DELETE /api/rooms/:id/connections — reset (delete all connections in room)
@@ -367,40 +546,123 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: formatZodError(parsed.error) });
     }
 
-    const { homeZoneId, connections, nodePositions, roomHistory } = parsed.data;
+    const { homeZoneId, connections, nodePositions, roomHistory, chains: importedChains } = parsed.data;
 
     // Validate homeZoneId
     const zone = ZONE_BY_ID.get(homeZoneId);
-    if (!zone || zone.type !== 'roadsHideout') {
-      return reply.status(400).send({ error: 'Invalid hideout zone' });
+    if (!zone) {
+      return reply.status(400).send({ error: 'homeZoneId not found in zone catalogue' });
     }
+
+    // Build the list of chains to materialize. If the export carried `chains`,
+    // honour them (multi-chain round-trip); otherwise fall back to a single
+    // primary chain rooted at homeZoneId (back-compat with pre-multi-chain
+    // exports). The primary chain is always the one whose sourceZoneId matches
+    // homeZoneId; if the import doesn't include such a chain we synthesize one.
+    type ImportChain = { sourceZoneId: string };
+    let chainsToCreate: ImportChain[] = [];
+    if (importedChains && importedChains.length > 0) {
+      const seen = new Set<string>();
+      for (const c of importedChains) {
+        if (!ZONE_BY_ID.get(c.sourceZoneId)) {
+          return reply.status(400).send({ error: `chain sourceZoneId '${c.sourceZoneId}' not found in zone catalogue` });
+        }
+        if (seen.has(c.sourceZoneId)) {
+          return reply.status(400).send({ error: `duplicate chain sourceZoneId '${c.sourceZoneId}'` });
+        }
+        seen.add(c.sourceZoneId);
+        chainsToCreate.push({ sourceZoneId: c.sourceZoneId });
+      }
+      if (!seen.has(homeZoneId)) {
+        // Ensure the primary chain (matching homeZoneId) always exists.
+        chainsToCreate.unshift({ sourceZoneId: homeZoneId });
+      }
+    } else {
+      chainsToCreate = [{ sourceZoneId: homeZoneId }];
+    }
+
+    // Derive zoneId → chainId membership by BFS from each chain's sourceZoneId
+    // across the (undirected) connections graph. Cross-chain bridging is
+    // forbidden, so the graph partitions cleanly. Primary chain claims first,
+    // then the rest in order; orphan nodes default to the primary chain.
+    const adjacency = new Map<string, Set<string>>();
+    const addEdge = (a: string, b: string) => {
+      if (!adjacency.has(a)) adjacency.set(a, new Set());
+      adjacency.get(a)!.add(b);
+    };
+    for (const c of connections) {
+      addEdge(c.fromZoneId, c.toZoneId);
+      addEdge(c.toZoneId, c.fromZoneId);
+    }
+
+    // Generate a stable id per chain up-front so we can reference it during
+    // BFS without an extra DB round-trip.
+    const chainIdBySource = new Map<string, string>();
+    for (const c of chainsToCreate) {
+      chainIdBySource.set(c.sourceZoneId, nanoid());
+    }
+    const primaryChainId = chainIdBySource.get(homeZoneId)!;
+
+    const zoneChainId = new Map<string, string>();
+    // Primary chain first.
+    const orderedSources = [
+      homeZoneId,
+      ...chainsToCreate.map(c => c.sourceZoneId).filter(s => s !== homeZoneId),
+    ];
+    for (const source of orderedSources) {
+      const chainId = chainIdBySource.get(source)!;
+      if (zoneChainId.has(source)) continue; // shouldn't happen, but skip if claimed
+      const queue: string[] = [source];
+      zoneChainId.set(source, chainId);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        const neighbours = adjacency.get(cur);
+        if (!neighbours) continue;
+        for (const n of neighbours) {
+          if (zoneChainId.has(n)) continue;
+          zoneChainId.set(n, chainId);
+          queue.push(n);
+        }
+      }
+    }
+    const chainIdForZone = (zoneId: string): string => zoneChainId.get(zoneId) ?? primaryChainId;
 
     const client = await app.db.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Update room homeZoneId
-      await client.query('UPDATE rooms SET home_zone_id = $1, updated_at = $2 WHERE id = $3', [homeZoneId, new Date().toISOString(), id]);
+      await client.query('UPDATE rooms SET home_zone_id = $1, updated_at = $2, chain_migrated = true WHERE id = $3', [homeZoneId, new Date().toISOString(), id]);
 
       // Delete all existing data
       await client.query('DELETE FROM connections WHERE room_id = $1', [id]);
       await client.query('DELETE FROM room_node_positions WHERE room_id = $1', [id]);
       await client.query('DELETE FROM room_node_memory WHERE room_id = $1', [id]);
-      
-      // Insert new connections
+      await client.query('DELETE FROM room_chains WHERE room_id = $1', [id]);
+
+      // Insert chains (primary first for chronological consistency).
+      const createdAt = new Date().toISOString();
+      for (const source of orderedSources) {
+        await client.query(
+          'INSERT INTO room_chains (id, room_id, source_zone_id, created_at) VALUES ($1, $2, $3, $4)',
+          [chainIdBySource.get(source), id, source, createdAt]
+        );
+      }
+
+      // Insert new connections (chain_id derived from the from-zone's chain).
       for (const conn of connections) {
         await client.query(`
-          INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [nanoid(), id, conn.fromZoneId, conn.toZoneId, conn.fromHandleId, conn.toHandleId, conn.expiresAt, conn.reportedAt || new Date().toISOString(), conn.reportedBy || null]);
+          INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [nanoid(), id, conn.fromZoneId, conn.toZoneId, conn.fromHandleId, conn.toHandleId, conn.expiresAt, conn.reportedAt || new Date().toISOString(), conn.reportedBy || null, chainIdForZone(conn.fromZoneId)]);
       }
-      
-      // Insert new node positions
+
+      // Insert new node positions (chain_id derived from the node's zone).
       for (const node of nodePositions) {
         await client.query(`
-          INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, explored, rotation)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [id, node.zoneId, node.x, node.y, JSON.stringify(node.features || {}), JSON.stringify(node.customHandles || null), !!node.explored, node.rotation ?? 0]);
+          INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, explored, rotation, chain_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [id, node.zoneId, node.x, node.y, JSON.stringify(node.features || {}), JSON.stringify(node.customHandles || null), !!node.explored, node.rotation ?? 0, chainIdForZone(node.zoneId)]);
       }
 
       // Insert new room memory (roads only)

@@ -16,7 +16,7 @@ import { TooltipProvider } from 'reka-ui';
 import PingButton from './zone/PingButton.vue';
 
 const props = defineProps<NodeProps<{ 
-  isHome: boolean; 
+  isChainSource: boolean;
   tier: number; 
   zoneName: string; 
   type: string; 
@@ -38,7 +38,7 @@ const showPingToast = inject<(zoneName: string, nodeId?: string) => void>('showP
 const isPinged = ref(false);
 const pingKey = ref(0);
 const isHovered = ref(false);
-const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isHome && !props.data.isGhost && isHovered.value);
+const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isChainSource && !props.data.isGhost && isHovered.value);
 const isRouteDestination = computed(() => plotRouteStore.destinationZoneId === props.id && plotRouteStore.hasRoute);
 
 function handlePing() {
@@ -149,10 +149,13 @@ async function handleDelete() {
 }
 
 const handles = computed(() => {
-  const h = [
-    { id: 'center', left: '50%', top: '50%', position: Position.Right }
+  const h: { id: string; left: string; top: string; position: Position }[] = [
+    { id: 'center', left: '50%', top: '50%', position: Position.Right },
+    // SW handle: midpoint of the diamond's south-west edge — lets users drag
+    // out a connection from a non-roads zone.
+    { id: 'sw', left: '25%', top: '75%', position: Position.Bottom },
   ];
-  
+
   // Add overlay handle if connecting to allow for easy center snapping
   if (isConnecting.value) {
     h.push({ id: 'center-overlay', left: '50%', top: '50%', position: Position.Right });
@@ -202,7 +205,7 @@ const handles = computed(() => {
       class="text-white text-xs text-center w-full h-full relative transition-all duration-300"
       :class="[
         hasReds ? 'red-glow' : '',
-        props.data.isHome ? 'home-glow' : '',
+        props.data.isChainSource ? 'home-glow' : '',
         props.data.highlighted ? 'goto-glow-animation' : '',
         isPinged ? 'ping-animation' : '',
         props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',
@@ -233,7 +236,8 @@ const handles = computed(() => {
         <ZoneHeader
           :id="props.id" 
           :zone-name="props.data.zoneName" 
-          :is-home="props.data.isHome" 
+          :is-chain-source="props.data.isChainSource" 
+          icon-compact
           :type="props.data.type as any" 
           :category="props.data.category"
           :map-shape="props.data.mapShape"

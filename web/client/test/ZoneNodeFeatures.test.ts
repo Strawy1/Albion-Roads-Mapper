@@ -109,7 +109,7 @@ describe('ZoneNode Features and Styling', () => {
           type: 'zone',
           data: {
             type: 'roads',
-            isHome: true,
+            isChainSource: true,
             tier: 5,
             zoneName: 'Zone A',
             customHandles: [{ id: 'e', left: '100%', top: '50%' }],
@@ -177,7 +177,7 @@ describe('ZoneNode Features and Styling', () => {
           type: 'zone',
           data: {
             type: 'roads',
-            isHome: false,
+            isChainSource: false,
             tier: 5,
             zoneName: 'Zone A',
             customHandles: [{ id: 'e', left: '100%', top: '50%' }],

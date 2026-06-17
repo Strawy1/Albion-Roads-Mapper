@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, nextTick } from 'vue';
-import type { Connection, ServerMessage, NodePosition, NodeFeatures, CustomHandle, RoomMemoryEntry } from 'shared';
+import type { Connection, ServerMessage, NodePosition, NodeFeatures, CustomHandle, RoomMemoryEntry, RoomChain } from 'shared';
 import { inferRotationFromHandles, getShapeHandlePositions, ZONE_BY_ID } from 'shared';
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
@@ -14,6 +14,8 @@ export type DisconnectReason = 'password_rotated' | 'room_deleted' | 'room_not_f
 export const useRoomStore = defineStore('room', () => {
   const connections = ref<Connection[]>([]);
   const homeZoneId = ref<string>('');
+  const chains = ref<RoomChain[]>([]);
+  const chainSourceZoneIds = computed(() => new Set(chains.value.map(c => c.sourceZoneId)));
   const nodePositions = ref<NodePosition[]>([]);
   const roomTitle = ref<string>('');
   const wsStatus = ref<WsStatus>('disconnected');
@@ -32,14 +34,14 @@ export const useRoomStore = defineStore('room', () => {
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function isNodeIsolated(nodeId: string, currentTime: number) {
-    if (nodeId === homeZoneId.value) return false;
+    if (chainSourceZoneIds.value.has(nodeId)) return false;
     const nodeConnections = connections.value.filter(c => c.fromZoneId === nodeId || c.toZoneId === nodeId);
     if (nodeConnections.length === 0) return true;
     return nodeConnections.every(c => (c.isExpired ?? false) || (new Date(c.expiresAt).getTime() - currentTime) <= 0);
   }
 
   function isNodeExpired(nodeId: string, currentTime: number) {
-    if (nodeId === homeZoneId.value) return false;
+    if (chainSourceZoneIds.value.has(nodeId)) return false;
 
     const nodeConnections = connections.value.filter(c => c.fromZoneId === nodeId || c.toZoneId === nodeId);
 
@@ -127,6 +129,7 @@ export const useRoomStore = defineStore('room', () => {
       case 'sync':
         connections.value = msg.connections;
         homeZoneId.value = msg.homeZoneId;
+        chains.value = msg.chains ?? [];
         roomTitle.value = msg.title || '';
         nodePositions.value = msg.nodePositions;
         validateNodeRotations(msg.nodePositions);
@@ -235,6 +238,38 @@ export const useRoomStore = defineStore('room', () => {
         ws = null;
         break;
 
+      case 'force_reload':
+        // Server completed a one-shot data migration — reload the page to pick it up cleanly
+        window.location.reload();
+        break;
+
+      case 'chain_added':
+        if (!chains.value.find(c => c.id === msg.chain.id)) {
+          chains.value = [...chains.value, msg.chain];
+        }
+        lastUpdate.value = new Date();
+        break;
+
+      case 'chain_removed': {
+        chains.value = chains.value.filter(c => c.id !== msg.chainId);
+        const removedZones = new Set(msg.removedZoneIds);
+        const removedConns = new Set(msg.removedConnectionIds);
+        if (removedConns.size > 0) {
+          connections.value = connections.value.filter(c => !removedConns.has(c.id));
+        }
+        if (removedZones.size > 0) {
+          nodePositions.value = nodePositions.value.filter(p => !removedZones.has(p.zoneId));
+          try {
+            const memoryStore = useRoomMemoryStore();
+            for (const zoneId of removedZones) {
+              memoryStore.applyMemoryDeleted(zoneId);
+            }
+          } catch { /* memory store optional */ }
+        }
+        lastUpdate.value = new Date();
+        break;
+      }
+
       case 'session_expired':
         // The JWT has expired or is invalid — clear the token and redirect to auth
         localStorage.removeItem(`token:${roomId.value}`);
@@ -274,6 +309,7 @@ export const useRoomStore = defineStore('room', () => {
               customHandles: p.customHandles ?? existing.customHandles,
               rotation: p.rotation ?? existing.rotation,
               explored: p.explored || existing.explored,
+              chainId: p.chainId ?? existing.chainId,
             };
           });
           nodePositions.value = merged;
@@ -368,6 +404,7 @@ export const useRoomStore = defineStore('room', () => {
     wsStatus.value = 'disconnected';
     connections.value = [];
     homeZoneId.value = '';
+    chains.value = [];
     roomTitle.value = '';
     nodePositions.value = [];
     roomId.value = '';
@@ -549,6 +586,48 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
+  async function addChain(sourceZoneId: string) {
+    if (!roomId.value || !getToken()) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ sourceZoneId }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      let message = text;
+      try { message = JSON.parse(text).error ?? text; } catch { /* not JSON */ }
+      throw new Error(message || `Failed to add chain (HTTP ${response.status})`);
+    }
+  }
+
+  async function removeChain(chainId: string) {
+    if (!roomId.value || !getToken()) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains/${chainId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      let message = text;
+      try { message = JSON.parse(text).error ?? text; } catch { /* not JSON */ }
+      throw new Error(message || `Failed to remove chain (HTTP ${response.status})`);
+    }
+  }
+
   return {
     connections,
     homeZoneId,
@@ -568,6 +647,8 @@ export const useRoomStore = defineStore('room', () => {
     connectingSourceHandleId,
     connectingSourceNodeId,
     recentlyViewedRooms,
+    chains,
+    chainSourceZoneIds,
     setCredentials,
     applyMessage,
     updateNodePositionsInStore,
@@ -593,5 +674,7 @@ export const useRoomStore = defineStore('room', () => {
     setBluePromptsEnabled,
     removeFromRecentRooms,
     importData,
+    addChain,
+    removeChain,
   };
 });

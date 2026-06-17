@@ -68,7 +68,8 @@ describe('WebSocket authentication', () => {
   });
 
   it('responds with auth_ok when valid token is sent', async () => {
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
 
@@ -86,7 +87,8 @@ describe('WebSocket authentication', () => {
   });
 
   it('sends sync message after auth_ok', async () => {
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
 
@@ -130,7 +132,8 @@ describe('WebSocket authentication', () => {
 
   it('only fans out to clients in the same room', async () => {
     // room 1 sync mocks (room, connections, node positions, memory)
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] });
     mockDb.query.mockResolvedValueOnce({ rows: [] });
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
@@ -142,8 +145,9 @@ describe('WebSocket authentication', () => {
     const token1 = app.jwt.sign({ roomId });
     const token2 = app.jwt.sign({ roomId: roomId2 });
 
-    // room 2 sync mocks (room, connections, node positions, memory)
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId2, home_zone_id: VALID_ZONE_B, created_at: new Date().toISOString() }] });
+    // room 2 sync mocks (room, chains, connections, node positions, memory)
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId2, home_zone_id: VALID_ZONE_B, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'chain-2', source_zone_id: VALID_ZONE_B }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] });
     mockDb.query.mockResolvedValueOnce({ rows: [] });
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
@@ -170,6 +174,7 @@ describe('WebSocket authentication', () => {
     // Post a connection to room 1 only
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       return Promise.resolve({ rows: [], rowCount: 1 });
     });
     
@@ -195,7 +200,8 @@ describe('WebSocket authentication', () => {
   });
 
   it('updates rooms.updated_at when updateLastUpdated is true in update_node_positions', async () => {
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room sync
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room sync
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections sync
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions sync
 
@@ -230,7 +236,8 @@ describe('WebSocket authentication', () => {
   });
 
   it('does NOT update rooms.updated_at when updateLastUpdated is missing in update_node_positions', async () => {
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room sync
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room sync
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections sync
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions sync
 
@@ -318,7 +325,8 @@ describe('WebSocket authentication', () => {
     const adminHash = await bcrypt.default.hash('admin-secret', 1);
 
     // Mock: sync (room, connections, node positions)
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
 
@@ -377,7 +385,8 @@ describe('WebSocket authentication', () => {
     // Authenticate with a token that expires in 1 second
     const shortLivedToken = app.jwt.sign({ roomId }, { expiresIn: 1 });
 
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory
@@ -405,5 +414,149 @@ describe('WebSocket authentication', () => {
     const expiredMsg = messages.find((m) => (m as { type: string }).type === 'session_expired') as { type: string; reason: string } | undefined;
     expect(expiredMsg).toBeDefined();
     expect(expiredMsg?.reason).toBe('Session expired, please log in again');
+  });
+});
+
+describe('Regression: chain_id is preserved through update_node_positions', () => {
+  it('preserves chain_id when re-inserting an existing node, so POST /connections from that node succeeds', async () => {
+    // Repro of the user-reported bug: fresh room with a single non-roads home zone
+    // (willowsigh-marsh, chain_migrated=true, chain-1 is the primary chain). After
+    // the client drags the home node, ws.ts handles update_node_positions by
+    // DELETE-then-INSERTing every row in room_node_positions. The bug was that the
+    // INSERT path did not preserve the existing chain_id, so the home node's
+    // chain_id became NULL. The user then tried to draw a connection out of the
+    // home node and POST /connections returned 400:
+    //   "Source zone is not part of any chain in this room".
+    //
+    // This test asserts both halves:
+    //   1) The INSERT carried out by update_node_positions stamps the existing
+    //      chain_id (chain-1) onto the re-inserted row.
+    //   2) A subsequent POST /connections from willowsigh-marsh → cetitos-aiayrom
+    //      finds the chain and responds 201.
+    const HOME_ZONE = 'willowsigh-marsh'; // non-roads, royal
+    const TARGET_ZONE = 'cetitos-aiayrom';
+    const CHAIN_ID = 'chain-1';
+
+    // Auth/sync mocks (room, chains, connections, node positions, memory)
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: HOME_ZONE, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: CHAIN_ID, source_zone_id: HOME_ZONE }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: HOME_ZONE, x: 0, y: 0, features: {}, custom_handles: null, rotation: 0, explored: false }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory
+
+    // update_node_positions transactional client. Returns the existing chain_id
+    // for the home zone so the preservation logic in ws.ts has something to read.
+    const mockClient = {
+      query: vi.fn().mockImplementation((q: string) => {
+        if (typeof q === 'string') {
+          if (q.includes('SELECT home_zone_id FROM rooms')) return Promise.resolve({ rows: [{ home_zone_id: HOME_ZONE }] });
+          if (q.includes('SELECT zone_id, chain_id FROM room_node_positions')) {
+            return Promise.resolve({ rows: [{ zone_id: HOME_ZONE, chain_id: CHAIN_ID }] });
+          }
+        }
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }),
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValue(mockClient);
+
+    await app.listen({ port: 0 });
+    const { socket } = await connectWs(roomId);
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 150));
+
+    // Client drags the home node — same shape the real client sends.
+    socket.send(JSON.stringify({
+      type: 'update_node_positions',
+      nodePositions: [{ zoneId: HOME_ZONE, x: -13.3, y: -6.9, features: {}, customHandles: null, rotation: 0, explored: false }],
+      updateLastUpdated: false,
+    }));
+    await new Promise((r) => setTimeout(r, 200));
+
+    // Assert 1: the INSERT INTO room_node_positions call carried chain_id = CHAIN_ID.
+    const insertCall = mockClient.query.mock.calls.find(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT INTO room_node_positions')
+    );
+    expect(insertCall).toBeDefined();
+    const insertParams = insertCall![1] as any[];
+    // Params shape: [roomId, zoneId, x, y, features, customHandles, rotation, explored, chain_id]
+    expect(insertParams[1]).toBe(HOME_ZONE);
+    expect(insertParams[insertParams.length - 1]).toBe(CHAIN_ID);
+
+    // Assert 2: subsequent POST /connections from the home zone to a brand-new
+    // target zone must succeed (no "Source zone is not part of any chain" error).
+    // Reset the top-level db mock to respond to the connection-route queries.
+    mockDb.query.mockImplementation((q: string) => {
+      if (typeof q !== 'string') return Promise.resolve({ rows: [], rowCount: 0 });
+      if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) {
+        return Promise.resolve({ rows: [{ chain_id: CHAIN_ID }] });
+      }
+      if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rows: [], rowCount: 1 });
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { fromZoneId: HOME_ZONE, toZoneId: TARGET_ZONE, secondsRemaining: 1800, slots: 7 },
+    });
+    expect(res.statusCode).toBe(201);
+
+    socket.close();
+  });
+});
+
+describe('WebSocket lazy chain migration', () => {
+  it('runs the migration on a legacy room, backfills chain_id, flips the flag, and broadcasts force_reload (no sync)', async () => {
+    // Provide a migration-transaction client whose query calls we can inspect.
+    const migrationClient = {
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValue(migrationClient);
+
+    // Room row WITHOUT chain_migrated → falsy → triggers migration
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: false }],
+    });
+
+    const { broadcast } = await import('../src/broadcast.js');
+    const broadcastSpy = vi.spyOn(await import('../src/broadcast.js'), 'broadcast');
+    broadcastSpy.mockClear();
+
+    await app.listen({ port: 0 });
+    const { socket } = await connectWs(roomId);
+    const messages: unknown[] = [];
+    socket.on('message', (d) => messages.push(JSON.parse(d.toString())));
+
+    socket.send(JSON.stringify({ type: 'auth', token }));
+
+    // Give the server time to run the migration transaction
+    await new Promise((r) => setTimeout(r, 300));
+
+    // The migration must have:
+    //   BEGIN, INSERT room_chains, UPDATE connections, UPDATE room_node_positions, UPDATE rooms, COMMIT
+    const sqlCalls: string[] = migrationClient.query.mock.calls.map((c: any[]) => String(c[0]));
+    expect(sqlCalls.some(s => s.startsWith('BEGIN'))).toBe(true);
+    expect(sqlCalls.some(s => s.includes('INSERT INTO room_chains'))).toBe(true);
+    expect(sqlCalls.some(s => s.includes('UPDATE connections SET chain_id'))).toBe(true);
+    expect(sqlCalls.some(s => s.includes('UPDATE room_node_positions SET chain_id'))).toBe(true);
+    expect(sqlCalls.some(s => s.includes('UPDATE rooms SET chain_migrated'))).toBe(true);
+    expect(sqlCalls.some(s => s.startsWith('COMMIT'))).toBe(true);
+
+    // It must have broadcast a force_reload for this room and NOT sent a sync to this socket.
+    const forceReloadCall = broadcastSpy.mock.calls.find(
+      (call: any[]) => call[0] === roomId && (call[1] as any)?.type === 'force_reload'
+    );
+    expect(forceReloadCall).toBeDefined();
+
+    const syncMsg = messages.find((m) => (m as any).type === 'sync');
+    expect(syncMsg).toBeUndefined();
+
+    socket.close();
+    broadcastSpy.mockRestore();
+    void broadcast; // keep import side-effect referenced
   });
 });
