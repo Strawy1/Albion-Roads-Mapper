@@ -17,6 +17,57 @@ export const useRoomStore = defineStore('room', () => {
   const chains = ref<RoomChain[]>([]);
   const chainSourceZoneIds = computed(() => new Set(chains.value.map(c => c.sourceZoneId)));
   const nodePositions = ref<NodePosition[]>([]);
+
+  // Friendly ID for a chain: primary (sourceZoneId === homeZoneId) is always 1;
+  // remaining chains are numbered in the order they appear in `chains` (which the
+  // server returns ordered by created_at ASC).
+  const chainFriendlyIdMap = computed(() => {
+    const map = new Map<string, number>();
+    const primary = chains.value.find(c => c.sourceZoneId === homeZoneId.value);
+    if (primary) map.set(primary.id, 1);
+    let next = 2;
+    for (const c of chains.value) {
+      if (map.has(c.id)) continue;
+      map.set(c.id, next++);
+    }
+    return map;
+  });
+  function chainFriendlyId(chainId: string | undefined | null): number | null {
+    if (!chainId) return null;
+    return chainFriendlyIdMap.value.get(chainId) ?? null;
+  }
+  function chainForZone(zoneId: string | undefined | null): RoomChain | null {
+    if (!zoneId) return null;
+    const np = nodePositions.value.find(n => n.zoneId === zoneId);
+    if (np?.chainId) {
+      const c = chains.value.find(ch => ch.id === np.chainId);
+      if (c) return c;
+    }
+    // Fallback: primary chain
+    return chains.value.find(c => c.sourceZoneId === homeZoneId.value) ?? null;
+  }
+  function chainTooltipForZone(zoneId: string | undefined | null): string | null {
+    const c = chainForZone(zoneId);
+    if (!c) return null;
+    const fid = chainFriendlyId(c.id);
+    const sourceName = ZONE_BY_ID.get(c.sourceZoneId)?.name ?? c.sourceZoneId;
+    return `Chain #${fid ?? '?'} starting at ${sourceName}`;
+  }
+  function chainFriendlyIdForZone(zoneId: string | undefined | null): number | null {
+    if (!zoneId) return null;
+    const np = nodePositions.value.find(n => n.zoneId === zoneId);
+    const id = chainFriendlyId(np?.chainId);
+    if (id !== null) return id;
+    // Fallback: if the zone exists in this room but has no chainId metadata
+    // (older data, or non-roads node not yet tagged), assume it belongs to
+    // the primary chain so the pill is still shown.
+    if (np) {
+      const primary = chains.value.find(c => c.sourceZoneId === homeZoneId.value);
+      if (primary) return chainFriendlyIdMap.value.get(primary.id) ?? 1;
+      return 1;
+    }
+    return null;
+  }
   const roomTitle = ref<string>('');
   const wsStatus = ref<WsStatus>('disconnected');
   const lastUpdate = ref<Date | null>(null);
@@ -28,6 +79,8 @@ export const useRoomStore = defineStore('room', () => {
   const disconnectReason = ref<DisconnectReason>(null);
   const connectingSourceHandleId = ref<string | null>(null);
   const connectingSourceNodeId = ref<string | null>(null);
+  const chainManagementOpen = ref(false);
+  function openChainManagement() { chainManagementOpen.value = true; }
 
   let ws: WebSocket | null = null;
   let reconnectDelay = 1000;
@@ -606,6 +659,42 @@ export const useRoomStore = defineStore('room', () => {
       try { message = JSON.parse(text).error ?? text; } catch { /* not JSON */ }
       throw new Error(message || `Failed to add chain (HTTP ${response.status})`);
     }
+
+    // Place the newly created chain's source zone at a random location 200px
+    // away from the primary chain's home zone. The server inserts it at (0,0);
+    // we override that with a random offset around the primary home node.
+    try {
+      const primaryHomeId = homeZoneId.value;
+      if (primaryHomeId && sourceZoneId !== primaryHomeId) {
+        // Wait briefly for the server's node_positions_updated broadcast to land
+        // so we can see the (0,0) row for the new node, then override it.
+        const waitForNewNode = async () => {
+          for (let i = 0; i < 20; i++) {
+            if (nodePositions.value.find(n => n.zoneId === sourceZoneId)) return true;
+            await new Promise(r => setTimeout(r, 50));
+          }
+          return !!nodePositions.value.find(n => n.zoneId === sourceZoneId);
+        };
+        await waitForNewNode();
+
+        const primary = nodePositions.value.find(n => n.zoneId === primaryHomeId);
+        const primaryX = primary?.x ?? 0;
+        const primaryY = primary?.y ?? 0;
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 200;
+        const newX = primaryX + Math.cos(angle) * radius;
+        const newY = primaryY + Math.sin(angle) * radius;
+
+        const existing = nodePositions.value.find(n => n.zoneId === sourceZoneId);
+        if (existing) {
+          updateNodePositionsInStore([{ ...existing, x: newX, y: newY }]);
+        } else {
+          updateNodePositionsInStore([{ zoneId: sourceZoneId, x: newX, y: newY } as NodePosition]);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to place new chain zone near primary home:', e);
+    }
   }
 
   async function removeChain(chainId: string) {
@@ -649,6 +738,11 @@ export const useRoomStore = defineStore('room', () => {
     recentlyViewedRooms,
     chains,
     chainSourceZoneIds,
+    chainFriendlyId,
+    chainFriendlyIdForZone,
+    chainTooltipForZone,
+    chainManagementOpen,
+    openChainManagement,
     setCredentials,
     applyMessage,
     updateNodePositionsInStore,

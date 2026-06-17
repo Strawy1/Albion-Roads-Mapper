@@ -126,7 +126,7 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4">
-     <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center px-4">
+    <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center px-4">
       <h1 class="text-4xl font-bold text-indigo-600 text-center">Albion Online Roads Mapper</h1>
       <RecentlyViewedRooms />
       <p class="text-white text-center">

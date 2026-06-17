@@ -25,6 +25,17 @@ const searchActive = ref(false);
 const isMobile = useMediaQuery('(max-width: 767px)');
 const tooltipSide = computed(() => isMobile.value ? 'left' : 'bottom') as import('vue').ComputedRef<'left' | 'bottom'>;
 
+const NEW_CHAIN_CTA_KEY = 'cta:chainManagement:dismissed';
+const showNewChainCta = ref(typeof localStorage !== 'undefined' && localStorage.getItem(NEW_CHAIN_CTA_KEY) !== '1');
+
+function onAddChainClick() {
+  if (showNewChainCta.value) {
+    showNewChainCta.value = false;
+    try { localStorage.setItem(NEW_CHAIN_CTA_KEY, '1'); } catch { /* ignore */ }
+  }
+  emit('addChain');
+}
+
 function onPlotRouteClick() {
   if (props.plotRouteMode) {
     emit('clearRoute');
@@ -73,15 +84,26 @@ function onPlotRouteClick() {
       <TooltipRoot>
         <TooltipTrigger as-child>
           <button
-            class="add-chain-btn w-12 h-12 items-center justify-center rounded-full frosted-button text-xl shadow-lg transition-colors flex-shrink-0"
-            @click="emit('addChain')"
-          >⛓️</button>
+            class="add-chain-btn relative w-12 h-12 items-center justify-center rounded-full text-xl shadow-lg transition-colors flex-shrink-0"
+            :class="showNewChainCta ? 'plot-route-active-pulse text-blue-300' : 'frosted-button'"
+            @click="onAddChainClick"
+          >
+            ⛓️
+            <!-- "New!" call-to-action prompt pointing upward at the button -->
+            <span
+              v-if="showNewChainCta"
+              class="new-chain-cta absolute left-1/2 -translate-x-1/2 top-full mt-3 px-2 py-1 rounded bg-blue-600 text-white text-sm font-semibold shadow-lg whitespace-nowrap pointer-events-none"
+            >
+              New!
+              <span class="new-chain-cta-arrow"></span>
+            </span>
+          </button>
         </TooltipTrigger>
         <TooltipPortal>
           <TooltipContent
             class="bg-black/90 text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]"
             :side="tooltipSide"
-          >Add chain</TooltipContent>
+          >Chain Management</TooltipContent>
         </TooltipPortal>
       </TooltipRoot>
     </TooltipProvider>
@@ -193,5 +215,26 @@ function onPlotRouteClick() {
 .plot-route-active-pulse {
   animation: plot-route-pulse 2s infinite ease-in-out;
   border: 1px solid #3b82f6;
+}
+
+/* "New!" call-to-action prompt above the Chain Management button */
+.new-chain-cta {
+  background-color: #2563eb; /* blue-600 */
+  animation: new-chain-cta-bounce 1.6s ease-in-out infinite;
+}
+.new-chain-cta-arrow {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid #2563eb; /* points upward toward the button */
+}
+@keyframes new-chain-cta-bounce {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, -3px); }
 }
 </style>

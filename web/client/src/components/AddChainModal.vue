@@ -59,7 +59,7 @@ async function save() {
 }
 
 async function removeChain(chainId: string, sourceZoneId: string) {
-  if (!confirm(`Delete the chain rooted at "${zoneName(sourceZoneId)}"? This removes every zone and connection in that chain.`)) {
+  if (!confirm(`Delete the chain starting at "${zoneName(sourceZoneId)}"? This removes every zone and connection in that chain.`)) {
     return;
   }
   removingChainId.value = chainId;
@@ -87,6 +87,7 @@ async function removeChain(chainId: string, sourceZoneId: string) {
       <h2 class="text-xl font-semibold mb-4 text-white">Chains</h2>
 
       <div class="flex flex-col gap-4">
+        <p class="text-xs text-gray-500">Chains are a means to create multiple seperated groups of zones, each having a source zone. This is useful in the case you're exploring outwards from Black Zones into Roads.</p>
         <!-- Existing chains list -->
         <div>
           <label class="block text-sm text-gray-400 mb-2">Current chains</label>
@@ -99,9 +100,12 @@ async function removeChain(chainId: string, sourceZoneId: string) {
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-white truncate">{{ zoneName(chain.sourceZoneId) }}</span>
                 <span
-                  v-if="chain.sourceZoneId === primaryHomeZoneId"
-                  class="text-[10px] uppercase tracking-wide text-emerald-400 border border-emerald-500/50 rounded px-1 py-0.5 flex-shrink-0"
-                >Primary</span>
+                  v-if="store.chainFriendlyId(chain.id) !== null"
+                  class="text-xs flex-shrink-0 rounded px-1.5 py-0.5 border inline-flex items-center gap-1"
+                  :class="chain.sourceZoneId === primaryHomeZoneId
+                    ? 'text-emerald-400 border-emerald-500/50'
+                    : 'text-blue-300 border-blue-500/50'"
+                ><span aria-hidden="true">⛓</span><span>{{ store.chainFriendlyId(chain.id) }}</span></span>
               </div>
               <button
                 v-if="chain.sourceZoneId !== primaryHomeZoneId"
@@ -129,7 +133,7 @@ async function removeChain(chainId: string, sourceZoneId: string) {
           <label class="block text-sm text-gray-400 mb-1">Add a new chain</label>
           <ZoneCombobox
             v-model="sourceZoneId"
-            placeholder="Search new chain's root zone…"
+            placeholder="Search new chain's start zone…"
             :show-already-added="false"
           />
           <p class="text-xs text-gray-500 mt-1">
@@ -142,6 +146,12 @@ async function removeChain(chainId: string, sourceZoneId: string) {
         <p v-if="success" class="text-green-400 text-sm">Chain added!</p>
 
         <div class="flex gap-2">
+                    <button
+            class="flex-1 px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
+            @click="close"
+          >
+            Close
+          </button>
           <button
             :disabled="saving || !sourceZoneId"
             class="flex-1 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -149,12 +159,7 @@ async function removeChain(chainId: string, sourceZoneId: string) {
           >
             {{ saving ? 'Adding…' : 'Add chain' }}
           </button>
-          <button
-            class="flex-1 px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
-            @click="close"
-          >
-            Close
-          </button>
+
         </div>
       </div>
     </div>

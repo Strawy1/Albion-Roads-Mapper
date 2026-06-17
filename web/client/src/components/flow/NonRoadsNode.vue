@@ -12,7 +12,7 @@ import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { deleteConnection, deleteNode } from '@/utils/roomOperations';
 import { Z_INDEX } from '@/constants/Layers';
 import { storeToRefs } from 'pinia';
-import { TooltipProvider } from 'reka-ui';
+import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import PingButton from './zone/PingButton.vue';
 
 const props = defineProps<NodeProps<{ 
@@ -33,7 +33,6 @@ const plotRouteStore = usePlotRouteStore();
 const { isConnecting, connections } = storeToRefs(store);
 const { updateNodeData } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
-const showPingToast = inject<(zoneName: string, nodeId?: string) => void>('showPingToast');
 
 const isPinged = ref(false);
 const pingKey = ref(0);
@@ -151,22 +150,52 @@ async function handleDelete() {
 const handles = computed(() => {
   const h: { id: string; left: string; top: string; position: Position }[] = [
     { id: 'center', left: '50%', top: '50%', position: Position.Right },
-    // SW handle: midpoint of the diamond's south-west edge — lets users drag
-    // out a connection from a non-roads zone.
+    // Fixed handles at the midpoints of each of the diamond's four edges
+    // (i.e. the four "corners" of the bounding square). These are static —
+    // they cannot be moved by the user.
+    { id: 'nw', left: '25%', top: '25%', position: Position.Top },
+    { id: 'ne', left: '75%', top: '25%', position: Position.Top },
+    { id: 'se', left: '75%', top: '75%', position: Position.Bottom },
     { id: 'sw', left: '25%', top: '75%', position: Position.Bottom },
   ];
 
+  // Hide this node's own center handle while dragging a connection from it,
+  // so the source zone doesn't show a center snap target on itself.
+  const isSource = isConnecting.value && store.connectingSourceNodeId === props.id;
+
   // Add overlay handle if connecting to allow for easy center snapping
-  if (isConnecting.value) {
+  if (isConnecting.value && !isSource) {
     h.push({ id: 'center-overlay', left: '50%', top: '50%', position: Position.Right });
   }
 
-  return h;
+  return isSource ? h.filter(x => x.id !== 'center') : h;
 });
 </script>
 
 <template>
   <div class="non-roads-node relative" :class="{ 'ghost-node': props.data.isGhost }">
+    <!-- Chain ID pill at the very top of the node, above the diamond's top tip.
+         Always shown when the zone belongs to any chain (including the only/primary one). -->
+    <TooltipProvider :delay-duration="0" v-if="store.chainFriendlyIdForZone(props.id) !== null">
+      <TooltipRoot>
+        <TooltipTrigger asChild>
+          <div
+            class="chain-id-pill absolute left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gray-900/90 border border-blue-500/60 text-blue-300 text-sm font-semibold flex items-center gap-1 shadow whitespace-nowrap cursor-pointer hover:bg-gray-800/95 hover:border-blue-400 transition-colors"
+            style="z-index: 30;"
+            @click.stop="store.openChainManagement()"
+            @mousedown.stop
+          >
+            <span aria-hidden="true">⛓</span>
+            <span>{{ store.chainFriendlyIdForZone(props.id) }}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipPortal>
+          <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]">
+            {{ store.chainTooltipForZone(props.id) }}
+          </TooltipContent>
+        </TooltipPortal>
+      </TooltipRoot>
+    </TooltipProvider>
     <div :class="[isConnecting ? 'connecting-mode' : '']">
         <template v-for="handle in handles" :key="handle.id">
           <Handle
@@ -205,7 +234,6 @@ const handles = computed(() => {
       class="text-white text-xs text-center w-full h-full relative transition-all duration-300"
       :class="[
         hasReds ? 'red-glow' : '',
-        props.data.isChainSource ? 'home-glow' : '',
         props.data.highlighted ? 'goto-glow-animation' : '',
         isPinged ? 'ping-animation' : '',
         props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',
@@ -217,14 +245,14 @@ const handles = computed(() => {
       @mouseleave="isHovered = false"
     >
       <!-- Ping Button (top tip) -->
-      <div class="absolute left-1/2 -translate-x-1/2 top-5" :class="Z_INDEX.CONTENT_LOW">
+      <div class="absolute left-1/2 -translate-x-1/2 top-9" :class="Z_INDEX.CONTENT_LOW">
         <PingButton @ping="handlePing" />
       </div>
 
       <!-- Smaller Diamond Shape Background -->
       <div 
         class="absolute inset-0 diamond-shape transition-colors duration-300 pointer-events-none"
-        :class="[hasReds ? 'bg-red-500' : (props.data.zoneName === 'Brecillien' ? 'bg-purple-500 border-purple-200' : getBorderBgClass(props.data.type)), Z_INDEX.NODE_BASE]"
+        :class="[hasReds ? 'bg-red-500' : (props.data.isChainSource ? 'bg-green-500' : (props.data.zoneName === 'Brecillien' ? 'bg-purple-500 border-purple-200' : getBorderBgClass(props.data.type))), Z_INDEX.NODE_BASE]"
       ></div>
       <div 
         class="absolute inset-[4px] diamond-shape transition-colors duration-300 pointer-events-none"
@@ -258,8 +286,8 @@ const handles = computed(() => {
 @import './nodes.css';
 
 .non-roads-node {
-  width: 200px;
-  height: 200px;
+  width: 250px;
+  height: 250px;
 }
 
 .plot-route-hover {

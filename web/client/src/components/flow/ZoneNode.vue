@@ -230,13 +230,17 @@ const handles = computed(() => {
     h.push({ id: 'center', left: '50%', top: '50%', position: Position.Right });
   }
 
+  // Hide this node's own center handle while dragging a connection from it,
+  // so the source zone doesn't show a center snap target on itself.
+  const isSource = isConnecting.value && store.connectingSourceNodeId === props.id;
+
   // Add overlay handle if connecting to allow for easy center snapping
-  if (isConnecting.value) {
+  if (isConnecting.value && !isSource) {
     h.push({ id: 'center-overlay', left: '50%', top: '50%', position: Position.Right });
   }
 
   // Keep disabled handles visible but non-interactive (shown as hollow/greyed out)
-  return h;
+  return isSource ? h.filter(x => x.id !== 'center') : h;
 });
 
 function getHandlePosition(left: string, top: string) {
@@ -954,6 +958,28 @@ function lockCore(core: string) {
 
 <template>
   <div class="zone-node relative" ref="zoneNodeRef" :class="{ 'ghost-node': props.data.isGhost }" @mousedown="onNodeMouseDown">
+    <!-- Chain ID pill at the very top of the node.
+         Always shown when the zone belongs to any chain (including the only/primary one). -->
+    <TooltipProvider :delay-duration="0" v-if="store.chainFriendlyIdForZone(props.id) !== null">
+      <TooltipRoot>
+        <TooltipTrigger asChild>
+          <div
+            class="chain-id-pill absolute left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gray-900/90 border border-blue-500/60 text-blue-300 text-sm font-semibold flex items-center gap-1 shadow whitespace-nowrap cursor-pointer hover:bg-gray-800/95 hover:border-blue-400 transition-colors"
+            style="z-index: 30;"
+            @click.stop="store.openChainManagement()"
+            @mousedown.stop
+          >
+            <span aria-hidden="true">⛓</span>
+            <span>{{ store.chainFriendlyIdForZone(props.id) }}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipPortal>
+          <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]">
+            {{ store.chainTooltipForZone(props.id) }}
+          </TooltipContent>
+        </TooltipPortal>
+      </TooltipRoot>
+    </TooltipProvider>
     <div :class="[isConnecting ? 'connecting-mode' : '']">
         <template v-if="!isHandleEditorOpen && !isMapFeaturesModalOpen && !isChestModalOpen" v-for="handle in handles" :key="handle.id">
           <div
@@ -1010,7 +1036,6 @@ function lockCore(core: string) {
         class="text-white text-xs text-center min-w-[400px] min-h-[400px] relative transition-all duration-300"
         :class="[
           hasReds ? 'red-glow' : '',
-          props.data.isChainSource ? 'home-glow' : '',
           props.data.highlighted ? 'goto-glow-animation' : '',
           isPinged ? 'ping-animation' : '',
           props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',

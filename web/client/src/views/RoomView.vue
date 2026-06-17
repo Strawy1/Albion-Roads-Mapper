@@ -67,6 +67,9 @@ const pendingConnection = ref<any>(null);
 const showOccupiedModal = ref(false);
 const pendingOccupiedConnection = ref<{ params: any; occupiedConn: any } | null>(null);
 const showAddChainModal = ref(false);
+watch(() => store.chainManagementOpen, (v) => {
+  if (v) { showAddChainModal.value = true; store.chainManagementOpen = false; }
+});
 
 function isRoads(zoneId: string): boolean {
   const zone = ZONE_BY_ID.get(zoneId);
@@ -860,8 +863,11 @@ async function handleConnect(params: any) {
 
       const isReplacingCenter = existingRoadsHandle === 'center' || newRoadsHandle === 'center';
       const isMovingOtherEnd = existingRoadsHandle === newRoadsHandle;
+      // Reassigning the roads-side portal while keeping the non-roads handle pinned
+      // is just a handle reassignment, not a new portal link.
+      const isReassigningRoadsHandle = existingNonRoadsHandle === newNonRoadsHandle;
 
-      if (!isReplacingCenter && !isMovingOtherEnd) {
+      if (!isReplacingCenter && !isMovingOtherEnd && !isReassigningRoadsHandle) {
         const isLoop = wouldCreateLongerLoop(store.connections, params.source, params.target);
         reportForm.value?.setConnection(
           params.source,
