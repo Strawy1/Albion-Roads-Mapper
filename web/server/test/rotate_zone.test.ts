@@ -173,6 +173,7 @@ describe('rotate_zone: basic rotation', () => {
 
     const params = updateCall![1] as any[];
     // Params: [roomId, zoneId, targetRotation, JSON.stringify(canonicalHandles)]
+    expect(params[0]).toBe(roomId);
     expect(params[1]).toBe(ROADS_ZONE);
     expect(params[2]).toBe(2);
 
