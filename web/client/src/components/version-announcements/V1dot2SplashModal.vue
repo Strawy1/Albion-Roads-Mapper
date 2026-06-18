@@ -229,7 +229,7 @@ function startRoutePlot() {
             <div v-if="slides[currentSlide].id === 'other'" class="w-full space-y-6">
               <div v-if="slides[currentSlide].fixes?.length">
                 <h3 class="text-xl font-semibold text-red-400 mb-2">🔧 Fixes</h3>
-                <ul class="list-disc list-inside space-y-2 text-gray-300 text-lg">
+                <ul class="list-disc list-outside ml-6 space-y-2 text-gray-300 text-lg">
                   <li v-for="fix in slides[currentSlide].fixes" :key="fix">
                     {{ fix }}
                   </li>
@@ -238,7 +238,7 @@ function startRoutePlot() {
 
               <div v-if="slides[currentSlide].improvements?.length">
                 <h3 class="text-xl font-semibold text-indigo-400 mb-2">✨ Improvements</h3>
-                <ul class="list-disc list-inside space-y-2 text-gray-300 text-lg">
+                <ul class="list-disc list-outside ml-6 space-y-2 text-gray-300 text-lg">
                   <li v-for="imp in slides[currentSlide].improvements" :key="imp">
                     {{ imp }}
                   </li>
