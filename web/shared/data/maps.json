@@ -686,7 +686,7 @@
     "mapName": "Cieos-Atatlum",
     "mapType": "roads",
     "tier": 6,
-    "mapShape": "c",
+    "mapShape": "o",
     "socketCount": 8,
     "largeSocketCount": 2,
     "smallSocketCount": 6,
