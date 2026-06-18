@@ -501,7 +501,7 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
           onUpdateSlots: (connId: string, slots: 7 | 20) => {
             const targetNodePos = store.nodePositions.find(n => n.zoneId === conn.toZoneId);
             if (targetNodePos) {
-              store.updateNodeFeatures(conn.toZoneId, { ...(targetNodePos.features || {}), slots });
+              store.updateNodeFeatures(conn.toZoneId, { ...(targetNodePos.features || {}), slots }, false);
             }
           },
           hasChildren: conn.toZoneId !== homeZoneId.value && connections.value.some(c => c.fromZoneId === conn.toZoneId),

@@ -332,6 +332,131 @@ describe('useRoomStore', () => {
     expect(store.disconnectReason).toBeNull();
   });
 
+  it('updateNodeFeatures: does NOT mark unexplored zone as explored when markExplored is false', () => {
+    const store = useRoomStore();
+    store.nodePositions = [{ zoneId: 'zone-a', x: 0, y: 0, explored: false }];
+
+    store.updateNodeFeatures('zone-a', { slots: 20 }, false);
+
+    expect(store.nodePositions[0].explored).toBe(false);
+  });
+
+  it('updateNodeFeatures: DOES mark unexplored zone as explored when markExplored is true (default)', () => {
+    const store = useRoomStore();
+    store.nodePositions = [{ zoneId: 'zone-a', x: 0, y: 0, explored: false }];
+
+    store.updateNodeFeatures('zone-a', { reds: 3 });
+
+    expect(store.nodePositions[0].explored).toBe(true);
+  });
+
+  it('connection_updated: does NOT mark unexplored destination as explored when only time is changed', () => {
+    const store = useRoomStore();
+
+    // Set up a connection that already has a non-center handle (e.g. was created with a portal handle)
+    const now = Date.now();
+    const conn = {
+      id: 'conn1',
+      roomId: 'room1',
+      fromZoneId: 'zone-a',
+      toZoneId: 'zone-b',
+      fromHandleId: 'n',
+      toHandleId: 's',
+      expiresAt: new Date(now + 100000).toISOString(),
+      reportedAt: new Date(now).toISOString(),
+    };
+
+    // zone-b is currently unexplored
+    store.connections = [conn];
+    store.nodePositions = [
+      { zoneId: 'zone-a', x: 0, y: 0, explored: true },
+      { zoneId: 'zone-b', x: 10, y: 10, explored: false },
+    ];
+
+    // Receive a connection_updated message where only the time changed (handles unchanged)
+    store.applyMessage({
+      type: 'connection_updated',
+      connection: {
+        ...conn,
+        expiresAt: new Date(now + 200000).toISOString(), // only time changed
+      },
+    } as any);
+
+    // zone-b must remain unexplored because no handle change occurred
+    const zoneB = store.nodePositions.find(n => n.zoneId === 'zone-b');
+    expect(zoneB!.explored).toBe(false);
+  });
+
+  it('connection_updated: does NOT mark unexplored destination as explored when only portal size is changed', () => {
+    const store = useRoomStore();
+
+    const now = Date.now();
+    const conn = {
+      id: 'conn1',
+      roomId: 'room1',
+      fromZoneId: 'zone-a',
+      toZoneId: 'zone-b',
+      fromHandleId: 'n',
+      toHandleId: 's',
+      slots: 7,
+      expiresAt: new Date(now + 100000).toISOString(),
+      reportedAt: new Date(now).toISOString(),
+    };
+
+    store.connections = [conn];
+    store.nodePositions = [
+      { zoneId: 'zone-a', x: 0, y: 0, explored: true },
+      { zoneId: 'zone-b', x: 10, y: 10, explored: false },
+    ];
+
+    // Receive a connection_updated message where only slots changed (handles unchanged)
+    store.applyMessage({
+      type: 'connection_updated',
+      connection: {
+        ...conn,
+        slots: 20, // only portal size changed
+      },
+    } as any);
+
+    const zoneB = store.nodePositions.find(n => n.zoneId === 'zone-b');
+    expect(zoneB!.explored).toBe(false);
+  });
+
+  it('connection_updated: DOES mark unexplored destination as explored when toHandleId changes to non-center', () => {
+    const store = useRoomStore();
+
+    const now = Date.now();
+    const conn = {
+      id: 'conn1',
+      roomId: 'room1',
+      fromZoneId: 'zone-a',
+      toZoneId: 'zone-b',
+      fromHandleId: null,
+      toHandleId: null, // was center
+      expiresAt: new Date(now + 100000).toISOString(),
+      reportedAt: new Date(now).toISOString(),
+    };
+
+    store.connections = [conn];
+    store.nodePositions = [
+      { zoneId: 'zone-a', x: 0, y: 0, explored: false },
+      { zoneId: 'zone-b', x: 10, y: 10, explored: false },
+    ];
+
+    // Handle changed from center to a non-center handle
+    store.applyMessage({
+      type: 'connection_updated',
+      connection: {
+        ...conn,
+        toHandleId: 's', // handle changed to non-center
+      },
+    } as any);
+
+    // zone-b should now be marked as explored because the handle changed
+    const zoneB = store.nodePositions.find(n => n.zoneId === 'zone-b');
+    expect(zoneB!.explored).toBe(true);
+  });
+
   it('should not expire parent node if child connection is expired but path to hideout still exists', () => {
     const store = useRoomStore();
     const homeZoneId = 'qiient-in-odetum';

@@ -293,16 +293,24 @@ export const useRoomStore = defineStore('room', () => {
       case 'connection_updated':
         {
           const index = connections.value.findIndex((c) => c.id === msg.connection.id);
+          const oldConn = index !== -1 ? connections.value[index] : null;
           if (index !== -1) {
             const newConnections = [...connections.value];
             newConnections[index] = msg.connection;
             connections.value = newConnections;
           }
-          // Mark zones as explored when a non-center handle is assigned
-          if (msg.connection.toHandleId && msg.connection.toHandleId !== 'center') {
+          // Mark zones as explored only when a handle changes from center/unset to a non-center handle.
+          // Editing time or portal size alone must not flag the destination zone as explored.
+          const oldToHandle = oldConn?.toHandleId ?? null;
+          const newToHandle = msg.connection.toHandleId ?? null;
+          const toHandleChanged = (!oldToHandle || oldToHandle === 'center') && newToHandle && newToHandle !== 'center';
+          if (toHandleChanged) {
             markNodeExplored(msg.connection.toZoneId);
           }
-          if (msg.connection.fromHandleId && msg.connection.fromHandleId !== 'center') {
+          const oldFromHandle = oldConn?.fromHandleId ?? null;
+          const newFromHandle = msg.connection.fromHandleId ?? null;
+          const fromHandleChanged = (!oldFromHandle || oldFromHandle === 'center') && newFromHandle && newFromHandle !== 'center';
+          if (fromHandleChanged) {
             markNodeExplored(msg.connection.fromZoneId);
           }
         }
@@ -648,12 +656,13 @@ export const useRoomStore = defineStore('room', () => {
     send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
   }
 
-  function updateNodeFeatures(zoneId: string, features: NodeFeatures) {
+  function updateNodeFeatures(zoneId: string, features: NodeFeatures, markExplored = true) {
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
     const newNodePositions = [...nodePositions.value];
     const featuresWithTimestamp = { ...features, lastUpdatedAt: Date.now() };
-    newNodePositions[index] = { ...newNodePositions[index], features: featuresWithTimestamp, explored: true };
+    const currentExplored = newNodePositions[index].explored ?? false;
+    newNodePositions[index] = { ...newNodePositions[index], features: featuresWithTimestamp, explored: markExplored ? true : currentExplored };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
     send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
