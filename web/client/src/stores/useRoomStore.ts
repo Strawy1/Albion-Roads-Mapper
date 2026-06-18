@@ -751,11 +751,21 @@ export const useRoomStore = defineStore('room', () => {
 
   function addToRecentRooms(id: string, vanityUrl: string, title: string) {
     if (!id) return;
-    const existing = recentlyViewedRooms.value.findIndex(r => r.id === id);
-    if (existing !== -1) {
-      recentlyViewedRooms.value.splice(existing, 1);
+    const existingIndex = recentlyViewedRooms.value.findIndex(r => r.id === id);
+    if (existingIndex !== -1) {
+      const existing = recentlyViewedRooms.value[existingIndex];
+      // If the title hasn't changed, we still want to move it to the top (re-accessing)
+      // but if it HAS changed, we update it as well.
+      recentlyViewedRooms.value.splice(existingIndex, 1);
+      recentlyViewedRooms.value.unshift({ 
+        ...existing,
+        vanityUrl, // update vanity URL in case it changed
+        title: title || existing.title || id 
+      });
+    } else {
+      recentlyViewedRooms.value.unshift({ id, vanityUrl, title: title || id });
     }
-    recentlyViewedRooms.value.unshift({ id, vanityUrl, title: title || id });
+    
     recentlyViewedRooms.value = recentlyViewedRooms.value.slice(0, 10); // Keep last 10
     localStorage.setItem('recentRooms', JSON.stringify(recentlyViewedRooms.value));
   }
@@ -962,6 +972,7 @@ export const useRoomStore = defineStore('room', () => {
     setAnimationsEnabled,
     bluePromptsEnabled,
     setBluePromptsEnabled,
+    addToRecentRooms,
     removeFromRecentRooms,
     importData,
     addChain,

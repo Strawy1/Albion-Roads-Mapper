@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import { useRoomStore } from '@/stores/useRoomStore';
+import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { storeToRefs } from 'pinia';
 import { Z_INDEX } from '@/constants/Layers';
 
@@ -23,9 +24,46 @@ const hasSeen = ref(
   typeof localStorage !== 'undefined' && localStorage.getItem(SPLASH_SEEN_KEY) === '1'
 );
 
+const currentSlide = ref(0);
+
+const slides = [
+  {
+    id: 'chains',
+    title: 'Map Chains',
+    image: '/images/changelog/1.2/chains.png',
+    hasCta: true,
+  },
+  {
+    id: 'routing',
+    title: 'Route Plotting',
+    image: '/images/changelog/1.2/routes.png',
+    hasCta: true,
+  },
+  {
+    id: 'roomrename',
+    title: 'Room Renaming',
+    image: '/images/changelog/1.2/roomrename.png',
+    hasCta: false,
+  }
+];
+
 const visible = computed(() =>
   !hasSeen.value && hasMapHistory.value && !hasOpenedChainManager.value
 );
+
+function nextSlide() {
+  if (currentSlide.value < slides.length - 1) {
+    currentSlide.value++;
+  } else {
+    dismiss();
+  }
+}
+
+function prevSlide() {
+  if (currentSlide.value > 0) {
+    currentSlide.value--;
+  }
+}
 
 function dismiss() {
   hasSeen.value = true;
@@ -35,6 +73,11 @@ function dismiss() {
 function openChainManager() {
   dismiss();
   store.openChainManagement();
+}
+
+function startRoutePlot() {
+  dismiss();
+  usePlotRouteStore().enterPlotRouteMode();
 }
 </script>
 
@@ -57,62 +100,123 @@ function openChainManager() {
           @click="dismiss"
         >✕</button>
 
-        <!-- Header -->
-        <div class="mb-4 pr-8">
-          <span class="inline-block text-xs font-semibold uppercase tracking-widest text-indigo-400 mb-1">What's new in v1.2</span>
-          <h2 class="text-2xl font-bold text-white">Chain Management</h2>
+        <div class="text-center mb-6">
+          <span class="text-lg font-bold uppercase tracking-widest text-indigo-400">
+            What's new in v1.2
+          </span>
         </div>
 
-        <!-- Video -->
-        <div class="rounded-lg overflow-hidden bg-black mb-5 aspect-video w-full">
-          <video
-            class="w-full h-full object-contain"
-            autoplay
-            loop
-            muted
-            playsinline
-            :src="'/media/chain-management-demo.mp4'"
-          />
-        </div>
+        <div class="flex flex-col gap-4 mb-4">
+          <!-- Image -->
+          <div class="rounded-lg overflow-hidden bg-black w-full border-2 border-gray-700 shadow-inner flex justify-center">
+            <img
+              class="max-w-full h-auto object-contain"
+              :src="slides[currentSlide].image"
+              :alt="slides[currentSlide].title"
+            />
+          </div>
 
-        <!-- Description -->
-        <p class="text-sm text-gray-300 mb-6">
-          Chains let you create <strong>multiple independent groups of zones</strong> within a single room — perfect for exploring outwards from Black Zones into Roads of Avalon. Each chain has its own source zone and updatable colour. Source zones for chains can be relocated as needed. Note:
-          <TooltipProvider :delay-duration="0">
-            <TooltipRoot>
-              <TooltipTrigger as-child>
-                <span class="text-yellow-500 underline decoration-dotted cursor-help">chains cannot be linked together.</span>
-              </TooltipTrigger>
-              <TooltipPortal>
-                <TooltipContent
-                  class="bg-gray-950 border border-gray-700 text-gray-200 text-xs px-3 py-2 rounded shadow-xl z-[10000] max-w-xs"
-                  side="top"
+          <!-- Title below image -->
+          <div class="flex justify-between items-end">
+            <div>
+              <h1 class="text-3xl font-bold text-white">{{ slides[currentSlide].title }}</h1>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="w-full">
+            <!-- Chain Management -->
+            <div v-if="slides[currentSlide].id === 'chains'" class="space-y-4">
+              <p class="text-base text-gray-300 leading-relaxed">
+                Chains let you create <strong>multiple independent groups of zones</strong> within a single room — perfect for exploring outwards from Black Zones into Roads of Avalon. Each chain has its own source zone and updatable colour.
+              </p>
+              <div class="flex flex-col gap-3">
+                <p class="text-base text-gray-300 leading-relaxed">
+                  Rooms can now be created using <strong>Royal Continent, Outlands zones or Brecillien</strong>! You can update your primary zone anytime in the manager.
+                  <TooltipProvider :delay-duration="0">
+                    <TooltipRoot>
+                      <TooltipTrigger as-child>
+                        <span class="text-yellow-500 underline decoration-dotted cursor-help ml-1">Note: two chains cannot be linked together.</span>
+                      </TooltipTrigger>
+                      <TooltipPortal>
+                        <TooltipContent
+                          class="bg-gray-950 border border-gray-700 text-gray-200 text-xs px-3 py-2 rounded shadow-xl z-[10000] max-w-xs"
+                          side="top"
+                        >
+                          Route plotting and connection deletions both use tree-traversal algorithms that require loop-free graphs. In Roads of Avalon, two zones can be joined by more than one portal pair, which would create a cycle.<br><br>Keeping chains strictly separate eliminates the risk of unintended data loss.
+                        </TooltipContent>
+                      </TooltipPortal>
+                    </TooltipRoot>
+                  </TooltipProvider>
+                </p>
+                
+                <div class="flex justify-center">
+                  <button
+                    class="px-4 py-2 mt-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors flex items-center gap-2 shadow-lg"
+                    @click="openChainManager"
+                  >
+                    Open Chain Manager ⛓️
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Route Plotting -->
+            <div v-if="slides[currentSlide].id === 'routing'" class="space-y-4">
+              <p class="text-base text-gray-300 leading-relaxed">
+                Plan your journey efficiently with the improved route plotting tool. Click any two zones on the map to find the shortest path between them, taking into account portal types and connection status. Perfect for coordinating group movements through the mists or roads.
+              </p>
+              <p class="text-base text-gray-300 leading-relaxed">
+                <span class="text-yellow-500">Routes can only be plotted amongst the same chain.</span> Only one route is allowed at any one time.
+              </p>
+              <div class="flex justify-center">
+                <button
+                  class="px-4 py-2 mt-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors flex items-center gap-2 shadow-lg"
+                  @click="startRoutePlot"
                 >
-                  Route plotting and connection deletions both use tree-traversal algorithms that require loop-free graphs. In Roads of Avalon, two zones can be joined by more than one portal pair, which would create a cycle.<br><br>Additionally, if you wanted to delete a connection containing a bunch of linked expired zones, and if that went into another chain, it <strong>could</strong> cause unintended data loss, as the "source" of the tree is not known. Keeping chains strictly separate eliminates that risk entirely.
-                </TooltipContent>
-              </TooltipPortal>
-            </TooltipRoot>
-          </TooltipProvider>
-        </p>
+                  Start a Route Plot 🗺️
+                </button>
+              </div>
+            </div>
 
-        <p class="text-sm text-gray-300 mb-6">
-          Rooms are now able to be created using <strong>Royal Continent, Outlands zones or Brecillien</strong>! You can however change your zone on the fly using the Chain Manager, just update your primary zone.
-        </p>
+            <!-- Route Plotting -->
+            <div v-if="slides[currentSlide].id === 'roomrename'" class="space-y-4">
+              <p class="text-base text-gray-300 leading-relaxed">
+                It is now possible to rename your room. Simply hover over the name, click on it, and you'll be prompted to rename it. Everyone who's viewing the room will instantly get the name change.
+              </p>
+              <p class="text-base leading-relaxed text-yellow-500">
+                 <strong>The admin password is required</strong> to rename the room.
+              </p>
+            </div>
+          </div>
+        </div>
 
-        <!-- Actions -->
-        <div class="flex gap-3">
+        <div class="flex justify-between items-center pt-4 border-t border-gray-800">
           <button
-            class="flex-1 px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
-            @click="dismiss"
+            v-if="currentSlide > 0"
+            class="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition-colors flex items-center gap-2 max-w-[40%]"
+            @click="prevSlide"
           >
-            Got it
+            ← {{ slides[currentSlide - 1].title }}
           </button>
-          <button
-            class="flex-1 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
-            @click="openChainManager"
-          >
-            Open Chain Manager ⛓️
-          </button>
+          <div v-else></div>
+
+          <div class="flex items-center gap-4">
+            <div class="text-gray-500 text-sm font-medium whitespace-nowrap">
+              {{ currentSlide + 1 }} / {{ slides.length }}
+            </div>
+            <button
+              class="px-6 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors flex items-center gap-2 shadow-lg"
+              @click="nextSlide"
+            >
+              <template v-if="currentSlide === slides.length - 1">
+                Close
+              </template>
+              <template v-else>
+                {{ slides[currentSlide + 1].title }} →
+              </template>
+            </button>
+          </div>
         </div>
       </div>
     </div>
