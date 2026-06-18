@@ -352,6 +352,11 @@ export const useRoomStore = defineStore('room', () => {
         homeZoneId.value = msg.homeZoneId;
         lastUpdate.value = new Date();
         break;
+
+      case 'room_title_updated':
+        roomTitle.value = msg.title;
+        addToRecentRooms(roomId.value, roomId.value, msg.title);
+        break;
       
       case 'room_reset':
         connections.value = [];

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { FastifyInstance } from 'fastify';
-import { CreateRoomBodySchema } from '../../shared/src/types';
+import bcrypt from 'bcrypt';
 
 const VALID_ZONE_ID = 'qiient-al-nusom';
 
@@ -87,5 +87,114 @@ describe('Room Title Persistence', () => {
     
     // We can't easily test WS with Vitest in this setup without a lot of mocking.
     // But we can check if the title column is in the migrations and the code uses it.
+  });
+});
+
+describe('PATCH /api/rooms/:id/title — rename room', () => {
+  const ROOM_ID = 'test-room';
+
+  it('returns 401 with no token', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      payload: { title: 'New Name', adminPassword: 'admin' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 403 when token is for a different room', async () => {
+    const token = app.jwt.sign({ roomId: 'other-room' });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'New Name', adminPassword: 'admin' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('returns 400 when title exceeds 50 characters', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'a'.repeat(51), adminPassword: 'admin' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 400 when adminPassword is missing', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'New Name' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 404 when room is not found', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID });
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 }); // room not found
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'New Name', adminPassword: 'admin' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 401 when admin password is incorrect', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID });
+    const correctAdminHash = await bcrypt.hash('correct-admin', 4);
+    mockDb.query.mockResolvedValueOnce({ rows: [{ admin_password_hash: correctAdminHash }], rowCount: 1 });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'New Name', adminPassword: 'wrong-admin' },
+    });
+    expect(res.statusCode).toBe(401);
+    const body = JSON.parse(res.payload);
+    expect(body.error).toBe('Invalid admin password');
+  });
+
+  it('renames the room successfully and returns ok', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID });
+    const adminPasswordHash = await bcrypt.hash('correct-admin', 4);
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminPasswordHash }], rowCount: 1 }) // SELECT admin_password_hash
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE rooms SET title
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'Dragon Lair', adminPassword: 'correct-admin' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.ok).toBe(true);
+    expect(body.title).toBe('Dragon Lair');
+  });
+
+  it('allows clearing the title with an empty string', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID });
+    const adminPasswordHash = await bcrypt.hash('admin', 4);
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminPasswordHash }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${ROOM_ID}/title`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: '', adminPassword: 'admin' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.ok).toBe(true);
+    expect(body.title).toBe('');
   });
 });

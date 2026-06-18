@@ -34,9 +34,6 @@ const showResetConfirmModal = ref(false);
 const resetting = ref(false);
 const resetError = ref('');
 
-// Copy link state
-const copied = ref(false);
-
 function toggleOpen() {
   open.value = !open.value;
   if (!open.value) resetSubForms();
@@ -46,7 +43,6 @@ function resetSubForms() {
   showChangePasswordModal.value = false;
   showResetConfirmModal.value = false;
   resetError.value = '';
-  copied.value = false;
 }
 
 function onClickOutside(e: MouseEvent) {
@@ -143,16 +139,6 @@ async function deleteRoom(adminPassword: string, setError: (msg: string) => void
 
 // savePassword function removed from here, it's now in ChangePasswordModal.vue
 
-function copyLink() {
-  const url = window.location.href;
-  navigator.clipboard.writeText(url).then(() => {
-    copied.value = true;
-    track('copy_room_link');
-    setTimeout(() => { copied.value = false; }, 2000);
-  });
-}
-
-
 function exitRoom() {
   store.exitRoom();
   router.replace({ path: '/' });
@@ -245,18 +231,6 @@ function exitRoom() {
             @click="showChangePasswordModal = true"
           >
             🔒  Change password
-          </button>
-        </div>
-
-        <!-- Copy link -->
-        <div class="border-b border-gray-700 p-2">
-          <button
-            type="button"
-            class="w-full text-left px-3 py-2 text-sm rounded text-gray-200 hover:bg-gray-700"
-            data-testid="settings-copy-link"
-            @click="copyLink"
-          >
-            {{ copied ? '✓  Copied!' : '🔗  Copy room link' }}
           </button>
         </div>
 

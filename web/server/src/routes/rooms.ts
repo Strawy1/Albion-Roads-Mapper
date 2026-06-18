@@ -10,6 +10,7 @@ import {
   UpdateChainBodySchema,
   RelocateChainBodySchema,
   ImportRoomBodySchema,
+  RenameRoomBodySchema,
   ZONE_BY_ID,
   defaultChainColor,
   PRIMARY_CHAIN_COLOR,
@@ -201,6 +202,48 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     trackPasswordRotated(app.db);
 
     return reply.send({ ok: true });
+  });
+
+  // PATCH /api/rooms/:id/title — rename the room (requires admin password)
+  app.patch<{ Params: { id: string } }>('/api/rooms/:id/title', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const jwtPayload = request.user as { roomId: string };
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    const parsed = RenameRoomBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+    const { title, adminPassword } = parsed.data;
+
+    const { rows } = await app.db.query<{ admin_password_hash: string }>(
+      'SELECT admin_password_hash FROM rooms WHERE id = $1',
+      [id]
+    );
+    const room = rows[0];
+    if (!room) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+    const validAdmin = await bcrypt.compare(adminPassword, room.admin_password_hash);
+    if (!validAdmin) {
+      return reply.status(401).send({ error: 'Invalid admin password' });
+    }
+
+    const result = await app.db.query(
+      'UPDATE rooms SET title = $1 WHERE id = $2',
+      [title || null, id]
+    );
+    if (result.rowCount === 0) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    broadcast(id, { type: 'room_title_updated', title: title || '' });
+    trackRoomModified(app.db, id);
+
+    return reply.send({ ok: true, title: title || '' });
   });
 
   // POST /api/rooms/:id/chains — add a new chain rooted at sourceZoneId
