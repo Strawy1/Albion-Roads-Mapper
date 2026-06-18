@@ -222,22 +222,22 @@ async function removeChain(chainId: string, sourceZoneId: string) {
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
                 <button
-                  :disabled="relocatingChainId === chain.id"
-                  class="px-2 py-1 rounded bg-orange-600 hover:bg-orange-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1"
-                  title="Relocate this chain's home zone (wipes the chain)"
-                  @click="toggleRelocatePicker(chain.id)"
-                >
-                  <span aria-hidden="true">↪</span>
-                  <span>{{ relocatingChainId === chain.id ? 'Moving…' : 'Relocate' }}</span>
-                </button>
-                <button
                   v-if="chain.sourceZoneId !== primaryHomeZoneId"
                   :disabled="removingChainId === chain.id"
                   class="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   title="Delete this chain and all of its zones"
                   @click="removeChain(chain.id, chain.sourceZoneId)"
                 >
-                  {{ removingChainId === chain.id ? 'Deleting…' : '🗑 Delete' }}
+                  {{ removingChainId === chain.id ? 'Deleting…' : '🗑' }}
+                </button>
+                <button
+                  :disabled="relocatingChainId === chain.id"
+                  class="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-500 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1"
+                  title="Relocate this chain's home zone (wipes the chain)"
+                  @click="toggleRelocatePicker(chain.id)"
+                >
+                  <span aria-hidden="true">↪</span>
+                  <span>{{ relocatingChainId === chain.id ? 'Moving…' : 'Relocate' }}</span>
                 </button>
               </div>
             </div>
