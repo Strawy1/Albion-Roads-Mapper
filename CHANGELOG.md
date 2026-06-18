@@ -1,12 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## UNRELEASED [1.2.0] - 2026-06-18
 ### New Features
-
-## [1.2.0] - 2026-06-18
-### Major Changes
 - Introducing **Zone Chains** – create multiple separate zone chains, each with its own starting zone, perfect for scouting from the outlands into roads or Brecilien.
-- Permanent Connections: linking two non-roads zones (royal continent, outlands, etc.) now creates a permanent connection with no timer. The connection edge pill displays "Permanent" instead of a countdown, and the timer/slots UI is hidden. This enables you to map routes directly to a city.
+- **Royal Continent / Outlands inter-connections** - linking two non-roads zones (royal continent, outlands, etc.) now creates a permanent connection with no timer. The connection edge pill displays "Permanent" instead of a countdown, and the timer/slots UI is hidden. This enables you to map routes directly to a city.
 
 ### Fixes
 - Zone rotation desync bug fixed for good!
