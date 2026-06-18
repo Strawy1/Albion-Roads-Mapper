@@ -4,8 +4,9 @@ import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPo
 import { useRoomStore } from '@/stores/useRoomStore';
 import { track } from '@vercel/analytics';
 import { Z_INDEX } from '@/constants/Layers';
-import { ZONE_BY_ID, CHAIN_COLOR_PALETTE } from 'shared';
+import { ZONE_BY_ID } from 'shared';
 import ZoneCombobox from './ZoneCombobox.vue';
+import ChainIdPill from './common/ChainIdPill.vue';
 
 defineProps<{
   modelValue: boolean;
@@ -153,9 +154,6 @@ async function removeChain(chainId: string, sourceZoneId: string) {
   }
 }
 
-function chainPillColour(chain: { chainColor?: string }): string {
-  return chain.chainColor ?? CHAIN_COLOR_PALETTE[0];
-}
 </script>
 
 <template>
@@ -216,15 +214,11 @@ function chainPillColour(chain: { chainColor?: string }): string {
 
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-white truncate">{{ zoneName(chain.sourceZoneId) }}</span>
-                <button
-                  type="button"
-                  class="text-xs flex-shrink-0 rounded-full px-1.5 py-0.5 border font-bold inline-flex items-center gap-1 cursor-pointer hover:bg-gray-700 transition-colors whitespace-nowrap"
-                  :style="{ color: chainPillColour(chain), borderColor: chainPillColour(chain) }"
+                <ChainIdPill
+                  :zone-id="chain.sourceZoneId"
+                  :on-click="() => toggleColourPicker(chain.id)"
                   :title="`Change colour for chain #${store.chainFriendlyId(chain.id) ?? '?'}`"
-                  @click.stop="toggleColourPicker(chain.id)"
-                >
-                  <span aria-hidden="true">⛓</span>
-                  <span>{{ store.chainFriendlyId(chain.id) ?? '?' }}</span></button>
+                />
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
                 <button

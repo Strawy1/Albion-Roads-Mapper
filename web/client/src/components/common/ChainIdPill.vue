@@ -21,6 +21,11 @@ const props = withDefaults(defineProps<{
   positionStyle?: Record<string, string> | string;
   /** Smaller variant for inline usage next to icons. */
   small?: boolean;
+  /**
+   * When provided, overrides the default click behaviour (opening chain management).
+   * Useful when the pill is embedded inside a panel that has its own click handler.
+   */
+  onClick?: () => void;
 }>(), {
   positionStyle: () => ({}),
   small: false,
@@ -60,7 +65,7 @@ const pillStyle = computed<Record<string, string>>(() => {
             props.small ? 'px-1.5 py-0.5 text-[10px] mt-0.5' : 'px-2 py-0.5 text-sm',
           ]"
           :style="pillStyle"
-          @click.stop="store.openChainManagement()"
+          @click.stop="props.onClick ? props.onClick() : store.openChainManagement()"
           @mousedown.stop
         >
           <span aria-hidden="true">⛓</span>
