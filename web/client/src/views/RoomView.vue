@@ -15,7 +15,7 @@ import BottomLeftToolbar from '../components/room/BottomLeftToolbar.vue';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import MegaToast from '../components/common/MegaToast.vue';
 import ConfirmationModal from '../components/common/ConfirmationModal.vue';
-import AddChainModal from '../components/AddChainModal.vue';
+import ChainManager from '../components/ChainManager.vue';
 import TitleSegment from '../components/room/TitleSegment.vue';
 import TopToolbar from '../components/room/TopToolbar.vue';
 import RouteBottleneckPill from '../components/room/RouteBottleneckPill.vue';
@@ -33,6 +33,7 @@ import { formatExpiresIn } from '@/utils/formatters';
 import { addConnection, deleteConnection, updateConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
+import V1dot2SplashModal from "@/components/version-announcements/V1dot2SplashModal.vue";
 
 const props = defineProps<{ id: string }>();
 const store = useRoomStore();
@@ -573,18 +574,20 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 // ── New-chain ghost-on-cursor placement ──────────────────────────────────────
-// Node visual is min 400x400 — anchor ghost so the cursor is dead-center.
-const CHAIN_GHOST_HALF = 200;
+// Roads nodes are 400x400, non-roads nodes are 250x250 — anchor ghost so the cursor is dead-center.
+const CHAIN_GHOST_ROADS_HALF = 200;
+const CHAIN_GHOST_NON_ROADS_HALF = 125;
 const CHAIN_GHOST_ID = '__chain-placement-ghost__';
 let chainGhostNode: any = null;
 
 function makeChainGhostNode(zoneId: string, pos: { x: number; y: number }) {
   const zone = ZONE_BY_ID.get(zoneId);
   const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  const half = isRoads ? CHAIN_GHOST_ROADS_HALF : CHAIN_GHOST_NON_ROADS_HALF;
   return {
     id: CHAIN_GHOST_ID,
     type: isRoads ? 'zone' : 'non-roads',
-    position: { x: pos.x - CHAIN_GHOST_HALF, y: pos.y - CHAIN_GHOST_HALF },
+    position: { x: pos.x - half, y: pos.y - half },
     selectable: false,
     draggable: false,
     data: {
@@ -609,7 +612,10 @@ function onPendingChainMouseMove(e: MouseEvent) {
   const zoneId = store.pendingChainSourceZoneId;
   if (!zoneId) return;
   const flow = screenToFlowCoordinate({ x: e.clientX, y: e.clientY });
-  const nextPos = { x: flow.x - CHAIN_GHOST_HALF, y: flow.y - CHAIN_GHOST_HALF };
+  const zone = ZONE_BY_ID.get(zoneId);
+  const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  const half = isRoads ? CHAIN_GHOST_ROADS_HALF : CHAIN_GHOST_NON_ROADS_HALF;
+  const nextPos = { x: flow.x - half, y: flow.y - half };
   if (!chainGhostNode) {
     chainGhostNode = makeChainGhostNode(zoneId, flow);
     flowNodes.value.push(chainGhostNode);
@@ -636,8 +642,11 @@ async function onPendingChainClick(e: MouseEvent) {
   e.stopPropagation();
   const flow = screenToFlowCoordinate({ x: e.clientX, y: e.clientY });
   // Persist the node so its center sits on the click.
-  const placedX = flow.x - CHAIN_GHOST_HALF;
-  const placedY = flow.y - CHAIN_GHOST_HALF;
+  const zone = ZONE_BY_ID.get(zoneId);
+  const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  const half = isRoads ? CHAIN_GHOST_ROADS_HALF : CHAIN_GHOST_NON_ROADS_HALF;
+  const placedX = flow.x - half;
+  const placedY = flow.y - half;
   // Clear pending immediately so the ghost vanishes; on error we re-show a toast.
   store.cancelPlacingChain();
   try {
@@ -1357,7 +1366,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
   <div class="h-dvh relative bg-gray-950 text-white">
     <TitleSegment :room-title="roomTitle" :class="Z_INDEX.UI_OVERLAY" @logout="exitRoom" @fit-view="fitView({ padding: 0.2, duration: 300 })" />
     <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" @add-chain="showAddChainModal = true" />
-    <AddChainModal v-model="showAddChainModal" />
+    <ChainManager v-model="showAddChainModal" />
+    <V1dot2SplashModal />
 
     <ReportForm
       ref="reportForm"

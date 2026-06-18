@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useRoomStore } from '../stores/useRoomStore';
+import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
+import { useRoomStore } from '@/stores/useRoomStore';
 import { track } from '@vercel/analytics';
 import { Z_INDEX } from '@/constants/Layers';
 import { ZONE_BY_ID, CHAIN_COLOR_PALETTE } from 'shared';
@@ -31,6 +32,12 @@ const relocateTargetZoneId = ref('');
 
 const chains = computed(() => store.chains);
 const primaryHomeZoneId = computed(() => store.homeZoneId);
+
+// Zones that cannot be used as a new chain source: already a source zone or
+// already a member of an existing chain.
+const disabledZoneIds = computed(() =>
+  [...store.chainSourceZoneIds, ...store.chainMemberZoneIds]
+);
 
 // The colour palette offered by the picker. Re-uses the shared palette
 // where possible.
@@ -160,14 +167,30 @@ function chainPillColour(chain: { chainColor?: string }): string {
     @click.self="close"
   >
     <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md" @click.stop>
-      <h2 class="text-xl font-semibold mb-4 text-white">Chains</h2>
+      <h2 class="text-xl font-semibold mb-4 text-white">Chain Management</h2>
 
       <div class="flex flex-col gap-4">
-        <p class="text-xs text-gray-400">Chains are a means to create multiple separated groups of zones, each having a source zone. This is useful in the case you're exploring outwards from Black Zones into Roads.</p>
-        <p class="text-xs text-gray-400"><span class="text-red-500">Two chains of zones <strong>cannot</strong> be linked together.</span> This is to prevent weird behaviour when we are plotting routes and deleting chains of connections.</p>
+        <p class="text-xs text-gray-400">Chains are a means to create multiple separated groups of zones, each having a source zone. This is useful in the case you're exploring from Black Zones / Royal Continent into Roads from different locations.</p>
+        <p class="text-xs text-gray-400">
+          <TooltipProvider :delay-duration="0">
+            <TooltipRoot>
+              <TooltipTrigger as-child>
+                <span class="text-yellow-500 underline decoration-dotted cursor-help">Two chains of zones <strong>cannot</strong> be linked together.</span>
+              </TooltipTrigger>
+             <TooltipPortal>
+                <TooltipContent
+                  class="bg-gray-950 border border-gray-700 text-gray-200 text-xs px-3 py-2 rounded shadow-xl z-[10000] max-w-xs"
+                  side="top"
+                >
+                  Route plotting and connection deletions both use tree-traversal algorithms that require loop-free graphs. In Roads of Avalon, two zones can be joined by more than one portal pair, which would create a cycle.<br><br>Additionally, if you wanted to delete a connection containing a bunch of linked expired zones, and if that went into another chain, it <strong>could</strong> cause unintended data loss, as the "source" of the tree is not known. Keeping chains strictly separate eliminates that risk entirely.
+                </TooltipContent>
+              </TooltipPortal>
+            </TooltipRoot>
+          </TooltipProvider>
+        </p>
         <!-- Existing chains list -->
         <div>
-          <label class="block text-sm text-gray-400 mb-2">Current chains</label>
+          <label class="block text-md text-white mb-1 font-bold">Current chains</label>
           <ul v-if="chains.length > 0" class="flex flex-col gap-2">
             <li
               v-for="chain in chains"
@@ -195,11 +218,13 @@ function chainPillColour(chain: { chainColor?: string }): string {
                 <span class="text-white truncate">{{ zoneName(chain.sourceZoneId) }}</span>
                 <button
                   type="button"
-                  class="text-xs flex-shrink-0 rounded px-1.5 py-0.5 border inline-flex items-center gap-1 cursor-pointer hover:bg-gray-700 transition-colors"
+                  class="text-xs flex-shrink-0 rounded-full px-1.5 py-0.5 border font-bold inline-flex items-center gap-1 cursor-pointer hover:bg-gray-700 transition-colors whitespace-nowrap"
                   :style="{ color: chainPillColour(chain), borderColor: chainPillColour(chain) }"
                   :title="`Change colour for chain #${store.chainFriendlyId(chain.id) ?? '?'}`"
                   @click.stop="toggleColourPicker(chain.id)"
-                ><span aria-hidden="true">⛓</span><span>{{ store.chainFriendlyId(chain.id) ?? '?' }}</span></button>
+                >
+                  <span aria-hidden="true">⛓</span>
+                  <span>{{ store.chainFriendlyId(chain.id) ?? '?' }}</span></button>
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
                 <button
@@ -233,6 +258,7 @@ function chainPillColour(chain: { chainColor?: string }): string {
                 v-model="relocateTargetZoneId"
                 placeholder="Search new home zone…"
                 :show-already-added="false"
+                :disabled-ids="disabledZoneIds"
               />
               <div class="flex gap-2 justify-end">
                 <button
@@ -255,15 +281,15 @@ function chainPillColour(chain: { chainColor?: string }): string {
 
         <!-- Add new chain -->
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Add a new chain</label>
+          <label class="block text-md text-white mb-1 font-bold">Add a new chain</label>
           <ZoneCombobox
             v-model="sourceZoneId"
             placeholder="Search new chain's start zone…"
             :show-already-added="false"
+            :disabled-ids="disabledZoneIds"
           />
           <p class="text-xs text-gray-500 mt-1">
-            Pick any zone to start a new independent chain in this room. New chains never share
-            connections with existing ones.
+            Pick any zone to start a new independent chain in this room.
           </p>
         </div>
 
@@ -284,7 +310,6 @@ function chainPillColour(chain: { chainColor?: string }): string {
           >
             {{ saving ? 'Adding…' : 'Place chain…' }}
           </button>
-
         </div>
       </div>
     </div>
