@@ -9,6 +9,10 @@ import {
   ComboboxItem,
   ComboboxItemIndicator,
   TooltipProvider,
+  TooltipRoot,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipPortal,
 } from 'reka-ui';
 import { ZONES } from 'shared';
 import type { Zone } from 'shared';
@@ -21,6 +25,7 @@ const props = withDefaults(defineProps<{
   excludedIds?: string[];
   disabledIds?: string[];
   wrongChainIds?: string[];
+  incompatibleIds?: string[];
   showAlreadyAdded?: boolean;
   smartAlreadyAdded?: boolean;
   alreadyAddedPlacement?: 'top' | 'bottom';
@@ -69,7 +74,8 @@ const mappedZoneIds = computed<Set<string>>(() => {
 
 const disabledIdsSet = computed<Set<string>>(() => new Set(props.disabledIds ?? []));
 const wrongChainIdsSet = computed<Set<string>>(() => new Set(props.wrongChainIds ?? []));
-const isUnselectable = (id: string) => disabledIdsSet.value.has(id) || wrongChainIdsSet.value.has(id);
+const incompatibleIdsSet = computed<Set<string>>(() => new Set(props.incompatibleIds ?? []));
+const isUnselectable = (id: string) => disabledIdsSet.value.has(id) || wrongChainIdsSet.value.has(id) || incompatibleIdsSet.value.has(id);
 
 const filteredZones = computed<Zone[]>(() => {
   const q = query.value.toLowerCase().trim();
@@ -79,6 +85,7 @@ const filteredZones = computed<Zone[]>(() => {
     if (props.showAlreadyAdded === false && mappedZoneIds.value.has(z.id) && !disabledIdsSet.value.has(z.id)) return false;
     // disabledIds zones only appear when the user has typed a query that matches them
     if (disabledIdsSet.value.has(z.id)) return !!q && z.name.toLowerCase().includes(q);
+    if (incompatibleIdsSet.value.has(z.id)) return !!q && z.name.toLowerCase().includes(q);
     if (props.smartAlreadyAdded && !q && mappedZoneIds.value.has(z.id)) return false;
     
     if (!q) {
@@ -133,6 +140,12 @@ defineExpose({
     onWrapperKeydown(e);
   },
 });
+
+function getItemTitle(id: string): string | undefined {
+  if (wrongChainIdsSet.value.has(id)) return 'This zone belongs to a different chain. You cannot link two chains together. Open the Chain Manager for an explainer.';
+  if (incompatibleIdsSet.value.has(id)) return 'This zone\'s type is incompatible with the from zone. e.g. Royal Cont <-> Outlands.';
+  return undefined;
+}
 
 // Track a single non-disabled result so Tab can accept it even before reka-ui highlights it
 watch(filteredZones, (zones) => {
@@ -205,7 +218,7 @@ function onWrapperKeydown(e: KeyboardEvent) {
 
 <template>
   <!-- capture Tab on the wrapper before reka-ui's internal listeners fire -->
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="0">
   <div ref="comboboxWrapper" class="relative" @keydown.capture="onWrapperKeydown">
     <ComboboxRoot
       :model-value="modelValue"
@@ -263,27 +276,36 @@ function onWrapperKeydown(e: KeyboardEvent) {
           <div v-if="filteredZones.length === 0" class="px-3 py-2 text-sm text-gray-400">
             {{ query ? 'No zones found' : 'Type to search all zones…' }}
           </div>
-          <ComboboxItem
-            v-for="zone in filteredZones"
-            :key="zone.id"
-            :value="zone.id"
-            :disabled="isUnselectable(zone.id)"
-            class="flex items-center gap-2 px-3 py-2 text-sm transition-colors"
-            :class="[
-              wrongChainIdsSet.has(zone.id)
-                ? 'opacity-50 cursor-not-allowed text-gray-400'
-                : disabledIdsSet.has(zone.id)
-                  ? 'opacity-50 cursor-not-allowed text-white bg-green-900/40'
-                  : (mappedZoneIds.has(zone.id) && zone.id !== modelValue
-                      ? 'text-white cursor-pointer bg-green-900/40 hover:bg-green-900/60 data-[highlighted]:bg-gray-700'
-                      : 'text-white cursor-pointer hover:bg-gray-700 data-[highlighted]:bg-gray-700')
-            ]"
-            :title="wrongChainIdsSet.has(zone.id) ? 'This zone belongs to a different chain' : undefined"
-          >
-            <ZoneComboItem :zone="zone" />
-            <span v-if="disabledIdsSet.has(zone.id)" class="shrink-0 text-green-400">✓</span>
-            <ComboboxItemIndicator v-else class="shrink-0 text-green-400">✓</ComboboxItemIndicator>
-          </ComboboxItem>
+          <TooltipRoot v-for="zone in filteredZones" :key="zone.id" :open="getItemTitle(zone.id) ? undefined : false">
+            <TooltipTrigger as-child>
+              <ComboboxItem
+                :value="zone.id"
+                :disabled="isUnselectable(zone.id)"
+                class="flex items-center gap-2 px-3 py-2 text-sm transition-colors"
+                :class="[
+                  (wrongChainIdsSet.has(zone.id) || incompatibleIdsSet.has(zone.id))
+                    ? 'opacity-50 cursor-not-allowed text-gray-400'
+                    : disabledIdsSet.has(zone.id)
+                      ? 'opacity-50 cursor-not-allowed text-white bg-green-900/40'
+                      : (mappedZoneIds.has(zone.id) && zone.id !== modelValue
+                          ? 'text-white cursor-pointer bg-green-900/40 hover:bg-green-900/60 data-[highlighted]:bg-gray-700'
+                          : 'text-white cursor-pointer hover:bg-gray-700 data-[highlighted]:bg-gray-700')
+                ]"
+              >
+                <ZoneComboItem :zone="zone" />
+                <span v-if="disabledIdsSet.has(zone.id)" class="shrink-0 text-green-400">✓</span>
+                <ComboboxItemIndicator v-else class="shrink-0 text-green-400">✓</ComboboxItemIndicator>
+              </ComboboxItem>
+            </TooltipTrigger>
+            <TooltipPortal v-if="getItemTitle(zone.id)">
+              <TooltipContent
+                class="bg-gray-900 border border-gray-600 text-white text-xs px-3 py-2 rounded shadow-xl z-[10000] max-w-[280px]"
+                :side-offset="6"
+              >
+                {{ getItemTitle(zone.id) }}
+              </TooltipContent>
+            </TooltipPortal>
+          </TooltipRoot>
         </ComboboxViewport>
       </ComboboxContent>
     </ComboboxRoot>

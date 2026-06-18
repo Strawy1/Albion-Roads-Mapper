@@ -7,7 +7,7 @@ import TagTier from './common/TagTier.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { addConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
-import { ZONE_BY_ID, getHandleFacing } from 'shared';
+import { ZONE_BY_ID, ZONES, getHandleFacing } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
 import TagExtras from "@/components/common/TagExtras.vue";
 import ChainIdPill from "@/components/common/ChainIdPill.vue";
@@ -65,6 +65,24 @@ function isNonRoadsZoneId(zoneId: string): boolean {
   if (!zone) return false;
   return zone.type !== 'roads' && zone.type !== 'roadsHideout';
 }
+
+// Returns zone IDs that cannot connect to the given zone due to type incompatibility:
+// Royal Continent (royalBlue/Yellow/Red) cannot connect to Outlands/other, and vice versa.
+const incompatibleZoneIds = computed<string[]>(() => {
+  if (!fromZoneId.value) return [];
+  const zone = ZONE_BY_ID.get(fromZoneId.value);
+  if (!zone) return [];
+  const isRoyal = zone.type === 'royalBlue' || zone.type === 'royalYellow' || zone.type === 'royalRed';
+  const isOutlandsOrOther = zone.type === 'outlands' || zone.type === 'other';
+  if (!isRoyal && !isOutlandsOrOther) return [];
+  return ZONES
+    .filter((z) => {
+      if (isRoyal) return z.type === 'outlands' || z.type === 'other';
+      // isOutlandsOrOther
+      return z.type === 'royalBlue' || z.type === 'royalYellow' || z.type === 'royalRed';
+    })
+    .map((z) => z.id);
+});
 
 const isPermanentConnection = computed(() => {
   if (!fromZoneId.value || !toZoneId.value) return false;
@@ -410,6 +428,7 @@ defineExpose({
                     :excluded-ids="[fromZoneId]"
                     :disabled-ids="connectedToFromZone"
                     :wrong-chain-ids="wrongChainZoneIds"
+                    :incompatible-ids="incompatibleZoneIds"
                     :smart-already-added="true"
                     already-added-placement="bottom"
                     data-testid="to-combobox"
