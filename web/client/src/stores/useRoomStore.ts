@@ -258,9 +258,22 @@ export const useRoomStore = defineStore('room', () => {
         break;
 
       case 'connection_removed':
-        connections.value = connections.value.filter((c) => c.id !== msg.connectionId);
+        if (msg.connectionId) {
+          connections.value = connections.value.filter((c) => c.id !== msg.connectionId);
+          usePlotRouteStore().onConnectionRemoved(msg.connectionId);
+        }
+        // The server batches any zones that became orphaned (no remaining
+        // connections, not a chain source / home zone) into the same message
+        // via `removedZoneIds`, so we remove them in one step here.
+        if (msg.removedZoneIds && msg.removedZoneIds.length > 0) {
+          const removedZones = new Set(msg.removedZoneIds);
+          nodePositions.value = nodePositions.value.filter(p => !removedZones.has(p.zoneId));
+          try {
+            const memoryStore = useRoomMemoryStore();
+            for (const zoneId of removedZones) memoryStore.applyMemoryDeleted(zoneId);
+          } catch { /* memory store optional */ }
+        }
         lastUpdate.value = new Date();
-        usePlotRouteStore().onConnectionRemoved(msg.connectionId);
         break;
 
       case 'connection_expired':

@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setupTestApp } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
 import { type Connection, UpdateConnectionBodySchema } from 'shared';
+import { broadcast } from '../src/broadcast.js';
+
+vi.mock('../src/broadcast.js', () => ({
+  broadcast: vi.fn(),
+  addSocket: vi.fn(),
+  removeSocket: vi.fn(),
+  getTotalSocketCount: vi.fn(() => 0),
+}));
 
 const VALID_ZONE_A = 'qiient-al-nusom';
 const VALID_ZONE_B = 'qiient-al-odesum';
@@ -879,22 +887,17 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
     const zoneB = VALID_ZONE_B;
     const conn1Id = 'conn-1';
 
-    // Query 1: SELECT from connections
+    // SELECT from connections (lookup endpoints)
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: conn1Id, from_zone_id: zoneA, to_zone_id: zoneB }] });
-    // Query 2: DELETE from connections
+    // DELETE from connections
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-    // Query 3: SELECT from rooms
-    mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: zoneA }] });
-    // Query 4: SELECT source_zone_id FROM room_chains
-    mockDb.query.mockResolvedValueOnce({ rows: [{ source_zone_id: zoneA }] });
-    // Loop for zoneA (skipped, chain source)
-    // Loop for zoneB:
-    // Query 5: SELECT 1 FROM connections
-    mockDb.query.mockResolvedValueOnce({ rows: [] });
-    // Query 6: DELETE FROM room_node_positions
+    // Set-based orphan SELECT — server treats zoneA as a chain source (excluded)
+    // and returns only zoneB as orphan.
+    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: zoneB }] });
+    // Batch DELETE from room_node_positions (ANY)
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-    // Query 7: SELECT from room_node_positions (for broadcast)
-    mockDb.query.mockResolvedValueOnce({ rows: [] });
+    // Batch DELETE from room_node_memory (ANY)
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
 
     const res = await app.inject({
       method: 'DELETE',
@@ -904,30 +907,30 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
     expect(res.statusCode).toBe(204);
   });
 
-  it('protects a secondary chain source from being deleted as an orphan', async () => {
+  it('protects a secondary chain source from being deleted as an orphan, and batches removed zones into a single connection_removed broadcast', async () => {
     // Scenario from the issue: a secondary chain has only one connection,
-    // from its source (zoneB) to a downstream zone (zoneA-like). Deleting
-    // that connection must NOT delete the chain-source node, only the
-    // downstream zone.
+    // from its source (zoneB) to a downstream zone. Deleting that connection
+    // must NOT delete the chain-source node, only the downstream zone. The
+    // deletion must be transmitted to the client in ONE batched message
+    // (`connection_removed` with `removedZoneIds`), not via per-zone loops.
     const sourceZone = VALID_ZONE_B; // secondary chain source
     const downstreamZone = 'cetitos-aiayrom'; // unrelated downstream zone
-    const homeZone = VALID_ZONE_A; // primary chain home
     const connId = 'conn-secondary';
 
-    // SELECT from connections
+    // SELECT from connections (lookup endpoints)
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: connId, from_zone_id: sourceZone, to_zone_id: downstreamZone }] });
     // DELETE from connections
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-    // SELECT from rooms — different primary home
-    mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: homeZone }] });
-    // SELECT source_zone_id FROM room_chains — primary + secondary
-    mockDb.query.mockResolvedValueOnce({ rows: [{ source_zone_id: homeZone }, { source_zone_id: sourceZone }] });
-    // Loop: zoneB (sourceZone) → SKIPPED because it's a chain source.
-    // Loop: downstreamZone → orphan check + delete
-    mockDb.query.mockResolvedValueOnce({ rows: [] }); // SELECT 1 FROM connections — none
-    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM room_node_positions
-    // SELECT from room_node_positions (for broadcast)
-    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: sourceZone, x: 0, y: 0, features: {}, custom_handles: null, chain_id: 'chain-secondary' }] });
+    // Set-based orphan SELECT — server-side query excludes the chain source
+    // (sourceZone), so only the downstream zone is returned.
+    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: downstreamZone }] });
+    // Batch DELETE from room_node_positions
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+    // Batch DELETE from room_node_memory
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+
+    const broadcastMock = vi.mocked(broadcast);
+    broadcastMock.mockClear();
 
     const res = await app.inject({
       method: 'DELETE',
@@ -936,12 +939,27 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
     });
     expect(res.statusCode).toBe(204);
 
-    // Assert: no DELETE was issued for the chain-source zone, only for the downstream zone.
+    // The batched position DELETE should target ONLY the downstream zone
+    // (chain source was excluded by the orphan-detection query).
     const deletePositionCalls = mockDb.query.mock.calls.filter((call: any[]) =>
       typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_positions')
     );
     expect(deletePositionCalls).toHaveLength(1);
-    expect(deletePositionCalls[0][1]).toEqual([roomId, downstreamZone]);
+    expect(deletePositionCalls[0][1]).toEqual([roomId, [downstreamZone]]);
+
+    // The deletion must be transmitted to the client as a SINGLE batched
+    // `connection_removed` message carrying both the connection id and the
+    // list of zones that became orphaned — not via a per-zone loop or a
+    // separate `node_positions_updated` snapshot.
+    const removalBroadcasts = broadcastMock.mock.calls.filter(
+      (call: any[]) => call[0] === roomId && (call[1]?.type === 'connection_removed' || call[1]?.type === 'node_positions_updated')
+    );
+    expect(removalBroadcasts).toHaveLength(1);
+    expect(removalBroadcasts[0][1]).toMatchObject({
+      type: 'connection_removed',
+      connectionId: connId,
+      removedZoneIds: [downstreamZone],
+    });
   });
 });
 

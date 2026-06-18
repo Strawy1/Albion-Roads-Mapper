@@ -365,59 +365,52 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'Connection not found' });
       }
 
+      // Delete the connection first.
       await app.db.query('DELETE FROM connections WHERE id = $1 AND room_id = $2', [connId, id]);
 
-      const { rows: rooms } = await app.db.query<{ home_zone_id: string }>(
-        'SELECT home_zone_id FROM rooms WHERE id = $1',
-        [id]
+      // Determine which of the connection's endpoint zones are now orphaned —
+      // i.e. have no remaining connections and are NOT a chain source / home
+      // zone. We compute this in a single set-based query (no per-zone loop)
+      // and delete all orphans + their memory in batch, then broadcast ONE
+      // `connection_removed` message containing both the connectionId and the
+      // list of removed zoneIds so the client can update in a single step.
+      const { rows: orphanRows } = await app.db.query<{ zone_id: string }>(
+        `SELECT z.zone_id
+         FROM unnest($2::text[]) AS z(zone_id)
+         WHERE NOT EXISTS (
+           SELECT 1 FROM connections c
+            WHERE c.room_id = $1
+              AND (c.from_zone_id = z.zone_id OR c.to_zone_id = z.zone_id)
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM room_chains rc
+            WHERE rc.room_id = $1 AND rc.source_zone_id = z.zone_id
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM rooms r
+            WHERE r.id = $1 AND r.home_zone_id = z.zone_id
+         )`,
+        [id, [conn.from_zone_id, conn.to_zone_id]]
       );
-      const room = rooms[0];
+      const removedZoneIds = orphanRows.map((r) => r.zone_id);
 
-      const { rows: chainRows } = await app.db.query<{ source_zone_id: string }>(
-        'SELECT source_zone_id FROM room_chains WHERE room_id = $1',
-        [id]
-      );
-      const chainSourceZoneIds = new Set<string>(chainRows.map(r => r.source_zone_id));
-      if (room?.home_zone_id) chainSourceZoneIds.add(room.home_zone_id);
-
-      const zonesToCheck = [conn.from_zone_id, conn.to_zone_id];
-      let positionsUpdated = false;
-
-      for (const zoneId of zonesToCheck) {
-        if (chainSourceZoneIds.has(zoneId)) continue;
-
-        const { rows: connections } = await app.db.query(
-          'SELECT 1 FROM connections WHERE room_id = $1 AND (from_zone_id = $2 OR to_zone_id = $2)',
-          [id, zoneId]
+      if (removedZoneIds.length > 0) {
+        await app.db.query(
+          'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = ANY($2::text[])',
+          [id, removedZoneIds]
         );
-
-        if (connections.length === 0) {
-          const res = await app.db.query('DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = $2', [id, zoneId]);
-          if ((res.rowCount ?? 0) > 0) {
-            positionsUpdated = true;
-          }
-        }
-      }
-
-      broadcast(id, { type: 'connection_removed', connectionId: connId });
-
-      if (positionsUpdated) {
-        const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; chain_id: string | null }>(
-          'SELECT zone_id, x, y, features, custom_handles, chain_id FROM room_node_positions WHERE room_id = $1',
-          [id]
+        await app.db.query(
+          'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = ANY($2::text[])',
+          [id, removedZoneIds]
         );
-        const nodePositions = positions.map(p => ({
-          zoneId: p.zone_id,
-          x: p.x,
-          y: p.y,
-          features: p.features,
-          customHandles: p.custom_handles,
-          chainId: p.chain_id ?? undefined,
-        }));
-        
-        broadcast(id, { type: 'node_positions_updated', nodePositions });
         trackRoomModified(app.db, id);
       }
+
+      broadcast(id, {
+        type: 'connection_removed',
+        connectionId: connId,
+        removedZoneIds: removedZoneIds.length > 0 ? removedZoneIds : undefined,
+      });
 
       return reply.status(204).send();
     },
@@ -462,22 +455,20 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
         [id, zoneId]
       );
-
-      const { rows: positions } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; chain_id: string | null }>(
-        'SELECT zone_id, x, y, features, custom_handles, rotation, chain_id FROM room_node_positions WHERE room_id = $1',
-        [id]
+      await app.db.query(
+        'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = $2',
+        [id, zoneId]
       );
-      const nodePositions = positions.map(p => ({
-        zoneId: p.zone_id,
-        x: p.x,
-        y: p.y,
-        features: p.features,
-        customHandles: p.custom_handles,
-        rotation: p.rotation,
-        chainId: p.chain_id ?? undefined,
-      }));
 
-      broadcast(id, { type: 'node_positions_updated', nodePositions });
+      // Broadcast a focused removal — piggy-back on `connection_removed`'s
+      // `removedZoneIds` channel (no connection involved, so connectionId is
+      // empty) so the client removes only this single node and doesn't have
+      // to reconcile a full-room snapshot.
+      broadcast(id, {
+        type: 'connection_removed',
+        connectionId: '',
+        removedZoneIds: [zoneId],
+      });
       trackRoomModified(app.db, id);
 
       return reply.status(204).send();
