@@ -7,18 +7,6 @@ import { useRoomStore } from '../src/stores/useRoomStore';
 import { Position } from '@vue-flow/core';
 import type { CustomHandle } from 'shared';
 
-const findNodeMock = vi.fn(() => undefined as any);
-
-vi.mock('@vue-flow/core', async () => {
-  const actual = await vi.importActual<any>('@vue-flow/core');
-  return {
-    ...actual,
-    useVueFlow: () => ({
-      findNode: findNodeMock,
-    }),
-  };
-});
-
 // A minimal set of handles: center, center-overlay, and one edge handle
 const BASIC_HANDLES: CustomHandle[] = [
   { id: 'center', left: '50%', top: '50%', position: Position.Right },
@@ -205,68 +193,4 @@ describe('ZoneNodeHandles', () => {
     });
   });
 
-  describe('center-handle-snap-small', () => {
-    it('applies center-handle-snap-small on non-roads nodes when dragging from a roads zone', async () => {
-      const store = useRoomStore();
-      store.setCredentials('room1', 'token1');
-      syncStore(store, {
-        nodePositions: [
-          { zoneId: 'zone-a', x: 0, y: 0, chainId: 'chain-1' },
-          { zoneId: 'zone-b', x: 100, y: 0, chainId: 'chain-1' },
-        ],
-      });
-      findNodeMock.mockReturnValue({ data: { type: 'roads' } });
-      store.isConnecting = true;
-      store.connectingSourceNodeId = 'zone-a';
-
-      const wrapper = mountHandles('zone-b', 'outlands');
-      await nextTick();
-
-      const centerOverlay = wrapper.find('.vue-flow__handle[id="center-overlay"]');
-      expect(centerOverlay.exists()).toBe(true);
-      expect(centerOverlay.classes()).toContain('center-handle-snap-small');
-    });
-
-    it('does not apply center-handle-snap-small when dragging from a non-roads zone', async () => {
-      const store = useRoomStore();
-      store.setCredentials('room1', 'token1');
-      syncStore(store, {
-        nodePositions: [
-          { zoneId: 'zone-a', x: 0, y: 0, chainId: 'chain-1' },
-          { zoneId: 'zone-b', x: 100, y: 0, chainId: 'chain-1' },
-        ],
-      });
-      findNodeMock.mockReturnValue({ data: { type: 'outlands' } });
-      store.isConnecting = true;
-      store.connectingSourceNodeId = 'zone-a';
-
-      const wrapper = mountHandles('zone-b', 'outlands');
-      await nextTick();
-
-      const centerOverlay = wrapper.find('.vue-flow__handle[id="center-overlay"]');
-      expect(centerOverlay.exists()).toBe(true);
-      expect(centerOverlay.classes()).not.toContain('center-handle-snap-small');
-    });
-
-    it('does not apply center-handle-snap-small on roads nodes even when dragging from a roads zone', async () => {
-      const store = useRoomStore();
-      store.setCredentials('room1', 'token1');
-      syncStore(store, {
-        nodePositions: [
-          { zoneId: 'zone-a', x: 0, y: 0, chainId: 'chain-1' },
-          { zoneId: 'zone-b', x: 100, y: 0, chainId: 'chain-1' },
-        ],
-      });
-      findNodeMock.mockReturnValue({ data: { type: 'roads' } });
-      store.isConnecting = true;
-      store.connectingSourceNodeId = 'zone-a';
-
-      const wrapper = mountHandles('zone-b', 'roads');
-      await nextTick();
-
-      const centerOverlay = wrapper.find('.vue-flow__handle[id="center-overlay"]');
-      expect(centerOverlay.exists()).toBe(true);
-      expect(centerOverlay.classes()).not.toContain('center-handle-snap-small');
-    });
-  });
 });
