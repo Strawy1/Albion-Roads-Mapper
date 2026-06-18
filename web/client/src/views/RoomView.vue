@@ -411,8 +411,8 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
       });
     }
 
-    // Remove nodes that are no longer present
-    flowNodes.value = flowNodes.value.filter(n => newNodes.find(nn => nn.id === n.id));
+    // Remove nodes that are no longer present (but keep transient ghosts)
+    flowNodes.value = flowNodes.value.filter(n => n.data?.isGhost || newNodes.find(nn => nn.id === n.id));
 
     // 3. Map to VueFlow edges
     flowEdges.value = connections.value.map((conn: Connection) => {
@@ -567,7 +567,100 @@ function handleKeyDown(e: KeyboardEvent) {
   if (e.key === 'Escape' && plotRouteStore.isPlotRouteMode) {
     plotRouteStore.exitPlotRouteMode();
   }
+  if (e.key === 'Escape' && store.pendingChainSourceZoneId) {
+    store.cancelPlacingChain();
+  }
 }
+
+// ── New-chain ghost-on-cursor placement ──────────────────────────────────────
+// Node visual is min 400x400 — anchor ghost so the cursor is dead-center.
+const CHAIN_GHOST_HALF = 200;
+const CHAIN_GHOST_ID = '__chain-placement-ghost__';
+let chainGhostNode: any = null;
+
+function makeChainGhostNode(zoneId: string, pos: { x: number; y: number }) {
+  const zone = ZONE_BY_ID.get(zoneId);
+  const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  return {
+    id: CHAIN_GHOST_ID,
+    type: isRoads ? 'zone' : 'non-roads',
+    position: { x: pos.x - CHAIN_GHOST_HALF, y: pos.y - CHAIN_GHOST_HALF },
+    selectable: false,
+    draggable: false,
+    data: {
+      isGhost: true,
+      isChainSource: true,
+      zoneName: zone?.name ?? zoneId,
+      type: zone?.type ?? 'roadsHideout',
+      tier: zone?.tier ?? 0,
+      features: {},
+    },
+  };
+}
+
+function removeChainGhost() {
+  if (chainGhostNode) {
+    flowNodes.value = flowNodes.value.filter(n => n.id !== CHAIN_GHOST_ID);
+    chainGhostNode = null;
+  }
+}
+
+function onPendingChainMouseMove(e: MouseEvent) {
+  const zoneId = store.pendingChainSourceZoneId;
+  if (!zoneId) return;
+  const flow = screenToFlowCoordinate({ x: e.clientX, y: e.clientY });
+  const nextPos = { x: flow.x - CHAIN_GHOST_HALF, y: flow.y - CHAIN_GHOST_HALF };
+  if (!chainGhostNode) {
+    chainGhostNode = makeChainGhostNode(zoneId, flow);
+    flowNodes.value.push(chainGhostNode);
+  } else {
+    // Mutate in place + call VueFlow's updateNode so the diamond/zone visually
+    // moves with the cursor (same pattern the position-sync watcher uses).
+    const existing = flowNodes.value.find(n => n.id === CHAIN_GHOST_ID);
+    if (existing) {
+      existing.position = nextPos;
+      updateNode(CHAIN_GHOST_ID, { position: nextPos });
+    }
+  }
+}
+
+async function onPendingChainClick(e: MouseEvent) {
+  const zoneId = store.pendingChainSourceZoneId;
+  if (!zoneId) return;
+  // Right-click / middle-click → cancel.
+  if (e.button !== 0) {
+    store.cancelPlacingChain();
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  const flow = screenToFlowCoordinate({ x: e.clientX, y: e.clientY });
+  // Persist the node so its center sits on the click.
+  const placedX = flow.x - CHAIN_GHOST_HALF;
+  const placedY = flow.y - CHAIN_GHOST_HALF;
+  // Clear pending immediately so the ghost vanishes; on error we re-show a toast.
+  store.cancelPlacingChain();
+  try {
+    await store.addChain(zoneId, { x: placedX, y: placedY });
+  } catch (err: any) {
+    showToast(err?.message ?? 'Failed to add chain', 'error');
+  }
+}
+
+function onPendingChainContextMenu(e: MouseEvent) {
+  if (!store.pendingChainSourceZoneId) return;
+  e.preventDefault();
+  store.cancelPlacingChain();
+}
+
+watch(() => store.pendingChainSourceZoneId, (id) => {
+  if (id) {
+    window.addEventListener('mousemove', onPendingChainMouseMove);
+  } else {
+    window.removeEventListener('mousemove', onPendingChainMouseMove);
+    removeChainGhost();
+  }
+});
 const showMobileSummary = ref(false);
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -1289,6 +1382,17 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         <Background />
         <Controls />
       </VueFlow>
+
+      <!-- New-chain ghost placement: transparent click-catcher above VueFlow.
+           The actual ghost is a real VueFlow node pushed into flowNodes so it
+           lives in flow coordinate space (zooms/pans correctly). -->
+      <div
+        v-if="store.pendingChainSourceZoneId"
+        class="absolute inset-0 cursor-crosshair"
+        :class="Z_INDEX.OVERLAY"
+        @click="onPendingChainClick"
+        @contextmenu="onPendingChainContextMenu"
+      ></div>
 
       <!-- Ping Toasts -->
       <div class="absolute top-20 md:top-24 left-1/2 -translate-x-1/2 pointer-events-none w-full max-w-[95vw] flex flex-col items-center gap-2 px-4" :class="Z_INDEX.TOAST">

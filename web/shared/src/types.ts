@@ -244,6 +244,11 @@ export const ChangePasswordBodySchema = z.object({
 
 export const AddChainBodySchema = z.object({
   sourceZoneId: z.string().min(1),
+  // Optional initial position. When provided, the server inserts the new
+  // chain's source node at these coords instead of (0,0). Used by the
+  // "ghost on cursor" placement flow in the client.
+  x: z.number().optional(),
+  y: z.number().optional(),
 });
 
 export type RoomChain = {

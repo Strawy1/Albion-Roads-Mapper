@@ -96,6 +96,17 @@ export const useRoomStore = defineStore('room', () => {
   const chainManagementOpen = ref(false);
   function openChainManagement() { chainManagementOpen.value = true; }
 
+  // "Ghost-on-cursor" placement state for new chains. While non-null, RoomView
+  // renders a ghost that follows the cursor; the next left-click on the canvas
+  // creates the chain at that flow coordinate. ESC / right-click cancels.
+  const pendingChainSourceZoneId = ref<string | null>(null);
+  function beginPlacingChain(sourceZoneId: string) {
+    pendingChainSourceZoneId.value = sourceZoneId;
+  }
+  function cancelPlacingChain() {
+    pendingChainSourceZoneId.value = null;
+  }
+
   let ws: WebSocket | null = null;
   let reconnectDelay = 1000;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -720,9 +731,15 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  async function addChain(sourceZoneId: string) {
+  async function addChain(sourceZoneId: string, position?: { x: number; y: number }) {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
+    }
+
+    const body: { sourceZoneId: string; x?: number; y?: number } = { sourceZoneId };
+    if (position && Number.isFinite(position.x) && Number.isFinite(position.y)) {
+      body.x = position.x;
+      body.y = position.y;
     }
 
     const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains`, {
@@ -731,7 +748,7 @@ export const useRoomStore = defineStore('room', () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getToken()}`
       },
-      body: JSON.stringify({ sourceZoneId }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -854,6 +871,9 @@ export const useRoomStore = defineStore('room', () => {
     chainTooltipForZone,
     chainManagementOpen,
     openChainManagement,
+    pendingChainSourceZoneId,
+    beginPlacingChain,
+    cancelPlacingChain,
     setCredentials,
     applyMessage,
     updateNodePositionsInStore,

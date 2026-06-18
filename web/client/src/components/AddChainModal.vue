@@ -113,26 +113,21 @@ async function chooseColour(chainId: string, hex: string) {
   }
 }
 
-async function save() {
+function save() {
   if (!sourceZoneId.value) {
     error.value = 'Choose a zone';
     return;
   }
 
-  saving.value = true;
+  // Defer actual chain creation until the user left-clicks on the canvas to
+  // place the source zone. RoomView renders the cursor ghost and calls
+  // store.addChain(zoneId, { x, y }) once a placement click is registered.
   error.value = '';
   success.value = false;
-  try {
-    await store.addChain(sourceZoneId.value);
-    success.value = true;
-    track('add_chain');
-    sourceZoneId.value = '';
-    setTimeout(() => { success.value = false; }, 1500);
-  } catch (e: any) {
-    error.value = e?.message ?? 'Failed to add chain';
-  } finally {
-    saving.value = false;
-  }
+  store.beginPlacingChain(sourceZoneId.value);
+  track('add_chain_begin_placement');
+  sourceZoneId.value = '';
+  close();
 }
 
 async function removeChain(chainId: string, sourceZoneId: string) {
@@ -287,7 +282,7 @@ function chainPillColour(chain: { chainColor?: string }): string {
             class="flex-1 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="save"
           >
-            {{ saving ? 'Adding…' : 'Add chain' }}
+            {{ saving ? 'Adding…' : 'Place chain…' }}
           </button>
 
         </div>

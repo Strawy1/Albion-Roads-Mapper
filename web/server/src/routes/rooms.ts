@@ -216,7 +216,9 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.status(400).send({ error: formatZodError(parsed.error) });
     }
-    const { sourceZoneId } = parsed.data;
+    const { sourceZoneId, x: requestedX, y: requestedY } = parsed.data;
+    const initialX = typeof requestedX === 'number' ? requestedX : 0;
+    const initialY = typeof requestedY === 'number' ? requestedY : 0;
 
     const zone = ZONE_BY_ID.get(sourceZoneId);
     if (!zone) {
@@ -268,7 +270,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       if (existingNode.length === 0) {
         await client.query(
           'INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, rotation, chain_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [id, sourceZoneId, 0, 0, JSON.stringify(getInitialFeatures(sourceZoneId)), JSON.stringify(null), 0, chainId]
+          [id, sourceZoneId, initialX, initialY, JSON.stringify(getInitialFeatures(sourceZoneId)), JSON.stringify(null), 0, chainId]
         );
         await client.query(
           'INSERT INTO room_node_memory (room_id, zone_id, features, times_added, rotation) VALUES ($1, $2, $3, ARRAY[$4::timestamptz], $5) ON CONFLICT (room_id, zone_id) DO NOTHING',
@@ -641,12 +643,42 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      await client.query('DELETE FROM connections WHERE room_id = $1', [id]);
-      await client.query('DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id != $2', [id, room.home_zone_id]);
-      await client.query(
-        'UPDATE room_node_positions SET features = $1, custom_handles = $2 WHERE room_id = $3 AND zone_id = $4',
-        ['{}', null, id, room.home_zone_id]
+      // Collect ALL chain source zones (which always includes the primary
+      // chain's source == home_zone_id). These must NEVER be deleted, even by
+      // a full room "reset" — otherwise we end up with the corrupt state of
+      // a chain whose source zone no longer has a node position.
+      const { rows: chainSourceRows } = await client.query<{ id: string; source_zone_id: string }>(
+        'SELECT id, source_zone_id FROM room_chains WHERE room_id = $1',
+        [id]
       );
+      const preservedZoneIds = Array.from(new Set<string>([
+        room.home_zone_id,
+        ...chainSourceRows.map((r) => r.source_zone_id),
+      ]));
+
+      await client.query('DELETE FROM connections WHERE room_id = $1', [id]);
+      await client.query(
+        'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id <> ALL($2::text[])',
+        [id, preservedZoneIds]
+      );
+      await client.query(
+        'UPDATE room_node_positions SET features = $1, custom_handles = $2 WHERE room_id = $3 AND zone_id = ANY($4::text[])',
+        ['{}', null, id, preservedZoneIds]
+      );
+      // Self-heal: for every chain, ensure its source zone has a node position
+      // row with the correct chain_id. If the row is missing entirely (the
+      // corrupt-room scenario), reconstruct it at (0,0); if it exists but has
+      // a NULL/stale chain_id, repair it to match the chain. This guarantees
+      // a reset always leaves every chain with its source zone properly
+      // wired to a node position.
+      for (const chain of chainSourceRows) {
+        await client.query(
+          `INSERT INTO room_node_positions (room_id, zone_id, x, y, features, custom_handles, chain_id)
+           VALUES ($1, $2, 0, 0, '{}', NULL, $3)
+           ON CONFLICT (room_id, zone_id) DO UPDATE SET chain_id = EXCLUDED.chain_id`,
+          [id, chain.source_zone_id, chain.id]
+        );
+      }
       await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
       
       await client.query('COMMIT');
