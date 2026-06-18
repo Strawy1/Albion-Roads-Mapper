@@ -310,7 +310,7 @@ defineExpose({
       <!-- Unexplored target tooltip — right of the pill -->
       <div
         v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
-        class="absolute left-full top-1/2 -translate-y-1/2 ml-2 pb-4"
+        class="absolute left-full top-1/2 -translate-y-1/2"
         :class="Z_INDEX.TOAST"
       >
         <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />

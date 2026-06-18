@@ -12,15 +12,15 @@ const emit = defineEmits<{ dismiss: [] }>();
     class="pointer-events-auto"
     :class="[Z_INDEX.HANDLE_OVERLAY]"
     bounce
-    :offset-y="-10"
-    :offset-x="10"
+    :offset-y="-15"
+    :offset-x="15"
   >
-    <span>Link Zone portals!</span>
+    <span class="text-xs font-bold">Link Zone portals!</span>
     <template #actions>
       <TooltipProvider :delay-duration="0">
         <TooltipRoot>
           <TooltipTrigger asChild>
-            <span class="how-trigger underline cursor-help text-blue-200 hover:text-white">(How?)</span>
+            <span class="how-trigger text-xs font-bold underline cursor-help text-blue-200 hover:text-white">(How?)</span>
           </TooltipTrigger>
           <TooltipPortal>
             <TooltipContent
@@ -33,7 +33,7 @@ const emit = defineEmits<{ dismiss: [] }>();
         </TooltipRoot>
       </TooltipProvider>
       <button
-        class="dismiss-btn ml-1 text-blue-200 hover:text-white leading-none"
+        class="dismiss-btn text-blue-200 hover:text-white leading-none"
         title="Dismiss"
         @click.stop="emit('dismiss')"
         @mousedown.stop
