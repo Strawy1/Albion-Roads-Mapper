@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Position, useVueFlow, Handle } from '@vue-flow/core';
+import { Position, Handle } from '@vue-flow/core';
 import type { CustomHandle } from 'shared';
 import { getHandleFacing } from 'shared';
 import { connectionStyle } from '@/utils/connectionStyle';
@@ -20,7 +20,6 @@ const props = defineProps<{
 const store = useRoomStore();
 const plotRouteStore = usePlotRouteStore();
 const { connections, isConnecting, nodePositions, connectingSourceNodeId } = storeToRefs(store);
-const { findNode } = useVueFlow();
 
 // ── Chain / visibility computeds ────────────────────────────────────────────
 
@@ -49,12 +48,6 @@ const connectedHandleIds = computed(() => {
   return ids;
 });
 
-const isSourceRoadsZone = computed(() => {
-  if (!connectingSourceNodeId.value) return false;
-  const sourceNode = findNode(connectingSourceNodeId.value);
-  return sourceNode?.data?.type === 'roads';
-});
-
 /**
  * Whether a handle should be rendered at all.
  * Rules:
@@ -75,14 +68,6 @@ const handleOpacity = (handleId: string): number | undefined => {
   // center-overlay and connected handles are dimmed, not hidden
   return 0.25;
 };
-
-/**
- * Whether the center-overlay should use the small snap area.
- * Applied when dragging from a roads zone onto a non-roads node.
- */
-const usesSmallCenterSnap = computed(() =>
-  isSourceRoadsZone.value && props.nodeType !== 'roads'
-);
 
 // ── Handle state computeds ───────────────────────────────────────────────────
 
@@ -140,10 +125,7 @@ function getHandlePosition(left: string, top: string): Position {
 }
 
 function centerOverlayClasses(): string[] {
-  return [
-    'center-handle-snap',
-    ...(usesSmallCenterSnap.value ? ['center-handle-snap-small'] : []),
-  ];
+  return ['center-handle-snap'];
 }
 </script>
 
@@ -171,8 +153,8 @@ function centerOverlayClasses(): string[] {
         :class="[
           'handle',
           handle.id === 'center-overlay' ? Z_INDEX.HANDLE_OVERLAY : Z_INDEX.HANDLE,
-          handle.id === 'center' || handle.id === 'center-overlay' ? 'center-handle' : '',
-          handle.id === 'center-overlay' ? centerOverlayClasses() : [],
+          handle.id === 'center' ? 'center-handle' : '',
+          handle.id === 'center-overlay' ? 'center-handle-snap' : [],
           handle.id !== 'center' && handle.id !== 'center-overlay' ? `facing-${getHandleFacing(handle.left, handle.top)}` : '',
           isIdle(handle.id) && !isConnecting ? 'handle-default' : '',
           isActive(handle.id) ? 'handle-active' : '',

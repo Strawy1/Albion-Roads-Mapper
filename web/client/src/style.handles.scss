@@ -235,13 +235,9 @@
 }
 
 .center-handle-snap {
-  width: 150px !important;
-  height: 150px !important;
+  width: 75px !important;
+  height: 75px !important;
   background-color: transparent !important;
   transform: translate(-50%, -50%) !important;
 
-  &.center-handle-snap-small {
-    width: 20px !important;
-    height: 20px !important;
-  }
 }
