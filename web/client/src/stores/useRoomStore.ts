@@ -179,12 +179,52 @@ export const useRoomStore = defineStore('room', () => {
       const defaultHandles = getShapeHandlePositions(shape);
       if (defaultHandles.length === 0) continue;
       const customHandles = node.customHandles;
-      if (!customHandles || customHandles.length === 0) continue;
+      const stored0 = node.rotation ?? 0;
+      if (!customHandles || customHandles.length === 0) {
+        // No saved handles means the zone is at default layout — which is only
+        // valid when stored rotation is 0. A non-zero stored rotation with no
+        // handles is a desync (e.g. a partial reset that wiped the handles but
+        // not the rotation, or vice versa) and must be flagged so the user can
+        // reset the zone via the hourglass button.
+        if (stored0 !== 0) {
+          console.warn(
+            `[RotationValidation] Zone "${node.zoneId}" has stored rotation=${stored0} ` +
+            `but no custom handles — layout is inconsistent.`
+          );
+          errors.push(node.zoneId);
+        }
+        continue;
+      }
 
-      const inferred = inferRotationFromHandles(customHandles, defaultHandles);
-      if (inferred === null) continue;
-
+      // Only consider the shape's own handle ids when inferring rotation —
+      // user-added customs aren't part of the shape and can sit anywhere on
+      // the perimeter. Previously these were included, which masked desyncs.
+      const shapeHandleRegex = new RegExp(`^${shape}-p\\d+$`);
+      const shapeHandles = customHandles.filter(h => shapeHandleRegex.test(h.id));
       const stored = node.rotation ?? 0;
+
+      // If the shape's handles aren't all present (e.g. corruption from a
+      // partially-applied update), that's a desync we should flag and let the
+      // server self-heal on next interaction.
+      if (shapeHandles.length !== defaultHandles.length) {
+        console.warn(
+          `[RotationValidation] Zone "${node.zoneId}" has ${shapeHandles.length}/${defaultHandles.length} shape handles; ` +
+          `data is inconsistent with shape "${shape}".`
+        );
+        errors.push(node.zoneId);
+        continue;
+      }
+
+      const inferred = inferRotationFromHandles(shapeHandles, defaultHandles);
+      if (inferred === null) {
+        // Handles can't be matched to any rotation — definite desync.
+        console.warn(
+          `[RotationValidation] Zone "${node.zoneId}" handles do not match any rotation of shape "${shape}".`
+        );
+        errors.push(node.zoneId);
+        continue;
+      }
+
       if (inferred !== stored) {
         console.warn(
           `[RotationValidation] Mismatch on zone "${node.zoneId}": ` +
@@ -444,6 +484,9 @@ export const useRoomStore = defineStore('room', () => {
           // Append any new entries the broadcast added.
           for (const p of incomingById.values()) next.push(p);
           nodePositions.value = next;
+          // Re-validate after applying authoritative server data so the UI
+          // reflects the corrected/uncorrected state of any changed zones.
+          validateNodeRotations(nodePositions.value);
         }
         if (msg.updateLastUpdated) {
           lastUpdate.value = new Date();
@@ -636,7 +679,11 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], rotation: 0, customHandles: [] };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
+    // Use the dedicated rotate endpoint: this guarantees server-side validation
+    // and an authoritative broadcast, which clears any stale rotation/handle
+    // desync without depending on the generic position update path.
+    send({ type: 'rotate_zone', zoneId, rotation: 0 });
+    clearRotationError(zoneId);
     track('reset_zone_portals');
   }
 
@@ -647,7 +694,11 @@ export const useRoomStore = defineStore('room', () => {
     newNodePositions[index] = { ...newNodePositions[index], rotation, explored: true };
     nodePositions.value = newNodePositions;
     lastUpdate.value = new Date();
-    send({ type: 'update_node_positions', nodePositions: nodePositions.value, updateLastUpdated: true });
+    // Dedicated rotate endpoint — the server is the single source of truth for
+    // rotation/handle consistency and will re-broadcast the canonical state
+    // to all clients (including this one).
+    send({ type: 'rotate_zone', zoneId, rotation });
+    clearRotationError(zoneId);
     track('update_node_rotation');
   }
 

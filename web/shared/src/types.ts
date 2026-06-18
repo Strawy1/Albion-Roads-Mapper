@@ -411,4 +411,5 @@ export type ClientMessage =
   | { type: 'ping'; zoneName: string; nodeId?: string }
   | { type: 'polo' }
   | { type: 'update_node_positions'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
+  | { type: 'rotate_zone'; zoneId: string; rotation: number }
   | { type: 'update_plot_route'; plottedRoute: string[]; destinationZoneId?: string };

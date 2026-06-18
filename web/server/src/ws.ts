@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
-import { ZONE_BY_ID, PRIMARY_CHAIN_COLOR, type Connection, type ClientMessage, type ServerMessage, type NodePosition, type RoomMemoryEntry } from 'shared';
+import { ZONE_BY_ID, PRIMARY_CHAIN_COLOR, canonicalizeHandlesForRotation, inferRotationForZone, normalizeRotationSteps, type Connection, type ClientMessage, type ServerMessage, type NodePosition, type RoomMemoryEntry, type CustomHandle } from 'shared';
 import { addSocket, removeSocket, broadcast, getTotalSocketCount } from './broadcast.js';
 import { trackRoomModified, trackRoutePlotted } from './routes/rooms_analytics.js';
 import { recordPolo, getWatchingCount } from './marcopolo.js';
@@ -236,12 +236,40 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
           if (!verifySession()) return;
 
           // Deduplicate nodePositions by zoneId to prevent unique constraint violations
-          const deduplicated = Array.from(
+          const deduplicatedRaw = Array.from(
             msg.nodePositions.reduce((map, pos) => {
               map.set(pos.zoneId, pos);
               return map;
             }, new Map<string, NodePosition>()).values()
           );
+
+          // Server-side rotation/handle self-heal: if the client is sending a
+          // node whose stored `rotation` is inconsistent with its `customHandles`
+          // (a desync), regenerate the canonical handle set from the requested
+          // rotation rather than trusting potentially-stale client state.
+          // The inferred rotation from handles is treated as authoritative when
+          // it conflicts with `pos.rotation` because handles drive what the
+          // user actually sees and clicks on.
+          const deduplicated = deduplicatedRaw.map((pos) => {
+            const zone = ZONE_BY_ID.get(pos.zoneId);
+            if (!zone || !zone.mapShape || zone.type === 'roadsHideout') return pos;
+            const handles = (pos.customHandles ?? null) as CustomHandle[] | null;
+            if (!handles || handles.length === 0) {
+              return { ...pos, rotation: normalizeRotationSteps(pos.rotation) };
+            }
+            const inferred = inferRotationForZone(zone.type, zone.mapShape, handles);
+            const requested = normalizeRotationSteps(pos.rotation);
+            if (inferred === null) {
+              // Handles are inconsistent — rebuild them from defaults at the requested rotation.
+              const canonical = canonicalizeHandlesForRotation(zone.type, zone.mapShape, handles, requested);
+              return { ...pos, rotation: requested, customHandles: canonical };
+            }
+            if (inferred !== requested) {
+              // Stored rotation disagrees with handle layout — handles win.
+              return { ...pos, rotation: inferred };
+            }
+            return { ...pos, rotation: requested };
+          });
 
           const client = await app.db.connect();
           try {
@@ -373,6 +401,113 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
               };
               broadcast(roomId, { type: 'memory_updated', entry });
             }
+          }
+          return;
+        }
+
+        if (msg.type === 'rotate_zone') {
+          // Dedicated endpoint for rotating a single zone.
+          //
+          // Why this exists: rotating a zone has historically been performed by
+          // sending a full `update_node_positions` payload. That made it
+          // impossible for the server to apply rotation-specific validation —
+          // and a desync (e.g. a missed `room_reset`) could leave a client with
+          // a stale `rotation` value that, when sent back, would propagate the
+          // bad state to every other client.
+          //
+          // The server treats this endpoint as the single source of truth for
+          // rotation: it reads the currently stored handles, recomputes the
+          // canonical handle layout at the requested rotation, persists the
+          // result, then broadcasts an authoritative `node_positions_updated`
+          // so every client converges on the corrected state — even if the
+          // requesting client sent inconsistent data.
+          if (!authenticated) return;
+          if (!verifySession()) return;
+          if (!msg.zoneId || typeof msg.rotation !== 'number') return;
+
+          const targetRotation = normalizeRotationSteps(msg.rotation);
+          const zone = ZONE_BY_ID.get(msg.zoneId);
+          if (!zone) return;
+
+          const dbClient = await app.db.connect();
+          let updatedPosition: NodePosition | null = null;
+          try {
+            await dbClient.query('BEGIN');
+            // Lock the room row to serialize concurrent rotation/update operations.
+            const { rows: roomRows } = await dbClient.query<{ home_zone_id: string }>(
+              'SELECT home_zone_id FROM rooms WHERE id = $1 FOR UPDATE',
+              [roomId]
+            );
+            if (!roomRows[0]) {
+              await dbClient.query('ROLLBACK');
+              return;
+            }
+
+            const { rows: existingRows } = await dbClient.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean; chain_id: string | null }>(
+              'SELECT zone_id, x, y, features, custom_handles, rotation, explored, chain_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+              [roomId, msg.zoneId]
+            );
+            const existing = existingRows[0];
+            if (!existing) {
+              await dbClient.query('ROLLBACK');
+              return;
+            }
+
+            const incomingHandles = (existing.custom_handles ?? null) as CustomHandle[] | null;
+            const canonicalHandles = canonicalizeHandlesForRotation(
+              zone.type,
+              zone.mapShape,
+              incomingHandles,
+              targetRotation,
+            );
+
+            await dbClient.query(
+              'UPDATE room_node_positions SET rotation = $3, custom_handles = $4, explored = true WHERE room_id = $1 AND zone_id = $2',
+              [roomId, msg.zoneId, targetRotation, JSON.stringify(canonicalHandles && canonicalHandles.length > 0 ? canonicalHandles : null)]
+            );
+            await dbClient.query(
+              'UPDATE rooms SET updated_at = $1 WHERE id = $2',
+              [new Date().toISOString(), roomId]
+            );
+
+            // Mirror the rotation/handles into room_node_memory (roads only),
+            // so a future re-add of the same zone restores the rotated layout.
+            if (zone.type === 'roads' || zone.type === 'roadsHideout') {
+              await app.db.query(
+                'UPDATE room_node_memory SET rotation = $3, custom_handles = $4, last_updated = $5 WHERE room_id = $1 AND zone_id = $2',
+                [roomId, msg.zoneId, targetRotation, JSON.stringify(canonicalHandles && canonicalHandles.length > 0 ? canonicalHandles : null), new Date().toISOString()]
+              );
+            }
+
+            await dbClient.query('COMMIT');
+
+            updatedPosition = {
+              zoneId: existing.zone_id,
+              x: existing.x,
+              y: existing.y,
+              features: existing.features,
+              customHandles: canonicalHandles,
+              rotation: targetRotation,
+              explored: true,
+              chainId: existing.chain_id ?? undefined,
+            };
+          } catch (e) {
+            await dbClient.query('ROLLBACK');
+            throw e;
+          } finally {
+            dbClient.release();
+          }
+
+          if (updatedPosition) {
+            // Re-broadcast the authoritative state to every client (including the
+            // sender) so any client that desynced will converge on the corrected
+            // rotation/handles automatically.
+            broadcast(roomId, {
+              type: 'node_positions_updated',
+              nodePositions: [updatedPosition],
+              updateLastUpdated: true,
+            });
+            trackRoomModified(app.db, roomId);
           }
           return;
         }
