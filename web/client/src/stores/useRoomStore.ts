@@ -17,6 +17,7 @@ export const useRoomStore = defineStore('room', () => {
   const chains = ref<RoomChain[]>([]);
   const chainSourceZoneIds = computed(() => new Set(chains.value.map(c => c.sourceZoneId)));
   const nodePositions = ref<NodePosition[]>([]);
+  const chainMemberZoneIds = computed(() => new Set(nodePositions.value.filter(n => n.chainId).map(n => n.zoneId)));
 
   // Friendly ID for a chain: now persisted on the server as `chainNumber`. The
   // map below stays for legacy callers and as a fallback if a chain row hasn't
@@ -915,6 +916,7 @@ export const useRoomStore = defineStore('room', () => {
     recentlyViewedRooms,
     chains,
     chainSourceZoneIds,
+    chainMemberZoneIds,
     chainFriendlyId,
     chainFriendlyIdForZone,
     chainColorForZone,
