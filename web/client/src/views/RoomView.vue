@@ -32,7 +32,7 @@ import { Controls } from '@vue-flow/controls';
 import { formatExpiresIn } from '@/utils/formatters';
 import { addConnection, deleteConnection, updateConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
-import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateCycle, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
+import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
 
 const props = defineProps<{ id: string }>();
 const store = useRoomStore();
@@ -912,6 +912,24 @@ async function handleConnect(params: any) {
     }
   }
 
+  // If a connection already exists between these two zones in the opposite direction,
+  // normalize the new connection's direction to match the existing one so we don't
+  // create a reverse-direction duplicate (which the server rejects as a cycle).
+  const existingAnyDirection = store.connections.find(c =>
+    !c.isExpired &&
+    ((c.fromZoneId === params.source && c.toZoneId === params.target) ||
+     (c.fromZoneId === params.target && c.toZoneId === params.source))
+  );
+  if (existingAnyDirection && existingAnyDirection.fromZoneId === params.target) {
+    // Swap source/target so directionality matches the existing connection
+    const tmp = params.source;
+    params.source = params.target;
+    params.target = tmp;
+    const tmpHandle = params.sourceHandle;
+    params.sourceHandle = params.targetHandle;
+    params.targetHandle = tmpHandle;
+  }
+
   // Check for existing connection between these two zones (to update it)
   const existing = store.connections.find(c =>
     !c.isExpired &&
@@ -1018,11 +1036,6 @@ async function handleConnect(params: any) {
     } catch (err: any) {
       showToast(err.message || 'Failed to update connection.', 'error');
     }
-    return;
-  }
-
-  if (wouldCreateCycle(store.connections, params.source, params.target)) {
-    showToast("This connection would create a cycle.", "error");
     return;
   }
 

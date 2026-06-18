@@ -129,9 +129,6 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       [id]
     );
     const connections = dbConnections.map(dbRowToConnection);
-    if (Shared.wouldCreateCycle(connections, fromZoneId, toZoneId)) {
-      return reply.status(400).send({ error: 'This connection would create a direct cycle' });
-    }
 
     // Validate that the source handle is not already occupied by another connection
     const normalizedFromHandle = fromHandleId || 'center';
