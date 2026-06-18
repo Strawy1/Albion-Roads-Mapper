@@ -12,8 +12,9 @@ import TipButton from '../TipButton.vue';
     <a
       href="https://discord.gg/uFq2PJuZ3r"
       target="_blank"
-      class="px-4 py-1.5 rounded-lg bg-[#5865F2]/70 hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center duration-500 text-white shadow-lg background-blur-md"
+      class="px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center duration-500 text-white shadow-lg background-blur-md flex items-center gap-2"
     >
+      <img src="/images/discord.png" alt="Discord" class="h-5 w-auto" />
       Discord
     </a>
 
