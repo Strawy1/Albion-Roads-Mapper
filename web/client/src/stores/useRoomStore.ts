@@ -395,9 +395,15 @@ export const useRoomStore = defineStore('room', () => {
       
       case 'node_positions_updated':
         {
-          const merged = msg.nodePositions.map((p: NodePosition) => {
-            const existing = nodePositions.value.find(n => n.zoneId === p.zoneId);
-            if (!existing) return p;
+          // Upsert: update entries present in the broadcast and keep all other
+          // preexisting node positions untouched. This avoids clobbering nodes
+          // belonging to existing chains when a single-row broadcast (e.g. a
+          // newly added chain's source zone) arrives.
+          const incomingById = new Map(msg.nodePositions.map((p: NodePosition) => [p.zoneId, p]));
+          const next = nodePositions.value.map((existing) => {
+            const p = incomingById.get(existing.zoneId);
+            if (!p) return existing;
+            incomingById.delete(existing.zoneId);
             return {
               ...existing,
               x: p.x,
@@ -411,7 +417,9 @@ export const useRoomStore = defineStore('room', () => {
               chainId: p.chainId ?? existing.chainId,
             };
           });
-          nodePositions.value = merged;
+          // Append any new entries the broadcast added.
+          for (const p of incomingById.values()) next.push(p);
+          nodePositions.value = next;
         }
         if (msg.updateLastUpdated) {
           lastUpdate.value = new Date();
@@ -520,10 +528,19 @@ export const useRoomStore = defineStore('room', () => {
   function updateNodePositionsInStore(positions: NodePosition[]) {
     if (!positions) return;
     // Merge incoming positions with existing ones, preserving explored/features/customHandles
-    // for nodes that already exist unless the incoming data explicitly provides them
-    const merged = positions.map(p => {
-      const existing = nodePositions.value.find(n => n.zoneId === p.zoneId);
-      if (!existing) return p;
+    // for nodes that already exist unless the incoming data explicitly provides them.
+    // IMPORTANT: the server's `update_node_positions` handler performs a full
+    // DELETE + reinsert of `room_node_positions` for the room, so the payload
+    // MUST contain every node we want to keep. Sending only the changed nodes
+    // would wipe every other zone in the room (and re-broadcast the truncated
+    // set to all clients, shuffling/dropping pre-existing chain nodes). So we
+    // build a full snapshot here: start from the current `nodePositions` and
+    // overlay the incoming changes.
+    const incomingById = new Map(positions.map(p => [p.zoneId, p]));
+    const merged: NodePosition[] = nodePositions.value.map(existing => {
+      const p = incomingById.get(existing.zoneId);
+      if (!p) return existing;
+      incomingById.delete(existing.zoneId);
       return {
         ...existing,
         x: p.x,
@@ -533,8 +550,13 @@ export const useRoomStore = defineStore('room', () => {
         features: p.features ?? existing.features,
         customHandles: p.customHandles ?? existing.customHandles,
         explored: p.explored || existing.explored,
+        // Preserve chainId so a position-only update (e.g. dragging a freshly
+        // created chain source) doesn't strip the chain membership locally.
+        chainId: p.chainId ?? existing.chainId,
       };
     });
+    // Append any incoming entries that aren't yet in the store.
+    for (const p of incomingById.values()) merged.push(p);
     send({ type: 'update_node_positions', nodePositions: merged });
     nodePositions.value = merged; // Optimistic update
     track('move_node');
@@ -716,41 +738,12 @@ export const useRoomStore = defineStore('room', () => {
       }
     } catch { /* ignore JSON parse issues; broadcast will catch up */ }
 
-    // Place the newly created chain's source zone at a random location 200px
-    // away from the primary chain's home zone. The server inserts it at (0,0);
-    // we override that with a random offset around the primary home node.
-    try {
-      const primaryHomeId = homeZoneId.value;
-      if (primaryHomeId && sourceZoneId !== primaryHomeId) {
-        // Wait briefly for the server's node_positions_updated broadcast to land
-        // so we can see the (0,0) row for the new node, then override it.
-        const waitForNewNode = async () => {
-          for (let i = 0; i < 20; i++) {
-            if (nodePositions.value.find(n => n.zoneId === sourceZoneId)) return true;
-            await new Promise(r => setTimeout(r, 50));
-          }
-          return !!nodePositions.value.find(n => n.zoneId === sourceZoneId);
-        };
-        await waitForNewNode();
-
-        const primary = nodePositions.value.find(n => n.zoneId === primaryHomeId);
-        const primaryX = primary?.x ?? 0;
-        const primaryY = primary?.y ?? 0;
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 200;
-        const newX = primaryX + Math.cos(angle) * radius;
-        const newY = primaryY + Math.sin(angle) * radius;
-
-        const existing = nodePositions.value.find(n => n.zoneId === sourceZoneId);
-        if (existing) {
-          updateNodePositionsInStore([{ ...existing, x: newX, y: newY }]);
-        } else {
-          updateNodePositionsInStore([{ zoneId: sourceZoneId, x: newX, y: newY } as NodePosition]);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to place new chain zone near primary home:', e);
-    }
+    // NOTE: previously we placed the new chain's source zone at a random
+    // offset 200px from the primary home, but that triggered an
+    // `update_node_positions` round-trip which (server-side: DELETE+reinsert)
+    // was clobbering preexisting nodes. Per user request, all repositioning
+    // logic on chain creation has been removed — the server's initial (0,0)
+    // placement stands, and existing nodes are left completely untouched.
   }
 
   async function updateChainColor(chainId: string, chainColor: string) {

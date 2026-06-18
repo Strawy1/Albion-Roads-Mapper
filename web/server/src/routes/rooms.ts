@@ -294,9 +294,14 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     broadcast(id, { type: 'chain_added', chain: { id: chainId, sourceZoneId, chainNumber, chainColor } });
 
     if (insertedNode) {
-      const { rows: nodePosRows } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean }>(
-        'SELECT zone_id, x, y, features, custom_handles, rotation, explored FROM room_node_positions WHERE room_id = $1',
-        [id]
+      // Only broadcast the newly inserted source node — re-broadcasting ALL
+      // positions would risk clobbering other clients' authoritative state
+      // (and any in-flight optimistic updates) for preexisting zones. The
+      // client merge handler upserts by zoneId so a single-row broadcast
+      // appends the new node without touching existing ones.
+      const { rows: nodePosRows } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean; chain_id: string | null }>(
+        'SELECT zone_id, x, y, features, custom_handles, rotation, explored, chain_id FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
+        [id, sourceZoneId]
       );
       const nodePositions = nodePosRows.map((row) => ({
         zoneId: row.zone_id,
@@ -306,6 +311,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
         customHandles: row.custom_handles,
         rotation: row.rotation ?? 0,
         explored: row.explored ?? false,
+        chainId: row.chain_id ?? undefined,
       }));
       broadcast(id, { type: 'node_positions_updated', nodePositions });
     }

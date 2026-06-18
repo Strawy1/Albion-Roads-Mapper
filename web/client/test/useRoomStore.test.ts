@@ -195,6 +195,108 @@ describe('useRoomStore', () => {
     expect(store.nodePositions).toHaveLength(3); // all three nodes present
   });
 
+  it('updateNodePositionsInStore sends a FULL snapshot even when called with a partial list (regression: adding a new chain must not wipe other chains\' nodes)', () => {
+    const store = useRoomStore();
+
+    // Capture every message the store sends over the WS.
+    const sent: any[] = [];
+    (global as any).WebSocket = class {
+      static OPEN = 1;
+      readyState = 1;
+      onopen: any;
+      send(payload: string) { sent.push(JSON.parse(payload)); }
+      close() {}
+      addEventListener(type: string, handler: any) {
+        if (type === 'open') setTimeout(() => handler(), 0);
+        if (type === 'message') {/* noop */}
+      }
+      removeEventListener() {}
+    };
+
+    store.setCredentials('room1', 'token1');
+    store.connect();
+
+    // Seed three preexisting nodes belonging to two different chains.
+    store.nodePositions = [
+      { zoneId: 'home', x: 0, y: 0, explored: true, chainId: 'chain-1' },
+      { zoneId: 'c1-child', x: 50, y: 50, explored: true, chainId: 'chain-1' },
+      { zoneId: 'c2-source', x: 200, y: 0, explored: false, chainId: 'chain-2' },
+    ];
+
+    // Simulate addChain's placement step: update ONLY the new chain's source
+    // zone position. The payload sent over the WS must still contain ALL
+    // preexisting nodes — otherwise the server (which does DELETE + reinsert)
+    // would wipe them.
+    store.updateNodePositionsInStore([
+      { zoneId: 'c2-source', x: 175, y: 100 } as any,
+    ]);
+
+    const updateMsg = sent.find(m => m.type === 'update_node_positions');
+    expect(updateMsg).toBeDefined();
+    const zoneIds = updateMsg.nodePositions.map((p: any) => p.zoneId).sort();
+    expect(zoneIds).toEqual(['c1-child', 'c2-source', 'home']);
+
+    // Preexisting nodes retain their coords (server would otherwise overwrite).
+    const home = updateMsg.nodePositions.find((p: any) => p.zoneId === 'home');
+    expect(home.x).toBe(0);
+    expect(home.y).toBe(0);
+    const child = updateMsg.nodePositions.find((p: any) => p.zoneId === 'c1-child');
+    expect(child.x).toBe(50);
+    expect(child.y).toBe(50);
+    // Updated node reflects the new coords.
+    const updated = updateMsg.nodePositions.find((p: any) => p.zoneId === 'c2-source');
+    expect(updated.x).toBe(175);
+    expect(updated.y).toBe(100);
+    // chainId membership is preserved through the overlay.
+    expect(updated.chainId).toBe('chain-2');
+  });
+
+  it('applyMessage(chain_added) + single-row node_positions_updated does NOT mutate preexisting coords (regression: adding a chain must not move other zones)', () => {
+    const store = useRoomStore();
+    store.setCredentials('room1', 'token1');
+
+    // Seed two preexisting chains' nodes at non-zero coords.
+    store.homeZoneId = 'home';
+    store.chains = [
+      { id: 'chain-1', sourceZoneId: 'home', chainNumber: 1, chainColor: '#10b981', createdAt: new Date().toISOString() } as any,
+    ];
+    store.nodePositions = [
+      { zoneId: 'home',     x: 10,  y: 20,  explored: true,  chainId: 'chain-1' },
+      { zoneId: 'c1-child', x: 50,  y: 60,  explored: true,  chainId: 'chain-1' },
+    ];
+
+    // Simulate the server flow: chain_added arrives first, then a SINGLE-ROW
+    // node_positions_updated containing only the new chain's source zone.
+    store.applyMessage({
+      type: 'chain_added',
+      chain: { id: 'chain-2', sourceZoneId: 'c2-source', chainNumber: 2, chainColor: '#3b82f6' } as any,
+    } as any);
+    store.applyMessage({
+      type: 'node_positions_updated',
+      nodePositions: [
+        { zoneId: 'c2-source', x: 0, y: 0, explored: false, chainId: 'chain-2' },
+      ],
+    } as any);
+
+    // Preexisting nodes MUST retain their exact coords and chain membership.
+    const home = store.nodePositions.find(p => p.zoneId === 'home');
+    expect(home).toBeDefined();
+    expect(home!.x).toBe(10);
+    expect(home!.y).toBe(20);
+    expect(home!.chainId).toBe('chain-1');
+    const child = store.nodePositions.find(p => p.zoneId === 'c1-child');
+    expect(child).toBeDefined();
+    expect(child!.x).toBe(50);
+    expect(child!.y).toBe(60);
+    expect(child!.chainId).toBe('chain-1');
+    // New chain source zone is appended with the broadcast's coords.
+    const newNode = store.nodePositions.find(p => p.zoneId === 'c2-source');
+    expect(newNode).toBeDefined();
+    expect(newNode!.x).toBe(0);
+    expect(newNode!.y).toBe(0);
+    expect(newNode!.chainId).toBe('chain-2');
+  });
+
   it('sets wsStatus to auth_failed and disconnectReason to room_deleted on room_deleted message', () => {
     const store = useRoomStore();
     store.roomId = 'room-to-delete';

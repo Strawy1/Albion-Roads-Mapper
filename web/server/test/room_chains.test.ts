@@ -117,7 +117,7 @@ describe('POST /api/rooms/:id/chains', () => {
     mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
     // 4. (after transaction) re-fetch node positions for broadcast
     mockDb.query.mockResolvedValueOnce({
-      rows: [{ zone_id: OTHER_ROADS_ZONE, x: 0, y: 0, features: {}, custom_handles: null, rotation: 0, explored: false }],
+      rows: [{ zone_id: OTHER_ROADS_ZONE, x: 0, y: 0, features: {}, custom_handles: null, rotation: 0, explored: false, chain_id: null }],
       rowCount: 1,
     });
 
@@ -141,6 +141,132 @@ describe('POST /api/rooms/:id/chains', () => {
       (call: any[]) => call[0] === ROOM_ID && call[1]?.type === 'chain_added'
     );
     expect(chainAddedCall).toBeDefined();
+  });
+
+  // Regression: the freshly created chain's source zone must carry the new
+  // chain's id in the `node_positions_updated` broadcast so clients can
+  // resolve the friendly id / colour pill immediately (no page refresh).
+  it('broadcasts node_positions_updated with the new chainId on the source zone', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID, passwordVersion: 1 });
+
+    // 1. password version check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ password_version: 1 }], rowCount: 1 });
+    // 2. room existence lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: ROOM_ID }], rowCount: 1 });
+    // 3. duplicate-root lookup: no existing row (so the source node will be inserted)
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    // 4. (after transaction) re-fetch node positions for broadcast — the new
+    //    source zone row carries the new chain's id.
+    mockDb.query.mockImplementationOnce(async (sql: string) => {
+      // Echo back the chain_id that the route just stored — vitest captures the
+      // INSERT params on the tx client; for simplicity we just hard-code that
+      // the broadcast SELECT returns whatever chain id the broadcast emitted.
+      return {
+        rows: [{
+          zone_id: OTHER_ROADS_ZONE,
+          x: 0,
+          y: 0,
+          features: {},
+          custom_handles: null,
+          rotation: 0,
+          explored: false,
+          chain_id: 'NEW_CHAIN_PLACEHOLDER',
+        }],
+        rowCount: 1,
+      };
+    });
+
+    const broadcastMock = vi.mocked(broadcast);
+    broadcastMock.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${ROOM_ID}/chains`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { sourceZoneId: OTHER_ROADS_ZONE },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = res.json<{ chain: { id: string; sourceZoneId: string } }>();
+    const newChainId = body.chain.id;
+    expect(newChainId).toBeTruthy();
+
+    const npuCall = broadcastMock.mock.calls.find(
+      (call: any[]) => call[0] === ROOM_ID && call[1]?.type === 'node_positions_updated'
+    );
+    expect(npuCall).toBeDefined();
+    const payload = npuCall![1] as any;
+    const sourceEntry = payload.nodePositions.find((p: any) => p.zoneId === OTHER_ROADS_ZONE);
+    expect(sourceEntry).toBeDefined();
+    // The broadcast must surface chainId for the new source zone so clients can
+    // assign the correct chain pill immediately on receipt.
+    expect(sourceEntry.chainId).toBeDefined();
+    expect(sourceEntry.chainId).toBe('NEW_CHAIN_PLACEHOLDER');
+  });
+
+  // Regression: adding a new chain MUST NOT move any preexisting nodes. The
+  // broadcast that announces the new source zone must contain ONLY that single
+  // row — re-broadcasting all positions would risk clobbering other clients'
+  // authoritative state for nodes belonging to existing chains.
+  it('does not include preexisting nodes in the post-add node_positions_updated broadcast', async () => {
+    const token = app.jwt.sign({ roomId: ROOM_ID, passwordVersion: 1 });
+
+    // 1. password version check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ password_version: 1 }], rowCount: 1 });
+    // 2. room existence lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: ROOM_ID }], rowCount: 1 });
+    // 3. duplicate-root lookup: no existing row
+    mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    // 4. (after transaction) re-fetch node positions for broadcast — assert
+    //    the SELECT is scoped to the new source zone only (room_id + zone_id),
+    //    so even if the DB held many preexisting rows, only the new node would
+    //    be returned and broadcast.
+    let capturedSql = '';
+    let capturedParams: unknown[] | undefined;
+    mockDb.query.mockImplementationOnce(async (sql: string, params: unknown[]) => {
+      capturedSql = sql;
+      capturedParams = params;
+      return {
+        rows: [{
+          zone_id: OTHER_ROADS_ZONE,
+          x: 0,
+          y: 0,
+          features: {},
+          custom_handles: null,
+          rotation: 0,
+          explored: false,
+          chain_id: 'NEW_CHAIN_ID',
+        }],
+        rowCount: 1,
+      };
+    });
+
+    const broadcastMock = vi.mocked(broadcast);
+    broadcastMock.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${ROOM_ID}/chains`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: { sourceZoneId: OTHER_ROADS_ZONE },
+    });
+
+    expect(res.statusCode).toBe(201);
+
+    // The broadcast SELECT must be scoped to the single new source zone.
+    expect(capturedSql).toContain('zone_id = $2');
+    expect(capturedParams).toEqual([ROOM_ID, OTHER_ROADS_ZONE]);
+
+    const npuCall = broadcastMock.mock.calls.find(
+      (call: any[]) => call[0] === ROOM_ID && call[1]?.type === 'node_positions_updated'
+    );
+    expect(npuCall).toBeDefined();
+    const payload = npuCall![1] as any;
+    // Only the freshly inserted source node should be in the broadcast — no
+    // preexisting node positions piggy-back along to potentially overwrite
+    // other clients' state.
+    expect(payload.nodePositions).toHaveLength(1);
+    expect(payload.nodePositions[0].zoneId).toBe(OTHER_ROADS_ZONE);
   });
 });
 

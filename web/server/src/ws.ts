@@ -290,9 +290,12 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             client.release();
           }
 
-          // Re-read from DB so the broadcast contains authoritative values (e.g. explored flag)
-          const { rows: updatedRows } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean }>(
-            'SELECT zone_id, x, y, features, custom_handles, rotation, explored FROM room_node_positions WHERE room_id = $1',
+          // Re-read from DB so the broadcast contains authoritative values (e.g. explored flag).
+          // Include chain_id so clients can resolve the zone's chain (friendly id / colour pill)
+          // immediately on broadcast — without it, a freshly added chain's source node would
+          // arrive without a chainId and the pill would fall back to the primary chain.
+          const { rows: updatedRows } = await app.db.query<{ zone_id: string; x: number; y: number; features: any; custom_handles: any; rotation: number; explored: boolean; chain_id: string | null }>(
+            'SELECT zone_id, x, y, features, custom_handles, rotation, explored, chain_id FROM room_node_positions WHERE room_id = $1',
             [roomId]
           );
           const broadcastPositions: NodePosition[] = updatedRows.map((row) => ({
@@ -303,6 +306,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             customHandles: row.custom_handles,
             rotation: row.rotation ?? 0,
             explored: row.explored ?? false,
+            chainId: row.chain_id ?? undefined,
           }));
           broadcast(roomId, { type: 'node_positions_updated', nodePositions: broadcastPositions, updateLastUpdated: msg.updateLastUpdated }, socket);
           trackRoomModified(app.db, roomId);

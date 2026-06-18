@@ -333,21 +333,19 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
         }
     });
 
-    // If new nodes were added, update the store.
-    const hasNewPositions = positions.some(p => !nodePositions.value.find(np => np.zoneId === p.zoneId));
-    if (hasNewPositions) {
-        const updatedPositions = positions.map(p => ({ 
-            zoneId: p.zoneId, 
-            x: p.x, 
-            y: p.y, 
-            features: p.features,
-            customHandles: p.customHandles,
-            virtualGridPos: p.virtualGridPos,
-            proximityTo: p.proximityTo || ZONE_BY_ID.get(p.zoneId)?.proximityTo,
-            explored: p.explored ?? false
-        }));
-        store.updateNodePositionsInStore(updatedPositions);
-    }
+    // NOTE: previously, this watcher detected zones referenced by connections
+    // (or the home zone) that were missing from `nodePositions` and auto-sent
+    // a full snapshot back to the server via `updateNodePositionsInStore`.
+    // That had two bad side-effects when a new chain was added:
+    //   1. it caused the client to emit an `update_node_positions` message
+    //      with a (0,0) entry for the newly created chain's source zone,
+    //   2. the server's handler does DELETE+reinsert for the room and then
+    //      re-broadcasts a `node_positions_updated` to everyone — so all
+    //      clients saw the freshly added node "pull" other nodes around as
+    //      the snapshot raced with the server's own broadcast.
+    // The server is now the sole authority for adding new node positions, so
+    // we no longer auto-persist anything from this watcher. The local
+    // `positions` array is still used for rendering only.
     
     // 2. Map to VueFlow nodes
     const newNodes = positions.map((pos: NodePosition) => {
