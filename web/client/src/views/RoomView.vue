@@ -893,6 +893,14 @@ async function handleConnect(params: any) {
     return;
   }
 
+  // Block cross-chain connections
+  const srcPos = store.nodePositions.find(np => np.zoneId === params.source);
+  const tgtPos = store.nodePositions.find(np => np.zoneId === params.target);
+  if (srcPos?.chainId && tgtPos?.chainId && srcPos.chainId !== tgtPos.chainId) {
+    showToast('You cannot connect zones from different chains.', 'error');
+    return;
+  }
+
   // Block connections using disabled handles
   const srcNode = getNode.value(params.source);
   const tgtNode = getNode.value(params.target);

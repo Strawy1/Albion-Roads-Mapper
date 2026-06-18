@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { Handle, Position, useVueFlow } from '@vue-flow/core';
+import { Position, useVueFlow } from '@vue-flow/core';
 import type { NodeProps } from '@vue-flow/core';
-import { getHandlePosition, getBorderBgClass } from '@/utils/zoneStyles';
-import { getHandleFacing } from 'shared';
+import { getBorderBgClass } from '@/utils/zoneStyles';
+import ZoneNodeHandles from './ZoneNodeHandles.vue';
 import ZoneHeader from './zone/ZoneHeader.vue';
 import { computed, ref, inject, type Ref, watch } from 'vue';
-import { connectionStyle } from '@/utils/connectionStyle';
 import type { NodeFeatures } from 'shared';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
+import type { CustomHandle } from 'shared';
 import { deleteConnection, deleteNode } from '@/utils/roomOperations';
 import { Z_INDEX } from '@/constants/Layers';
 import { storeToRefs } from 'pinia';
@@ -31,7 +31,7 @@ const props = defineProps<NodeProps<{
 
 const store = useRoomStore();
 const plotRouteStore = usePlotRouteStore();
-const { isConnecting, connections } = storeToRefs(store);
+const { isConnecting } = storeToRefs(store);
 const { updateNodeData } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
 
@@ -58,43 +58,6 @@ const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
 const isExpired = computed(() => store.isNodeExpired(props.id, now.value));
 const isRestricted = computed(() => isIsolated.value || isExpired.value);
 const hasReds = computed(() => !!props.data.features?.reds);
-
-const hoveredHandleId = ref<string | null>(null);
-
-const isPulsing = (handleId: string) => {
-    return isConnecting.value &&
-           (handleId === store.connectingSourceHandleId && props.id === store.connectingSourceNodeId || handleId === hoveredHandleId.value) &&
-           handleId !== 'center-overlay';
-};
-
-const isIdle = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    if (isPulsing(handleId)) return false;
-
-    if (isConnecting.value) return true;
-    return handleId !== 'center';
-};
-
-const isActive = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    return isConnecting.value && !isPulsing(handleId);
-};
-
-const handleEdgeClass = (handleId: string): string => {
-  if (handleId === 'center' || handleId === 'center-overlay') return '';
-  const conn = connections.value.find(c =>
-    (c.fromZoneId === props.id && c.fromHandleId === handleId) ||
-    (c.toZoneId === props.id && c.toHandleId === handleId)
-  );
-  if (!conn) return '';
-  if (plotRouteStore.plottedConnectionIds.has(conn.id)) return store.animationsEnabled ? 'handle-edge-plotted' : 'handle-edge-blue';
-  const remainingMs = new Date(conn.expiresAt).getTime() - now.value;
-  const style = connectionStyle(remainingMs, conn.isExpired ?? false);
-  if (style.stroke === '#0ee25e') return 'handle-edge-green';
-  if (style.stroke === '#f59e0b') return 'handle-edge-orange';
-  if (style.stroke === '#ef4444') return 'handle-edge-red';
-  return 'handle-edge-grey';
-};
 
 const { onConnectStart, onConnectEnd } = useVueFlow();
 
@@ -148,8 +111,8 @@ async function handleDelete() {
   showDeleteOverlay.value = false;
 }
 
-const handles = computed(() => {
-  const h: { id: string; left: string; top: string; position: Position }[] = [
+const handles = computed<CustomHandle[]>(() => {
+  const h: CustomHandle[] = [
     { id: 'center', left: '50%', top: '50%', position: Position.Right },
     // Fixed handles at the midpoints of each of the diamond's four edges
     // (i.e. the four "corners" of the bounding square). These are static —
@@ -177,27 +140,13 @@ const handles = computed(() => {
   <div class="non-roads-node relative" :class="{ 'ghost-node': props.data.isGhost }">
     <ChainIdPill :zone-id="props.id" :position-style="{  'z-index': '30' }" />
     <div :class="[isConnecting ? 'connecting-mode' : '']">
-        <template v-for="handle in handles" :key="handle.id">
-          <Handle
-            type="source"
-            :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
-            :id="handle.id"
-            :style="{ left: handle.left, top: handle.top }"
-            :class="[
-              'handle', 
-              handle.id === 'center-overlay' ? Z_INDEX.HANDLE_OVERLAY : Z_INDEX.HANDLE,
-              handle.id === 'center' || handle.id === 'center-overlay' ? 'center-handle' : '',
-              handle.id === 'center-overlay' ? 'center-handle-snap' : '',
-              handle.id !== 'center' && handle.id !== 'center-overlay' ? `facing-${getHandleFacing(handle.left, handle.top)}` : '',
-              isIdle(handle.id) && !isConnecting ? 'handle-default' : '',
-              isActive(handle.id) ? 'handle-active' : '',
-              isPulsing(handle.id) ? 'pulsing-handle' : '',
-              handleEdgeClass(handle.id)
-            ]"
-            @mouseenter="hoveredHandleId = handle.id === 'center-overlay' ? 'center' : handle.id"
-            @mouseleave="(e: MouseEvent) => { if (!(e.relatedTarget as HTMLElement)?.closest?.('.vue-flow__handle')) hoveredHandleId = null }"
-          />
-        </template>
+        <ZoneNodeHandles
+          :node-id="props.id"
+          :node-type="props.data.type"
+          :handles="handles"
+          :is-restricted="isRestricted"
+          :now="now"
+        />
     </div>
     <div v-if="isRestricted" class="absolute inset-0 cursor-pointer" :class="[Z_INDEX.RESTRICTED_NODE, { 'bg-transparent': !showDeleteOverlay, 'bg-black/80': showDeleteOverlay }]" @click="showDeleteOverlay = true">
        <div v-if="showDeleteOverlay" class="flex flex-col items-center justify-center h-full rounded-lg" @click.stop>

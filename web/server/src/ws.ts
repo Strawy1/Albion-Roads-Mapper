@@ -6,6 +6,7 @@ import { handleAuth } from './operations/auth.js';
 import { handleUpdateNodePositions } from './operations/update_node_positions.js';
 import { handleRotateZone } from './operations/rotate_zone.js';
 import { handleUpdatePlotRoute } from './operations/update_plot_route.js';
+import { handleCreateConnection } from './operations/create_connection.js';
 
 
 export async function wsRoutes(app: FastifyInstance): Promise<void> {
@@ -90,6 +91,9 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             return;
           case 'update_plot_route':
             await handleUpdatePlotRoute(ctx, msg as any);
+            return;
+          case 'create_connection':
+            await handleCreateConnection(ctx, msg as any);
             return;
         }
 

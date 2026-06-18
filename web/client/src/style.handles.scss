@@ -239,4 +239,9 @@
   height: 150px !important;
   background-color: transparent !important;
   transform: translate(-50%, -50%) !important;
+
+  &.center-handle-snap-small {
+    width: 20px !important;
+    height: 20px !important;
+  }
 }

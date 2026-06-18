@@ -14,6 +14,7 @@ import ZoneChestButton from './zone/ZoneChestButton.vue';
 import ZoneChestModal from './zone/ZoneChestModal.vue';
 import ZoneHandleEditor from './zone/ZoneHandleEditor.vue';
 import ZoneHandleEditorButton from './zone/ZoneHandleEditorButton.vue';
+import ZoneNodeHandles from './ZoneNodeHandles.vue';
 import PingButton from './zone/PingButton.vue';
 import RoomMemoryButton from './zone/RoomMemoryButton.vue';
 import BluePrompt from '@/components/ui/BluePrompt.vue';
@@ -46,7 +47,7 @@ const props = defineProps<NodeProps<{
 const store = useRoomStore();
 const memoryStore = useRoomMemoryStore();
 const plotRouteStore = usePlotRouteStore();
-const { connections, homeZoneId, isConnecting } = storeToRefs(store);
+const { connections, homeZoneId, isConnecting, nodePositions, connectingSourceNodeId } = storeToRefs(store);
 const memoryEntry = computed(() => memoryStore.getEntry(props.id));
 const featuresRequireUpdate = computed(() => {
   const entry = memoryEntry.value;
@@ -75,6 +76,7 @@ const featuresRequireUpdate = computed(() => {
 });
 const { updateNodeData, findNode, viewport, viewportRef } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
+
 
 const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
 const isExpired = computed(() => store.isNodeExpired(props.id, now.value));
@@ -253,49 +255,11 @@ function getHandlePosition(left: string, top: string) {
 }
 
 
-const hoveredHandleId = ref<string | null>(null);
-
 const { onMoveStart, onMoveEnd, onNodeDragStart, onConnectStart, onConnectEnd, updateNode } = useVueFlow();
 
 watch(isMapFeaturesModalOpen, (val) => {
   updateNode(props.id, { zIndex: val ? 9999 : 0 });
 });
-
-const isPulsing = (handleId: string) => {
-    return isConnecting.value &&
-           (handleId === store.connectingSourceHandleId && props.id === store.connectingSourceNodeId || handleId === hoveredHandleId.value) &&
-           handleId !== 'center-overlay';
-};
-
-const isIdle = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    if (isPulsing(handleId)) return false;
-
-    if (isConnecting.value) return true;
-    return handleId !== 'center';
-};
-
-const isActive = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    return isConnecting.value && !isPulsing(handleId);
-};
-
-const handleEdgeClass = (handleId: string): string => {
-  if (handleId === 'center' || handleId === 'center-overlay') return '';
-  const conn = connections.value.find(c =>
-    (c.fromZoneId === props.id && c.fromHandleId === handleId) ||
-    (c.toZoneId === props.id && c.toHandleId === handleId)
-  );
-  if (!conn) return '';
-  if (plotRouteStore.plottedConnectionIds.has(conn.id)) return store.animationsEnabled ? 'handle-edge-plotted' : 'handle-edge-blue';
-  if (isRestricted.value || store.isEdgeIsolated(conn.id, now.value)) return 'handle-edge-grey';
-  const remainingMs = new Date(conn.expiresAt).getTime() - now.value;
-  const style = connectionStyle(remainingMs, conn.isExpired ?? false);
-  if (style.stroke === '#0ee25e') return 'handle-edge-green';
-  if (style.stroke === '#f59e0b') return 'handle-edge-orange';
-  if (style.stroke === '#ef4444') return 'handle-edge-red';
-  return 'handle-edge-grey';
-};
 const isViewportMoving = ref(false);
 onMoveStart(() => {
   isViewportMoving.value = true;
@@ -963,39 +927,14 @@ function lockCore(core: string) {
          Always shown when the zone belongs to any chain (including the only/primary one). -->
     <ChainIdPill :zone-id="props.id" :position-style="{'z-index': '30' }" />
     <div :class="[isConnecting ? 'connecting-mode' : '']">
-        <template v-if="!isHandleEditorOpen && !isMapFeaturesModalOpen && !isChestModalOpen" v-for="handle in handles" :key="handle.id">
-          <div
-            v-if="handle.disabled"
-            class="handle absolute"
-            :class="[
-              Z_INDEX.HANDLE,
-              `facing-${getHandleFacing(handle.left, handle.top)}`,
-              'is-disabled'
-            ]"
-            :style="{ left: handle.left, top: handle.top }"
-          />
-          <template v-else>
-          <Handle
-            type="source"
-            :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
-            :id="handle.id"
-            :style="{ left: handle.left, top: handle.top }"
-            :class="[
-              'handle', 
-              handle.id === 'center-overlay' ? Z_INDEX.HANDLE_OVERLAY : Z_INDEX.HANDLE,
-              handle.id === 'center' || handle.id === 'center-overlay' ? 'center-handle' : '',
-              handle.id === 'center-overlay' ? 'center-handle-snap' : '',
-              handle.id !== 'center' && handle.id !== 'center-overlay' ? `facing-${getHandleFacing(handle.left, handle.top)}` : '',
-              isIdle(handle.id) && !isConnecting ? 'handle-default' : '',
-              isActive(handle.id) ? 'handle-active' : '',
-              isPulsing(handle.id) ? 'pulsing-handle' : '',
-              handleEdgeClass(handle.id)
-            ]"
-            @mouseenter="hoveredHandleId = handle.id === 'center-overlay' ? 'center' : handle.id"
-            @mouseleave="(e: MouseEvent) => { if (!(e.relatedTarget as HTMLElement)?.closest?.('.vue-flow__handle')) hoveredHandleId = null }"
-          />
-          </template>
-        </template>
+      <ZoneNodeHandles
+        v-if="!isHandleEditorOpen && !isMapFeaturesModalOpen && !isChestModalOpen"
+        :node-id="props.id"
+        :node-type="props.data.type"
+        :handles="handles"
+        :is-restricted="isRestricted"
+        :now="now"
+      />
     </div>
     
     <div v-if="isRestricted" class="absolute inset-0 cursor-pointer diamond-shape" :class="[Z_INDEX.RESTRICTED_NODE, { 'bg-transparent': !showDeleteOverlay, 'bg-black/80': showDeleteOverlay }]" @click="showDeleteOverlay = true">
