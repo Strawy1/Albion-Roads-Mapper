@@ -122,7 +122,7 @@ function onPlotRouteClick() {
           <TooltipContent
             class="bg-black/90 text-white text-xs px-2 py-1 rounded shadow-lg z-[10000]"
             :side="tooltipSide"
-          >{{ plotRouteMode ? 'Cancel route plotting (Esc)' : (hasRoute ? 'Clear plotted route' : 'Plot route to zone') }}</TooltipContent>
+          >{{ plotRouteMode ? 'Cancel route plotting (Esc)' : (hasRoute ? 'Clear plotted route' : 'Plot a route between two zones') }}</TooltipContent>
         </TooltipPortal>
       </TooltipRoot>
     </TooltipProvider>

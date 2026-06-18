@@ -31,15 +31,24 @@ const props = defineProps<NodeProps<{
 
 const store = useRoomStore();
 const plotRouteStore = usePlotRouteStore();
-const { isConnecting } = storeToRefs(store);
+const { isConnecting, nodePositions } = storeToRefs(store);
 const { updateNodeData } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
 
 const isPinged = ref(false);
 const pingKey = ref(0);
 const isHovered = ref(false);
-const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isChainSource && !props.data.isGhost && isHovered.value);
-const isRouteDestination = computed(() => plotRouteStore.destinationZoneId === props.id && plotRouteStore.hasRoute);
+const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isGhost && isHovered.value);
+const isRouteDestination = computed(() => (plotRouteStore.fromZoneId === props.id || plotRouteStore.toZoneId === props.id) && plotRouteStore.hasRoute);
+// During selectingTo: the chosen start zone should glow blue even before the route is committed
+const isSelectingFromZone = computed(() => plotRouteStore.isSelectingTo && plotRouteStore.fromZoneId === props.id);
+// During selectingTo: zones not in the selected chain should be dimmed
+const thisNodeChainId = computed(() => nodePositions.value.find(n => n.zoneId === props.id)?.chainId ?? null);
+const isGreyedByChain = computed(() =>
+  plotRouteStore.isSelectingTo &&
+  !props.data.isGhost &&
+  thisNodeChainId.value !== plotRouteStore.chainId
+);
 
 function handlePing() {
   store.send({ type: 'ping', zoneName: props.data.zoneName || props.id, nodeId: props.id });
@@ -148,6 +157,15 @@ const handles = computed<CustomHandle[]>(() => {
           :now="now"
         />
     </div>
+    <!-- Plot route mode overlay: intercepts clicks on inner elements so only the node-level click registers.
+         We drive isHovered from here so the glow activates even though this div sits on top of the inner content. -->
+    <div
+      v-if="plotRouteStore.isPlotRouteMode && !props.data.isGhost"
+      class="absolute inset-0 z-[200] cursor-pointer"
+      @mouseenter="isHovered = true"
+      @mouseleave="isHovered = false"
+    />
+
     <div v-if="isRestricted" class="absolute inset-0 cursor-pointer" :class="[Z_INDEX.RESTRICTED_NODE, { 'bg-transparent': !showDeleteOverlay, 'bg-black/80': showDeleteOverlay }]" @click="showDeleteOverlay = true">
        <div v-if="showDeleteOverlay" class="flex flex-col items-center justify-center h-full rounded-lg" @click.stop>
          <p class="text-white mb-4">Node is expired. Delete it?</p>
@@ -166,8 +184,9 @@ const handles = computed<CustomHandle[]>(() => {
         props.data.highlighted ? 'goto-glow-animation' : '',
         isPinged ? 'ping-animation' : '',
         props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',
+        isGreyedByChain ? 'opacity-30 grayscale' : '',
         isPlotRouteTarget && store.animationsEnabled ? 'plot-route-hover' : (isPlotRouteTarget ? 'plot-route-hover-static' : ''),
-        isRouteDestination && store.animationsEnabled ? 'plot-route-destination' : (isRouteDestination ? 'plot-route-destination-static' : '')
+        (isRouteDestination || isSelectingFromZone) && store.animationsEnabled ? 'plot-route-destination' : ((isRouteDestination || isSelectingFromZone) ? 'plot-route-destination-static' : '')
       ]"
       @animationend="(e: AnimationEvent) => { if (e.animationName === 'goto-glow') updateNodeData(props.id, { highlighted: false }); if (e.animationName === 'ping-glow' || e.animationName === 'ping-glow-home') isPinged = false; }"
       @mouseenter="isHovered = true"

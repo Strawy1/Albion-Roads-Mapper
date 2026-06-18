@@ -39,6 +39,12 @@ const isOutsideSourceChain = computed(() =>
   thisChainId.value !== sourceChainId.value
 );
 
+/** True when route-plotting selectingTo phase and this node is on a different chain */
+const isGreyedByChain = computed(() =>
+  plotRouteStore.isSelectingTo &&
+  thisChainId.value !== plotRouteStore.chainId
+);
+
 const connectedHandleIds = computed(() => {
   const ids = new Set<string>();
   for (const c of connections.value) {
@@ -61,9 +67,10 @@ const isHandleVisible = (handleId: string): boolean => {
 };
 
 /**
- * Opacity for a handle when this node is outside the source chain.
+ * Opacity for a handle when this node is outside the source chain or greyed by chain in plot-route mode.
  */
 const handleOpacity = (handleId: string): number | undefined => {
+  if (isGreyedByChain.value) return 0.3;
   if (!isOutsideSourceChain.value) return undefined;
   // center-overlay and connected handles are dimmed, not hidden
   return 0.25;
@@ -98,6 +105,7 @@ const isActive = (handleId: string): boolean => {
 
 const handleEdgeClass = (handleId: string): string => {
   if (handleId === 'center' || handleId === 'center-overlay') return '';
+  if (isGreyedByChain.value) return 'handle-edge-grey';
   const conn = connections.value.find(c =>
     (c.fromZoneId === props.nodeId && c.fromHandleId === handleId) ||
     (c.toZoneId === props.nodeId && c.toHandleId === handleId)

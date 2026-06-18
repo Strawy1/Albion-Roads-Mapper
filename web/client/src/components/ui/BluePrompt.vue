@@ -4,8 +4,10 @@ import { useRafFn } from '@vueuse/core';
 import { useVueFlow } from '@vue-flow/core';
 import { Z_INDEX } from '@/constants/Layers';
 import { useRoomStore } from '@/stores/useRoomStore';
+import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 
 const roomStore = useRoomStore();
+const plotRouteStore = usePlotRouteStore();
 
 const props = defineProps<{
   pointing?: 'up' | 'down' | 'left' | 'right';
@@ -85,7 +87,7 @@ const tooltipStyle = computed(() => {
 </script>
 
 <template>
-  <Teleport v-if="roomStore.bluePromptsEnabled" to="body" :disabled="!target && !screenPos">
+  <Teleport v-if="roomStore.bluePromptsEnabled && !plotRouteStore.isPlotRouteMode" to="body" :disabled="!target && !screenPos">
     <div
       :class="[Z_INDEX.UI_OVERLAY, { 'absolute': !target && !screenPos }]"
       :style="tooltipStyle"

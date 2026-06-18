@@ -152,6 +152,9 @@ export interface Room {
   createdAt: string;
   updatedAt?: string;
   plottedRoute?: string[];
+  plottedRouteFromZoneId?: string;
+  plottedRouteToZoneId?: string;
+  plottedRouteChainId?: string;
 }
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
@@ -399,7 +402,7 @@ export const ImportRoomBodySchema = z.object({
 
 export type ServerMessage =
   | { type: 'auth_ok' }
-  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; chains?: RoomChain[] }
+  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[] }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
   | { type: 'connection_removed'; connectionId?: string; removedZoneIds?: string[] }
@@ -413,7 +416,7 @@ export type ServerMessage =
   | { type: 'memory_sync'; memory: RoomMemoryEntry[] }
   | { type: 'memory_updated'; entry: RoomMemoryEntry }
   | { type: 'memory_deleted'; zoneId: string }
-  | { type: 'plot_route_updated'; plottedRoute: string[]; destinationZoneId?: string }
+  | { type: 'plot_route_updated'; plottedRoute: string[]; fromZoneId?: string; toZoneId?: string; chainId?: string }
   | { type: 'password_rotated' }
   | { type: 'room_deleted' }
   | { type: 'force_reload' }
@@ -431,5 +434,5 @@ export type ClientMessage =
   | { type: 'polo' }
   | { type: 'update_node_positions'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
   | { type: 'rotate_zone'; zoneId: string; rotation: number }
-  | { type: 'update_plot_route'; plottedRoute: string[]; destinationZoneId?: string }
+  | { type: 'update_plot_route'; plottedRoute: string[]; fromZoneId?: string; toZoneId?: string; chainId?: string }
   | { type: 'create_connection'; fromZoneId: string; toZoneId: string; fromHandleId?: string; toHandleId?: string; secondsRemaining: number; slots?: number; reportedBy?: string; targetPosition?: { x: number; y: number }; permanent?: boolean };

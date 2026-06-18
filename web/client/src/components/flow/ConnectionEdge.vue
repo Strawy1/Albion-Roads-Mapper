@@ -25,6 +25,14 @@ type EdgeData = {
   targetFacing?: string;
   slots?: 7 | 20;
   isPlotted?: boolean;
+  /** True when the user selected this edge in the reverse direction (start→end opposes conn.fromZoneId→toZoneId) */
+  isReversedPlotted?: boolean;
+  /** True when this edge is part of the hover ghost preview */
+  isGhostRoute?: boolean;
+  /** True when the ghost preview edge is traversed in reverse */
+  isGhostRouteReversed?: boolean;
+  /** True when route-plotting is in selectingTo phase and this edge belongs to a different chain */
+  isGreyedByChain?: boolean;
 };
 
 const props = defineProps<EdgeProps<EdgeData>>();
@@ -125,6 +133,14 @@ const style = computed(() => {
       color: '#6366f1'
     };
   }
+  if (props.data?.isGhostRoute) {
+    return {
+      stroke: '#3b82f6',
+      strokeDasharray: '6,4',
+      animated: false,
+      color: '#1d4ed8'
+    };
+  }
   if (props.data?.isPlotted) {
     return {
       stroke: '#3b82f6',
@@ -137,6 +153,38 @@ const style = computed(() => {
 });
 
 const isPlotted = computed(() => props.data?.isPlotted ?? false);
+const isGhostRoute = computed(() => props.data?.isGhostRoute ?? false);
+const isGreyedByChain = computed(() => props.data?.isGreyedByChain ?? false);
+/** When true, chevrons should travel from target→source (reversed direction relative to stored edge) */
+const isEffectivelyReversed = computed(() =>
+  (isPlotted.value && (props.data?.isReversedPlotted ?? false)) ||
+  (isGhostRoute.value && (props.data?.isGhostRouteReversed ?? false))
+);
+/** Path reversed for chevron animation: swap source/target points so chevrons flow user-start → user-end */
+const reversedPath = computed(() => {
+  // Create a reversed SVG path by swapping the M and the last endpoint.
+  // For animateMotion we use a new path starting from target going to source.
+  const srcHandleId = props.sourceHandleId;
+  const tgtHandleId = props.targetHandleId || 'center';
+  const srcFacing = srcHandleId && !isCenter(srcHandleId)
+    ? (getHandleFacingFromId(srcHandleId, props.sourceNode) ?? props.data?.sourceFacing ?? props.sourcePosition)
+    : props.sourcePosition;
+  const tgtFacing = tgtHandleId && !isCenter(tgtHandleId)
+    ? (getHandleFacingFromId(tgtHandleId, props.targetNode) ?? props.data?.targetFacing ?? props.targetPosition)
+    : props.targetPosition;
+  return getConnectionPath({
+    sourceX: tgtCenter.value?.x ?? props.targetX,
+    sourceY: tgtCenter.value?.y ?? props.targetY,
+    targetX: srcCenter.value?.x ?? props.sourceX,
+    targetY: srcCenter.value?.y ?? props.sourceY,
+    sourcePosition: tgtFacing as any,
+    targetPosition: srcFacing as any,
+    sourceHandleId: tgtHandleId,
+    targetHandleId: srcHandleId,
+    forceStraight: false,
+  })[0];
+});
+const chevronPath = computed(() => isEffectivelyReversed.value ? reversedPath.value : path.value);
 
 // Pill uses time-based colours, but blue instead of green when plotted
 const pillStyle = computed(() => {
@@ -240,20 +288,20 @@ defineExpose({
     :id="id"
     :path="path"
     :animated="false"
-    :style="{ stroke: isPlotted ? '#3b82f6' : style.stroke, strokeWidth: isPlotted ? 3 : 2, opacity: isRestricted ? 0.3 : 1, strokeDasharray: isPlotted ? 'none' : undefined, animation: !roomStore.animationsEnabled ? 'none' : (isPlotted ? 'pulse-blue-stroke 0.75s infinite ease-in-out' : (isRestricted ? 'none' : undefined)) }"
+    :style="{ stroke: (isPlotted || isGhostRoute) ? '#3b82f6' : (isGreyedByChain ? '#6b7280' : style.stroke), strokeWidth: (isPlotted || isGhostRoute) ? 3 : 2, opacity: isGhostRoute ? 0.5 : (isRestricted || isGreyedByChain ? 0.3 : 1), strokeDasharray: isGhostRoute ? '6,4' : (isPlotted ? 'none' : undefined), animation: (!roomStore.animationsEnabled || isGreyedByChain) ? 'none' : (isPlotted ? 'pulse-blue-stroke 0.75s infinite ease-in-out' : (isRestricted ? 'none' : undefined)) }"
     class="cursor-pointer"
     @click.stop="showPopover = !showPopover"
     @mousedown.stop
   />
   
   <!-- Animated chevrons -->
-  <g v-if="!props.data?.isGhost && !isRestricted && roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: chevronsVisible ? 1 : 0, transition: 'opacity 0.3s ease' }">
+  <g v-if="!props.data?.isGhost && !isRestricted && !isGreyedByChain && roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: isGhostRoute ? 0.6 : (chevronsVisible ? 1 : 0), transition: 'opacity 0.3s ease' }">
     <path
       v-for="i in numChevrons"
       :key="`${chevronEpoch}-${i}`"
-      :d="isPlotted ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
+      :d="(isPlotted || isGhostRoute) ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
       fill="none"
-      :stroke-width="isPlotted ? 4 : 3"
+      :stroke-width="(isPlotted || isGhostRoute) ? 4 : 3"
       stroke-linecap="round"
       stroke-linejoin="round"
       :stroke="style.stroke"
@@ -265,7 +313,7 @@ defineExpose({
         :dur="`${duration}s`"
         :begin="`${(i - 1) * (duration / numChevrons)}s`"
         repeatCount="indefinite"
-        :path="path"
+        :path="chevronPath"
         rotate="auto"
       />
       <animate 
@@ -280,13 +328,13 @@ defineExpose({
   </g>
 
   <!-- Static chevrons (animations disabled) -->
-  <g v-if="!props.data?.isGhost && !isRestricted && !roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: chevronsVisible ? 1 : 0, transition: 'opacity 0.3s ease' }">
+  <g v-if="!props.data?.isGhost && !isRestricted && !isGreyedByChain && !roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: isGhostRoute ? 0.6 : (chevronsVisible ? 1 : 0), transition: 'opacity 0.3s ease' }">
     <path
       v-for="i in numChevrons"
       :key="`static-${chevronEpoch}-${i}`"
-      :d="isPlotted ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
+      :d="(isPlotted || isGhostRoute) ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
       fill="none"
-      :stroke-width="isPlotted ? 4 : 3"
+      :stroke-width="(isPlotted || isGhostRoute) ? 4 : 3"
       stroke-linecap="round"
       stroke-linejoin="round"
       :stroke="style.stroke"
@@ -298,13 +346,13 @@ defineExpose({
         keyTimes="0;1"
         calcMode="linear"
         fill="freeze"
-        :path="path"
+        :path="chevronPath"
         rotate="auto"
       />
     </path>
   </g>
 
-  <EdgeLabelRenderer v-if="!props.data?.isGhost">
+  <EdgeLabelRenderer v-if="!props.data?.isGhost && !isGhostRoute">
     <div
       :style="{
         transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
@@ -324,7 +372,7 @@ defineExpose({
       <div
         data-trigger="true"
         class="text-xs px-3 py-2 inline-flex flex-col items-center justify-center gap-0.5 rounded-full text-white cursor-pointer backdrop-blur-md"
-        :style="{ backgroundColor: pillStyle.color + 'b3', border: `1px solid ${pillStyle.stroke}` }"
+        :style="isGreyedByChain ? { backgroundColor: '#374151b3', border: '1px solid #6b7280', opacity: 0.4 } : { backgroundColor: pillStyle.color + 'b3', border: `1px solid ${pillStyle.stroke}` }"
         @click.stop="showPopover = !showPopover"
         @mousedown.stop
       >

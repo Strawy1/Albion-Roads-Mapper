@@ -10,11 +10,20 @@ export const handleUpdatePlotRoute: OperationHandler<Extract<ClientMessage, { ty
   if (!ctx.authenticated) return;
   if (!ctx.verifySession()) return;
   const plottedRoute = Array.isArray(msg.plottedRoute) ? msg.plottedRoute : [];
-  const destinationZoneId = msg.destinationZoneId;
+  const fromZoneId = msg.fromZoneId ?? null;
+  const toZoneId = msg.toZoneId ?? null;
+  const chainId = msg.chainId ?? null;
+  const hasRoute = plottedRoute.length > 0;
   await ctx.app.db.query(
-    'UPDATE rooms SET plotted_route = $1 WHERE id = $2',
-    [plottedRoute.length > 0 ? plottedRoute : null, ctx.roomId]
+    'UPDATE rooms SET plotted_route = $1, plotted_route_from_zone_id = $2, plotted_route_to_zone_id = $3, plotted_route_chain_id = $4 WHERE id = $5',
+    [
+      hasRoute ? plottedRoute : null,
+      hasRoute ? fromZoneId : null,
+      hasRoute ? toZoneId : null,
+      hasRoute ? chainId : null,
+      ctx.roomId,
+    ]
   );
-  broadcast(ctx.roomId, { type: 'plot_route_updated', plottedRoute, destinationZoneId }, ctx.socket);
-  if (plottedRoute.length > 0) trackRoutePlotted(ctx.app.db, ctx.roomId);
+  broadcast(ctx.roomId, { type: 'plot_route_updated', plottedRoute, fromZoneId: fromZoneId ?? undefined, toZoneId: toZoneId ?? undefined, chainId: chainId ?? undefined }, ctx.socket);
+  if (hasRoute) trackRoutePlotted(ctx.app.db, ctx.roomId);
 };

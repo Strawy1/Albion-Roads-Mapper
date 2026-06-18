@@ -258,9 +258,7 @@ export const useRoomStore = defineStore('room', () => {
         addToRecentRooms(roomId.value, roomId.value, roomTitle.value);
         if (msg.plottedRoute && msg.plottedRoute.length > 0) {
           const plotRouteStore = usePlotRouteStore();
-          const lastConnId = msg.plottedRoute[msg.plottedRoute.length - 1];
-          const lastConn = connections.value.find(c => c.id === lastConnId);
-          plotRouteStore.applyPlottedRoute(msg.plottedRoute, lastConn?.toZoneId);
+          plotRouteStore.applyPlottedRoute(msg.plottedRoute, msg.plottedRouteFromZoneId, msg.plottedRouteToZoneId, msg.plottedRouteChainId);
         }
         break;
 
@@ -468,7 +466,7 @@ export const useRoomStore = defineStore('room', () => {
         break;
 
       case 'plot_route_updated':
-        usePlotRouteStore().applyPlottedRoute(msg.plottedRoute, msg.destinationZoneId);
+        usePlotRouteStore().applyPlottedRoute(msg.plottedRoute, msg.fromZoneId, msg.toZoneId, msg.chainId);
         break;
       
       case 'node_positions_updated':

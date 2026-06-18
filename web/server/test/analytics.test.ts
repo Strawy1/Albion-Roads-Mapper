@@ -742,7 +742,8 @@ describe('Analytics — node position updates via WebSocket', () => {
     socket.send(JSON.stringify({
       type: 'update_plot_route',
       plottedRoute: [VALID_ZONE_A, VALID_ZONE_B],
-      destinationZoneId: VALID_ZONE_B,
+      fromZoneId: VALID_ZONE_A,
+      toZoneId: VALID_ZONE_B,
     }));
 
     await new Promise((r) => setTimeout(r, 200));

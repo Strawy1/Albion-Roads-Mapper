@@ -6,6 +6,11 @@
 - **Royal Continent / Outlands inter-connections** - linking two non-roads zones (royal continent, outlands, etc.) now creates a permanent connection with no timer. The connection edge pill displays "Permanent" instead of a countdown, and the timer/slots UI is hidden. This enables you to map routes directly to a city.
 - You are now able to rename rooms.
 
+### Reworked
+- Route Plotting now require you to select a start and end zone. This does now enable the ability to plot routes in reverse of the normal "flow" of the map.
+  - You still can only plot one route at a time.
+  - The route must be within the same chain of zones.
+
 ### Fixes
 - Zone rotation desync bug fixed for good!
 - Multi-portal links between two zones is now properly supported, you will not longer get an error adding them.

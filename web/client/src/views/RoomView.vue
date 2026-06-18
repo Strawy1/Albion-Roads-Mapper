@@ -451,6 +451,10 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
           connection: { ...conn },
           now: now.value,
           isPlotted: plotRouteStore.plottedConnectionIds.has(conn.id),
+          isReversedPlotted: plotRouteStore.reversedConnectionIds.has(conn.id),
+          isGhostRoute: plotRouteStore.ghostConnectionIds.has(conn.id),
+          isGhostRouteReversed: plotRouteStore.ghostReversedConnectionIds.has(conn.id),
+          isGreyedByChain: plotRouteStore.isSelectingTo && (() => { const srcChain = nodePositions.value.find(n => n.zoneId === conn.fromZoneId)?.chainId ?? null; return srcChain !== plotRouteStore.chainId; })(),
           onDelete: async (id: string) => {
             try {
               await deleteConnection(props.id, store.token!, id);
@@ -555,18 +559,26 @@ watch(now, () => {
   });
 });
 
-// Update isPlotted on edges when the route changes
-watch(() => plotRouteStore.plottedConnectionIds, () => {
+// Update isPlotted/ghost on edges when the route or ghost preview changes
+watch(() => [plotRouteStore.plottedConnectionIds, plotRouteStore.ghostConnectionIds, plotRouteStore.reversedConnectionIds, plotRouteStore.ghostReversedConnectionIds, plotRouteStore.isSelectingTo, plotRouteStore.chainId], () => {
   flowEdges.value.forEach((edge) => {
     edge.data.isPlotted = plotRouteStore.plottedConnectionIds.has(edge.id);
+    edge.data.isReversedPlotted = plotRouteStore.reversedConnectionIds.has(edge.id);
+    edge.data.isGhostRoute = plotRouteStore.ghostConnectionIds.has(edge.id);
+    edge.data.isGhostRouteReversed = plotRouteStore.ghostReversedConnectionIds.has(edge.id);
+    const edgeConn = store.connections.find(c => c.id === edge.id);
+    edge.data.isGreyedByChain = plotRouteStore.isSelectingTo && edgeConn ? (() => { const srcChain = nodePositions.value.find(n => n.zoneId === edgeConn.fromZoneId)?.chainId ?? null; return srcChain !== plotRouteStore.chainId; })() : false;
   });
 }, { deep: true });
 
 // Show toast when a route is plotted (either locally or from server)
-watch(() => plotRouteStore.destinationZoneId, (newId) => {
-  if (newId) {
-    const destNode = flowNodes.value.find((n: any) => n.id === newId);
-    routePlottedToast.value = destNode?.data?.zoneName || newId;
+watch(() => plotRouteStore.toZoneId, (newId) => {
+  if (newId && plotRouteStore.hasRoute) {
+    const fromNode = flowNodes.value.find((n: any) => n.id === plotRouteStore.fromZoneId);
+    const toNode = flowNodes.value.find((n: any) => n.id === newId);
+    const fromName = fromNode?.data?.zoneName || plotRouteStore.fromZoneId || '';
+    const toName = toNode?.data?.zoneName || newId;
+    routePlottedToast.value = `${fromName} → ${toName}`;
     if (routePlottedToastTimeout) clearTimeout(routePlottedToastTimeout);
     routePlottedToastTimeout = setTimeout(() => (routePlottedToast.value = ''), 5000);
   } else {
@@ -693,9 +705,23 @@ const showMobileSummary = ref(false);
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 function onNodeClick(event: any) {
-  if (plotRouteStore.isPlotRouteMode && event.node.id !== store.homeZoneId && !event.node.data.isGhost) {
-    plotRouteStore.selectDestination(store.homeZoneId, event.node.id, store.connections);
+  if (plotRouteStore.isPlotRouteMode && !event.node.data.isGhost) {
+    const nodeChainId = nodePositions.value.find((n: any) => n.zoneId === event.node.id)?.chainId ?? null;
+    plotRouteStore.selectZone(event.node.id, nodeChainId, store.connections);
   }
+}
+
+function onNodeMouseEnter(event: any) {
+  if (!plotRouteStore.isSelectingTo || event.node.data.isGhost) return;
+  const nodeChainId = nodePositions.value.find((n: any) => n.zoneId === event.node.id)?.chainId ?? null;
+  // Only show ghost preview for zones in the same chain
+  if (nodeChainId !== plotRouteStore.chainId) return;
+  plotRouteStore.updateGhostPreview(event.node.id, store.connections);
+}
+
+function onNodeMouseLeave(_event: any) {
+  if (!plotRouteStore.isSelectingTo) return;
+  plotRouteStore.updateGhostPreview(null, store.connections);
 }
 
 function onNodeDragStop() {
@@ -1430,6 +1456,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         @connect-start="handleConnectStart"
         @connect-end="handleConnectEnd"
         @node-click="onNodeClick"
+        @node-mouse-enter="onNodeMouseEnter"
+        @node-mouse-leave="onNodeMouseLeave"
       >
         <template #connection-line="connectionLineProps">
           <ConnectionLine v-bind="connectionLineProps" :is-occupied="isHandleOccupied(connectionLineProps.sourceNode.id, connectionLineProps.sourceHandle?.id ?? null)" />
@@ -1492,7 +1520,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
       <div class="absolute top-20 md:top-24 left-1/2 -translate-x-1/2 pointer-events-none w-full max-w-[95vw] flex flex-col items-center gap-2 px-4" :class="Z_INDEX.TOAST">
         <Transition name="ping-toast">
           <MegaToast
-            v-if="plotRouteStore.isPlotRouteMode"
+            v-if="plotRouteStore.isSelectingFrom"
             :visible="true"
             :fading-out="false"
             :fill-duration="9999"
@@ -1500,7 +1528,19 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
             fill-color="rgba(59, 130, 246, 0.15)"
             bg-class="bg-blue-900/40"
             border-class="border-blue-400"
-          >🗺️ Click on a zone to plot a route</MegaToast>
+          >🗺️ Click on a zone to set the route <b>start</b></MegaToast>
+        </Transition>
+        <Transition name="ping-toast">
+          <MegaToast
+            v-if="plotRouteStore.isSelectingTo"
+            :visible="true"
+            :fading-out="false"
+            :fill-duration="9999"
+            :enable-internal-animation="false"
+            fill-color="rgba(59, 130, 246, 0.15)"
+            bg-class="bg-blue-900/40"
+            border-class="border-blue-400"
+          >🗺️ Now click on a zone in the same chain to set the route <b>end</b></MegaToast>
         </Transition>
         <Transition name="ping-toast">
           <MegaToast
@@ -1511,7 +1551,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
             fill-color="rgba(59, 130, 246, 0.35)"
             bg-class="bg-blue-600/30 backdrop-blur-md"
             border-class="border-blue-300"
-          >✅ Route plotted to {{ routePlottedToast }}</MegaToast>
+          >✅ Route plotted: {{ routePlottedToast }}</MegaToast>
         </Transition>
       </div>
 
