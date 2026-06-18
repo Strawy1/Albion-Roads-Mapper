@@ -1124,12 +1124,14 @@ async function handleConfirmOccupied() {
     }
   }
 
-  // Compute secondsRemaining from the occupied connection's expiresAt
-  const secondsRemaining = Math.max(1, Math.round((new Date(occupiedConn.expiresAt).getTime() - Date.now()) / 1000));
+  const isPermanentConn = !isRoads(params.source) && !isRoads(params.target);
 
-  // Get slots from the target node's features, defaulting to 7
+  // Compute secondsRemaining from the occupied connection's expiresAt (for non-permanent connections)
+  const secondsRemaining = isPermanentConn ? null : Math.max(1, Math.round((new Date(occupiedConn.expiresAt).getTime() - Date.now()) / 1000));
+
+  // Get slots from the target node's features, defaulting to 7 (for non-permanent connections)
   const targetNodePos = store.nodePositions.find(np => np.zoneId === params.target);
-  const slots: 7 | 20 = (targetNodePos?.features?.slots === 20 ? 20 : 7);
+  const slots: 7 | 20 | null = isPermanentConn ? null : (targetNodePos?.features?.slots === 20 ? 20 : 7);
 
   try {
     await addConnection(
@@ -1141,6 +1143,9 @@ async function handleConfirmOccupied() {
       slots,
       params.sourceHandle || 'center',
       params.targetHandle || 'center',
+      undefined,
+      undefined,
+      isPermanentConn,
     );
   } catch (err: any) {
     showToast(err.message || 'Failed to add connection.', 'error');

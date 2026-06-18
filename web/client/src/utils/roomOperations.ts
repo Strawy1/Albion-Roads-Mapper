@@ -83,29 +83,37 @@ export async function addConnection(
   token: string,
   fromZoneId: string,
   toZoneId: string,
-  secondsRemaining: number,
-  slots: 7 | 20,
+  secondsRemaining: number | null,
+  slots: 7 | 20 | null,
   fromHandleId?: string,
   toHandleId?: string,
   reportedBy?: string,
   targetPosition?: { x: number, y: number },
+  permanent?: boolean,
 ): Promise<void> {
+  const body: Record<string, unknown> = {
+    fromZoneId,
+    toZoneId,
+    fromHandleId,
+    toHandleId,
+    reportedBy,
+    targetPosition,
+  };
+
+  if (permanent) {
+    body.permanent = true;
+  } else {
+    body.secondsRemaining = secondsRemaining;
+    body.slots = slots;
+  }
+
   const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/connections`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      fromZoneId,
-      toZoneId,
-      secondsRemaining,
-      slots,
-      fromHandleId,
-      toHandleId,
-      reportedBy,
-      targetPosition,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

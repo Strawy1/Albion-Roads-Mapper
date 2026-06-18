@@ -57,6 +57,7 @@ export interface Connection {
   startHandle?: HandleCoordinates;
   endHandle?: HandleCoordinates;
   chainId?: string;
+  permanent?: boolean;
 }
 
 export interface NodePosition {
@@ -186,6 +187,7 @@ export const ConnectionSchema = z.object({
   reportedAt: z.string().datetime(),
   reportedBy: z.string().optional(),
   chainId: z.string().nullable().optional(),
+  permanent: z.boolean().optional(),
   startHandle: z.object({
     position: z.object({ x: z.number(), y: z.number() }),
   }).optional(),
@@ -223,12 +225,22 @@ export const CreateConnectionBodySchema = z.object({
   toZoneId: z.string().min(1),
   fromHandleId: z.string().nullable().optional(),
   toHandleId: z.string().nullable().optional(),
-  secondsRemaining: z.number().int().min(1).max(86400),
+  permanent: z.boolean().optional(),
+  secondsRemaining: z.number().int().min(1).max(86400).optional(),
   slots: z.union([z.literal(7), z.literal(20)], {
     errorMap: () => ({ message: 'slots is required and must be 7 or 20' }),
-  }),
+  }).optional(),
   reportedBy: z.string().optional(),
   targetPosition: z.object({ x: z.number(), y: z.number() }).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.permanent) {
+    if (data.secondsRemaining === undefined || data.secondsRemaining === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'secondsRemaining is required', path: ['secondsRemaining'] });
+    }
+    if (data.slots === undefined || data.slots === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'slots is required and must be 7 or 20', path: ['slots'] });
+    }
+  }
 });
 
 export const UpdateConnectionBodySchema = z.object({
@@ -368,6 +380,7 @@ export const ImportRoomBodySchema = z.object({
       reportedAt: z.string().datetime().optional(),
       reportedBy: z.string().optional(),
       chainId: z.string().nullable().optional(),
+      permanent: z.boolean().optional(),
   })),
   nodePositions: z.array(NodePositionSchema),
   roomHistory: z.array(RoomMemoryEntrySchema).optional(),
@@ -413,4 +426,4 @@ export type ClientMessage =
   | { type: 'update_node_positions'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
   | { type: 'rotate_zone'; zoneId: string; rotation: number }
   | { type: 'update_plot_route'; plottedRoute: string[]; destinationZoneId?: string }
-  | { type: 'create_connection'; fromZoneId: string; toZoneId: string; fromHandleId?: string; toHandleId?: string; secondsRemaining: number; slots?: number; reportedBy?: string; targetPosition?: { x: number; y: number } };
+  | { type: 'create_connection'; fromZoneId: string; toZoneId: string; fromHandleId?: string; toHandleId?: string; secondsRemaining: number; slots?: number; reportedBy?: string; targetPosition?: { x: number; y: number }; permanent?: boolean };

@@ -15,7 +15,10 @@ export const handleCreateConnection: OperationHandler<Extract<ClientMessage, { t
   if (!ctx.authenticated) return;
   if (!ctx.verifySession()) return;
 
-  const { fromZoneId, toZoneId, fromHandleId, toHandleId, secondsRemaining, slots, reportedBy, targetPosition } = msg;
+  const { fromZoneId, toZoneId, fromHandleId, toHandleId, reportedBy, targetPosition } = msg;
+  const permanent = msg.permanent === true;
+  const secondsRemaining = msg.secondsRemaining;
+  const slots = msg.slots;
 
   if (fromZoneId === toZoneId) {
     ctx.send({ type: 'error', message: 'You cannot have same-zone connections' });
@@ -195,12 +198,15 @@ export const handleCreateConnection: OperationHandler<Extract<ClientMessage, { t
 
   const connId = randomUUID();
   const reportedAt = now.toISOString();
-  const expiresAt = new Date(now.getTime() + secondsRemaining * 1000).toISOString();
+  // Permanent connections use a far-future expiry (100 years from now)
+  const expiresAt = permanent
+    ? new Date(now.getTime() + 100 * 365.25 * 24 * 60 * 60 * 1000).toISOString()
+    : new Date(now.getTime() + (secondsRemaining ?? 3600) * 1000).toISOString();
 
   await ctx.app.db.query(`
-    INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-  `, [connId, ctx.roomId, fromZoneId, toZoneId, fromHandleId ?? null, toHandleId ?? null, expiresAt, reportedAt, reportedBy ?? null, sourceChainId]);
+    INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id, permanent)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  `, [connId, ctx.roomId, fromZoneId, toZoneId, fromHandleId ?? null, toHandleId ?? null, expiresAt, reportedAt, reportedBy ?? null, sourceChainId, permanent]);
 
   const connection: Connection = {
     id: connId,
@@ -213,6 +219,7 @@ export const handleCreateConnection: OperationHandler<Extract<ClientMessage, { t
     reportedAt,
     reportedBy: reportedBy ?? undefined,
     chainId: sourceChainId,
+    permanent: permanent || undefined,
   };
 
   broadcast(ctx.roomId, { type: 'connection_added', connection });

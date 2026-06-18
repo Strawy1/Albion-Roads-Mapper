@@ -919,9 +919,9 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       // Insert new connections (chain_id derived from the from-zone's chain).
       for (const conn of connections) {
         await client.query(`
-          INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        `, [nanoid(), id, conn.fromZoneId, conn.toZoneId, conn.fromHandleId, conn.toHandleId, conn.expiresAt, conn.reportedAt || new Date().toISOString(), conn.reportedBy || null, chainIdForZone(conn.fromZoneId)]);
+          INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id, permanent)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [nanoid(), id, conn.fromZoneId, conn.toZoneId, conn.fromHandleId, conn.toHandleId, conn.expiresAt, conn.reportedAt || new Date().toISOString(), conn.reportedBy || null, chainIdForZone(conn.fromZoneId), conn.permanent ?? false]);
       }
 
       // Insert new node positions (chain_id derived from the node's zone).

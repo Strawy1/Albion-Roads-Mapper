@@ -19,6 +19,7 @@ interface DbConnection {
   reported_at: string;
   reported_by: string | null;
   chain_id: string | null;
+  permanent: boolean | null;
 }
 
 function dbRowToConnection(row: DbConnection): Connection {
@@ -33,6 +34,7 @@ function dbRowToConnection(row: DbConnection): Connection {
     reportedAt: row.reported_at,
     reportedBy: row.reported_by ?? undefined,
     chainId: row.chain_id ?? undefined,
+    permanent: row.permanent ?? undefined,
   };
 }
 
@@ -90,7 +92,8 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid body' });
     }
 
-    const { fromZoneId, toZoneId, fromHandleId, toHandleId, secondsRemaining, slots, reportedBy, targetPosition } = parsed.data;
+    const { fromZoneId, toZoneId, fromHandleId, toHandleId, reportedBy, targetPosition, secondsRemaining, slots } = parsed.data;
+    const permanent = parsed.data.permanent === true;
 
     if (fromZoneId === toZoneId) {
       return reply.status(400).send({ error: 'You cannot have same-zone connections' });
@@ -276,14 +279,22 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       }
     } else {
       // No target position provided (connecting two existing nodes) — update slots and lastUpdatedAt on the target node
-      await app.db.query(`
-        UPDATE room_node_positions
-        SET features = jsonb_set(
-          jsonb_set(COALESCE(features, '{}'), '{slots}', $1::jsonb),
-          '{lastUpdatedAt}', $2::jsonb
-        )
-        WHERE room_id = $3 AND zone_id = $4
-      `, [JSON.stringify(slots), JSON.stringify(lastUpdateMs), id, toZoneId]);
+      if (!permanent && slots !== undefined) {
+        await app.db.query(`
+          UPDATE room_node_positions
+          SET features = jsonb_set(
+            jsonb_set(COALESCE(features, '{}'), '{slots}', $1::jsonb),
+            '{lastUpdatedAt}', $2::jsonb
+          )
+          WHERE room_id = $3 AND zone_id = $4
+        `, [JSON.stringify(slots), JSON.stringify(lastUpdateMs), id, toZoneId]);
+      } else {
+        await app.db.query(`
+          UPDATE room_node_positions
+          SET features = jsonb_set(COALESCE(features, '{}'), '{lastUpdatedAt}', $1::jsonb)
+          WHERE room_id = $2 AND zone_id = $3
+        `, [JSON.stringify(lastUpdateMs), id, toZoneId]);
+      }
     }
 
     // Update lastUpdatedAt for the source zone (fromZoneId)
@@ -312,12 +323,15 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
 
     const connId = randomUUID();
     const reportedAt = now.toISOString();
-    const expiresAt = new Date(now.getTime() + secondsRemaining * 1000).toISOString();
+    // Permanent connections use a far-future expiry (100 years from now)
+    const expiresAt = permanent
+      ? new Date(now.getTime() + 100 * 365.25 * 24 * 60 * 60 * 1000).toISOString()
+      : new Date(now.getTime() + (secondsRemaining ?? 3600) * 1000).toISOString();
 
     await app.db.query(`
-      INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `, [connId, id, fromZoneId, toZoneId, fromHandleId ?? null, toHandleId ?? null, expiresAt, reportedAt, reportedBy ?? null, sourceChainId]);
+      INSERT INTO connections (id, room_id, from_zone_id, to_zone_id, from_handle_id, to_handle_id, expires_at, reported_at, reported_by, chain_id, permanent)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [connId, id, fromZoneId, toZoneId, fromHandleId ?? null, toHandleId ?? null, expiresAt, reportedAt, reportedBy ?? null, sourceChainId, permanent]);
 
     const connection: Connection = {
       id: connId,
@@ -330,6 +344,7 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       reportedAt,
       reportedBy: reportedBy ?? undefined,
       chainId: sourceChainId,
+      permanent: permanent || undefined,
     };
 
     broadcast(id, { type: 'connection_added', connection });

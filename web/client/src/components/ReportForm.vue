@@ -59,6 +59,17 @@ const isRoyalOrOutlands = computed(() => {
   if (!zone) return false;
   return zone.type.startsWith('royal') || zone.type === 'outlands';
 });
+
+function isNonRoadsZoneId(zoneId: string): boolean {
+  const zone = ZONE_BY_ID.get(zoneId);
+  if (!zone) return false;
+  return zone.type !== 'roads' && zone.type !== 'roadsHideout';
+}
+
+const isPermanentConnection = computed(() => {
+  if (!fromZoneId.value || !toZoneId.value) return false;
+  return isNonRoadsZoneId(fromZoneId.value) && isNonRoadsZoneId(toZoneId.value);
+});
 watch([fromZoneId, toZoneId], () => {
   secondsRemaining.value = null;
 });
@@ -155,7 +166,7 @@ function isPortalOccupied(zoneId: string, handleId: string | null) {
 }
 
 const canSubmit = computed(
-  () => fromZoneId.value && toZoneId.value && secondsRemaining.value !== null && !submitting.value,
+  () => fromZoneId.value && toZoneId.value && (isPermanentConnection.value || secondsRemaining.value !== null) && !submitting.value,
 );
 
 function getFallbackPosition(sourceZoneId: string, handleId: string | null): { x: number; y: number } | undefined {
@@ -218,12 +229,13 @@ async function submitAndAddMore() {
       store.token!,
       fromZoneId.value,
       toZoneId.value,
-      Number(secondsRemaining.value!),
-      slots.value,
+      isPermanentConnection.value ? null : Number(secondsRemaining.value!),
+      isPermanentConnection.value ? null : slots.value,
       fromHandleId.value || 'center',
       toHandleId.value || 'center',
       reportedBy.value || undefined,
       resolvedPosition,
+      isPermanentConnection.value,
     );
 
     emit('success', 'Connection added!');
@@ -412,8 +424,13 @@ defineExpose({
             </div>
           </div><!-- end From/To wrapper -->
           
-          <!-- Time + Slots -->
-          <div class="grid grid-cols-2 gap-3">
+          <!-- Permanent connection notice (non-roads to non-roads) -->
+          <div v-if="isPermanentConnection" class="rounded-lg bg-emerald-900/40 border border-emerald-600 px-4 py-3 text-emerald-300 text-sm text-center">
+            🔗 This will be a <strong>Permanent Connection</strong> — no timer required.
+          </div>
+
+          <!-- Time + Slots (only for non-permanent connections) -->
+          <div v-if="!isPermanentConnection" class="grid grid-cols-2 gap-3">
             <div class="flex flex-col gap-1.5" ref="timeInputContainer">
               <label class="text-sm font-medium text-gray-400 text-center">Expires In</label>
               <TimeInput

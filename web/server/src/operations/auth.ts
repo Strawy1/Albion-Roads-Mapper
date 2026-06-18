@@ -26,6 +26,8 @@ interface DbConnection {
   expires_at: string;
   reported_at: string;
   reported_by: string | null;
+  chain_id: string | null;
+  permanent: boolean | null;
 }
 
 export const handleAuth: OperationHandler<Extract<ClientMessage, { type: 'auth' }>> = async (
@@ -120,9 +122,11 @@ export const handleAuth: OperationHandler<Extract<ClientMessage, { type: 'auth' 
         expiresAt: row.expires_at,
         reportedAt: row.reported_at,
         reportedBy: row.reported_by ?? undefined,
-        chainId: (row as any).chain_id ?? undefined,
+        chainId: row.chain_id ?? undefined,
+        permanent: row.permanent ?? undefined,
       }))
       .filter((c) => {
+        if (c.permanent) return true;
         const expiresAt = new Date(c.expiresAt).getTime();
         return now.getTime() - expiresAt < EXPIRE_GRACE_MS;
       });

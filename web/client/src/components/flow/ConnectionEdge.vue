@@ -95,8 +95,13 @@ const remainingMs = computed(() => {
   return expiresMs.value - props.data.now;
 });
 
+const isPermanent = computed(() => {
+  return props.data?.connection?.permanent === true;
+});
+
 const isDirectlyExpired = computed(() => {
   if (!props.data?.connection) return false;
+  if (isPermanent.value) return false;
   return (props.data.connection.isExpired ?? false) || remainingMs.value <= 0;
 });
 
@@ -323,7 +328,7 @@ defineExpose({
         @click.stop="showPopover = !showPopover"
         @mousedown.stop
       >
-        <span class="leading-none">{{ isIsolated ? 'Isolated' : (isDirectlyExpired ? 'Expired' : formatCountdown(remainingMs)) }}</span>
+        <span class="leading-none">{{ isIsolated ? 'Isolated' : (isPermanent ? 'Permanent' : (isDirectlyExpired ? 'Expired' : formatCountdown(remainingMs))) }}</span>
         <span
           v-if="props.data?.slots !== undefined && !isRestricted"
           class="text-[10px] leading-none mt-0.5 px-1.5 pt-0.5 pb-1 rounded-full font-bold border"
@@ -354,28 +359,33 @@ defineExpose({
           <span class="text-gray-400">By:</span> {{ data.connection.reportedBy }}
         </div>
         <div v-if="data?.connection" class="mb-2">
-          <div class="flex gap-2 text-center">
-            <div class="text-xs text-gray-400 flex-1">Created</div>
-            <div class="text-xs text-gray-400 flex-1">Expires</div>
-          </div>
-          <div class="flex gap-2 text-center">
-            <div class="text-xs flex-1">{{ new Date(data.connection.reportedAt).toLocaleTimeString() }}</div>
-            <div class="text-xs flex-1">{{ new Date(data.connection.expiresAt).toLocaleTimeString() }}</div>
-          </div>
-          <div class="text-xs text-gray-400 mt-2 mb-1 text-center">Time Remaining</div>
-          <div class="flex items-stretch gap-1">
-            <TimeInput v-model="newSecondsRemaining" compact class="flex-1" @enter="newSecondsRemaining !== null && data?.onUpdate?.(id, newSecondsRemaining!) && (showPopover = false)" />
-            <button
-              :disabled="newSecondsRemaining === null"
-              class="bg-indigo-700 hover:bg-indigo-600 text-white rounded px-2 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Update Connection"
-              @click.stop="data?.onUpdate?.(id, newSecondsRemaining!); showPopover = false"
-            >
-              Update
-            </button>
-          </div>
+          <template v-if="isPermanent">
+            <div class="text-xs text-emerald-400 text-center py-1">🔗 Permanent Connection</div>
+          </template>
+          <template v-else>
+            <div class="flex gap-2 text-center">
+              <div class="text-xs text-gray-400 flex-1">Created</div>
+              <div class="text-xs text-gray-400 flex-1">Expires</div>
+            </div>
+            <div class="flex gap-2 text-center">
+              <div class="text-xs flex-1">{{ new Date(data.connection.reportedAt).toLocaleTimeString() }}</div>
+              <div class="text-xs flex-1">{{ new Date(data.connection.expiresAt).toLocaleTimeString() }}</div>
+            </div>
+            <div class="text-xs text-gray-400 mt-2 mb-1 text-center">Time Remaining</div>
+            <div class="flex items-stretch gap-1">
+              <TimeInput v-model="newSecondsRemaining" compact class="flex-1" @enter="newSecondsRemaining !== null && data?.onUpdate?.(id, newSecondsRemaining!) && (showPopover = false)" />
+              <button
+                :disabled="newSecondsRemaining === null"
+                class="bg-indigo-700 hover:bg-indigo-600 text-white rounded px-2 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Update Connection"
+                @click.stop="data?.onUpdate?.(id, newSecondsRemaining!); showPopover = false"
+              >
+                Update
+              </button>
+            </div>
+          </template>
         </div>
-        <div class="mb-3">
+        <div v-if="!isPermanent" class="mb-3">
           <div class="text-xs text-gray-400 mb-1 text-center">Slots</div>
           <div class="flex gap-2">
             <button
@@ -391,6 +401,7 @@ defineExpose({
           </div>
           <hr class="border-gray-600 mt-3" />
         </div>
+        <hr v-if="isPermanent" class="border-gray-600 mb-3" />
         <div class="flex flex-col gap-2">
           <template v-if="data?.hasChildren">
             <div class="flex gap-2">
