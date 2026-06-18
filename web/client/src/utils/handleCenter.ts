@@ -58,7 +58,16 @@ export function getTrueHandleCenter(node: any, handleId: string | null | undefin
   }
   const customHandles = node.data?.customHandles ?? node.data?.handles;
   const defaultHandles = getDefaultHandles(node.data?.type as ZoneType, node.data?.mapShape);
-  const allHandleDefs = [...(customHandles ?? []), ...defaultHandles];
+
+  // Fixed handles for non-roads diamond nodes (nw/ne/se/sw corners of the 250×250 diamond bounding box)
+  const nonRoadsFixedHandles = [
+    { id: 'nw', left: '25%', top: '25%' },
+    { id: 'ne', left: '75%', top: '25%' },
+    { id: 'se', left: '75%', top: '75%' },
+    { id: 'sw', left: '25%', top: '75%' },
+  ];
+
+  const allHandleDefs = [...(customHandles ?? []), ...defaultHandles, ...nonRoadsFixedHandles];
   const handleDef = handleId ? allHandleDefs.find((h: any) => h.id === handleId) : null;
 
   const nodeW = node.dimensions?.width ?? 0;
