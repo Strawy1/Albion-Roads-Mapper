@@ -129,17 +129,6 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
     );
     const connections = dbConnections.map(dbRowToConnection);
 
-    // Reject connections that would create a cycle (A→B when B→A already exists)
-    const cycleExists = connections.some(c =>
-      !c.isExpired && (
-        (c.fromZoneId === toZoneId && c.toZoneId === fromZoneId) ||
-        (c.fromZoneId === fromZoneId && c.toZoneId === toZoneId)
-      )
-    );
-    if (cycleExists) {
-      return reply.status(400).send({ error: 'This connection would create a cycle' });
-    }
-
     // Validate that the source handle is not already occupied by another connection
     const normalizedFromHandle = fromHandleId || 'center';
     const sourceHandleOccupied = connections.find(c =>

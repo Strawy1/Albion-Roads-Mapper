@@ -122,18 +122,18 @@ describe('POST /api/rooms/:id/connections', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejects connection that creates a cycle', async () => {
+  it('rejects a second connection between the same two zones when the source handle is already occupied (same center handle)', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
     mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'test-chain-id' }] }); // fromZoneId chain lookup
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // toZoneId chain lookup
-    // Return an existing connection: VALID_ZONE_B -> VALID_ZONE_A
+    // Existing connection B→A using default center handles; the center handle on VALID_ZONE_A is therefore occupied.
     mockDb.query.mockResolvedValueOnce({ rows: [{ 
       id: 'conn-1', 
       room_id: roomId, 
       from_zone_id: VALID_ZONE_B, 
       to_zone_id: VALID_ZONE_A, 
-      from_handle_id: null, 
-      to_handle_id: null, 
+      from_handle_id: null,   // center on VALID_ZONE_B
+      to_handle_id: null,     // center on VALID_ZONE_A — this handle is occupied
       expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), 
       reported_at: new Date().toISOString(), 
       reported_by: null 
@@ -143,12 +143,11 @@ describe('POST /api/rooms/:id/connections', () => {
       method: 'POST',
       url: `/api/rooms/${roomId}/connections`,
       headers: { authorization: `Bearer ${token}` },
-      // Try to create: VALID_ZONE_A -> VALID_ZONE_B
-      // Cycle: A -> B -> A
+      // Attempt to create A→B with no explicit handles (defaults to center on VALID_ZONE_A — already occupied above)
       payload: { fromZoneId: VALID_ZONE_A, toZoneId: VALID_ZONE_B, secondsRemaining: 1800, slots: 7 },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json<{ error: string }>().error).toMatch(/cycle/i);
+    expect(res.json<{ error: string }>().error).toMatch(/source handle/i);
   });
 
   it('rejects connection when source handle is already occupied', async () => {
@@ -1064,6 +1063,99 @@ describe('Connection lastUpdatedAt refresh', () => {
     expect(updateCall).toBeDefined();
     expect(updateCall[1]).toContain(VALID_ZONE_A);
     expect(updateCall[1]).toContain(VALID_ZONE_B);
+  });
+});
+
+describe('Multi-portal-pair: two connections between same zone pair', () => {
+  // Zones used for this scenario — both are real roads zones in the catalogue
+  const QUAENT = 'quaent-al-nusis';
+  const CIEITOS = 'cieitos-obaelos';
+
+  it('allows a second portal pair connection between quaent-al-nusis and cieitos-obaelos when the first uses different handles', async () => {
+    const futureExpiry = new Date(Date.now() + 3_600_000).toISOString();
+    const reportedAt = new Date().toISOString();
+
+    // Existing connection: quaent (e) → cieitos (c-p1) — already on the map
+    const existingDbRow = {
+      id: 'existing-conn-1',
+      room_id: roomId,
+      from_zone_id: QUAENT,
+      to_zone_id: CIEITOS,
+      from_handle_id: 'e',
+      to_handle_id: 'c-p1',
+      expires_at: futureExpiry,
+      reported_at: reportedAt,
+      reported_by: null,
+      chain_id: 'iAIGCt5pnw9pbDZ74oxAE',
+    };
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'iAIGCt5pnw9pbDZ74oxAE' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'iAIGCt5pnw9pbDZ74oxAE' }] }); // toZoneId chain lookup (same chain — allowed)
+    mockDb.query.mockResolvedValueOnce({ rows: [existingDbRow] }); // connections check (first portal pair)
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // INSERT connection
+
+    // Second portal pair: quaent (e2) → cieitos (c-p2) — different handles from the first pair
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        fromZoneId: QUAENT,
+        toZoneId: CIEITOS,
+        fromHandleId: 'e2',
+        toHandleId: 'c-p2',
+        secondsRemaining: 1800,
+        slots: 7,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const conn = res.json<{ fromZoneId: string; toZoneId: string }>();
+    expect(conn.fromZoneId).toBe(QUAENT);
+    expect(conn.toZoneId).toBe(CIEITOS);
+  });
+
+  it('still rejects when the same source handle is already occupied', async () => {
+    const futureExpiry = new Date(Date.now() + 3_600_000).toISOString();
+    const reportedAt = new Date().toISOString();
+
+    // Existing connection already uses handle 'e' on quaent
+    const existingDbRow = {
+      id: 'existing-conn-1',
+      room_id: roomId,
+      from_zone_id: QUAENT,
+      to_zone_id: CIEITOS,
+      from_handle_id: 'e',
+      to_handle_id: 'c-p1',
+      expires_at: futureExpiry,
+      reported_at: reportedAt,
+      reported_by: null,
+      chain_id: 'iAIGCt5pnw9pbDZ74oxAE',
+    };
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId }] }); // room check
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'iAIGCt5pnw9pbDZ74oxAE' }] }); // fromZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ chain_id: 'iAIGCt5pnw9pbDZ74oxAE' }] }); // toZoneId chain lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [existingDbRow] }); // connections check
+
+    // Attempt to reuse the same handle 'e' — must be rejected
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        fromZoneId: QUAENT,
+        toZoneId: CIEITOS,
+        fromHandleId: 'e',      // same handle as existing connection
+        toHandleId: 'c-p2',
+        secondsRemaining: 1800,
+        slots: 7,
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/source handle/i);
   });
 });
 
