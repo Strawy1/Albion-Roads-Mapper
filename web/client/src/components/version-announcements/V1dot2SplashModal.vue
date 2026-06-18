@@ -48,7 +48,7 @@ const slides = [
   {
     id: 'other',
     title: 'Other changes',
-    image: null,
+    image: undefined,
     hasCta: false,
     fixes: [
       'Zone rotation desync bug fixed for good!',
