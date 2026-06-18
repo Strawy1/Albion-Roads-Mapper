@@ -44,11 +44,31 @@ const slides = [
     title: 'Room Renaming',
     image: '/images/changelog/1.2/roomrename.png',
     hasCta: false,
+  },
+  {
+    id: 'other',
+    title: 'Other changes',
+    image: null,
+    hasCta: false,
+    fixes: [
+      'Zone rotation desync bug fixed for good!',
+      'Zones are longer wrongly marked as "explored" by changing the connecting time/portal.',
+      'Fixed Cieos-Atatlum\'s map type (O shape, not C shape). Please report any other map categorisation oddies on Discord!',
+      'Fixed misaligned connection lines on zone handles.',
+    ],
+    improvements: [
+      'It is now possible for two zones to be connected via two portal pairs. When this occurs, it uses the same "direction" as the preexisting connection.',
+      'Added Discord image to the Discord buttons.',
+      'Improved some of the blue hints to be less obtuse and less in your face.',
+      'Added changelog "slideshows" for new updates.'
+    ],
   }
 ];
 
+const manualVisible = ref(false);
+
 const visible = computed(() =>
-  !hasSeen.value && hasMapHistory.value && !hasOpenedChainManager.value
+  manualVisible.value || (!hasSeen.value && hasMapHistory.value && !hasOpenedChainManager.value)
 );
 
 function nextSlide() {
@@ -66,9 +86,19 @@ function prevSlide() {
 }
 
 function dismiss() {
+  manualVisible.value = false;
   hasSeen.value = true;
   try { localStorage.setItem(SPLASH_SEEN_KEY, '1'); } catch { /* ignore */ }
 }
+
+function show() {
+  currentSlide.value = 0;
+  manualVisible.value = true;
+}
+
+defineExpose({
+  show
+});
 
 function openChainManager() {
   dismiss();
@@ -83,16 +113,24 @@ function startRoutePlot() {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible"
-      class="fixed inset-0 bg-black/70 flex items-center justify-center p-2 md:p-8"
-      :class="Z_INDEX.MODAL"
-      @click.self="dismiss"
+    <Transition
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
     >
       <div
-        class="relative bg-gray-900 border border-gray-700 rounded-xl p-4 md:p-6 w-full md:max-w-5xl shadow-2xl overflow-y-auto max-h-full"
-        @click.stop
+        v-if="visible"
+        class="fixed inset-0 bg-black/70 flex items-center justify-center p-2 md:p-8"
+        :class="Z_INDEX.MODAL"
+        @click.self="dismiss"
       >
+        <div
+          class="relative bg-gray-900 border border-gray-700 rounded-xl p-4 md:p-6 w-full md:max-w-5xl shadow-2xl overflow-y-auto max-h-full"
+          @click.stop
+        >
         <!-- Close button -->
         <button
           class="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-white hover:bg-gray-700 transition-colors text-lg leading-none"
@@ -108,7 +146,7 @@ function startRoutePlot() {
 
         <div class="flex flex-col gap-4 mb-4">
           <!-- Image -->
-          <div class="rounded-lg overflow-hidden bg-black w-full border-2 border-gray-700 shadow-inner flex justify-center">
+          <div v-if="slides[currentSlide].image" class="rounded-lg overflow-hidden bg-black w-full border-2 border-gray-700 shadow-inner flex justify-center">
             <img
               class="max-w-full h-auto object-contain"
               :src="slides[currentSlide].image"
@@ -188,6 +226,25 @@ function startRoutePlot() {
                  <strong>The admin password is required</strong> to rename the room.
               </p>
             </div>
+            <div v-if="slides[currentSlide].id === 'other'" class="w-full space-y-6">
+              <div v-if="slides[currentSlide].fixes?.length">
+                <h3 class="text-xl font-semibold text-red-400 mb-2">🔧 Fixes</h3>
+                <ul class="list-disc list-inside space-y-2 text-gray-300 text-lg">
+                  <li v-for="fix in slides[currentSlide].fixes" :key="fix">
+                    {{ fix }}
+                  </li>
+                </ul>
+              </div>
+
+              <div v-if="slides[currentSlide].improvements?.length">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-2">✨ Improvements</h3>
+                <ul class="list-disc list-inside space-y-2 text-gray-300 text-lg">
+                  <li v-for="imp in slides[currentSlide].improvements" :key="imp">
+                    {{ imp }}
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -218,7 +275,8 @@ function startRoutePlot() {
             </button>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>

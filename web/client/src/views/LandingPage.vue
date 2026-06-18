@@ -3,8 +3,11 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import RecentlyViewedRooms from '../components/RecentlyViewedRooms.vue';
+import V1dot2SplashModal from '../components/version-announcements/V1dot2SplashModal.vue';
 
 const router = useRouter();
+
+const splashModal = ref<InstanceType<typeof V1dot2SplashModal> | null>(null);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const currentTime = ref(0);
@@ -125,7 +128,27 @@ onMounted(() => {
 </style>
 
 <template>
-  <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4">
+  <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4 relative overflow-x-hidden">
+    <div class="w-full flex justify-center px-4 mb-4">
+      <div class="w-full max-w-3xl bg-indigo-900/40 border border-indigo-500/50 rounded-lg p-3 flex flex-col md:flex-row items-center justify-between gap-3 shadow-lg backdrop-blur-sm">
+        <div class="flex items-center gap-3">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500 text-white animate-pulse">
+            ✨
+          </span>
+          <div>
+            <p class="font-bold text-indigo-100">Update v1.2 is here!</p>
+            <p class="text-xs text-indigo-200/80">Map Zone Chains, enhanced route plotting, room renaming and more!</p>
+          </div>
+        </div>
+        <button
+          @click="splashModal?.show()"
+          class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-md transition-all shadow-md active:scale-95"
+        >
+          See What's New
+        </button>
+      </div>
+    </div>
+
     <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center px-4">
       <h1 class="text-4xl font-bold text-indigo-600 text-center">Albion Online Roads Mapper</h1>
       <RecentlyViewedRooms />
@@ -222,8 +245,9 @@ onMounted(() => {
         class="w-full min-[1200px]:border-2 min-[1200px]:border-gray-500 min-[1200px]:rounded-lg"
       />
     </div>
-  </div>
-  <div class="fixed bottom-2 left-0 right-0 text-center pointer-events-none">
-    <CopyrightNotice />
+    <div class="w-full text-center pb-8 pointer-events-none">
+      <CopyrightNotice class="pointer-events-auto" />
+    </div>
+    <V1dot2SplashModal ref="splashModal" />
   </div>
 </template>
