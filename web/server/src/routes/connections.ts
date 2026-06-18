@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import {CreateConnectionBodySchema, getDefaultHandles, inferRotationFromHandles, UpdateConnectionBodySchema, ZONE_BY_ID} from 'shared';
-import * as Shared from 'shared';
 import type { Connection, RoomMemoryEntry } from 'shared';
 import { broadcast } from '../broadcast.js';
 import { getInitialFeatures } from '../utils/nodeFeatures.js';

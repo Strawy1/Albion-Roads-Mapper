@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
-import { useRoomStore } from '../src/stores/useRoomStore.js';
+import { useRoomStore } from '@/stores/useRoomStore.js';
 import { ZONES } from 'shared';
-import ZoneCombobox from '../src/components/ZoneCombobox.vue';
+import ZoneCombobox from '@/components/ZoneCombobox.vue';
 
 // We test the filtering logic by inspecting the component's internal computed
 // rather than fighting reka-ui's portal teleportation in jsdom.

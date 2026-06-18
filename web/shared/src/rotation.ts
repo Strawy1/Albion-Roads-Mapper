@@ -1,5 +1,5 @@
 import type { CustomHandle, ZoneType } from './types.js';
-import { getDefaultHandles, getShapeHandlePositions } from './handles.js';
+import { getShapeHandlePositions } from './handles.js';
 
 /**
  * Rotation is stored as the number of clockwise 90° steps from the default orientation.

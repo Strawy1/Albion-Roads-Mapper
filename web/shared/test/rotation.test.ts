@@ -7,8 +7,8 @@ import {
   inferRotationFromHandles,
   canonicalizeHandlesForRotation,
   inferRotationForZone,
-} from '../src/rotation.js';
-import { getShapeHandlePositions } from '../src/handles.js';
+  getShapeHandlePositions
+} from '../src';
 
 describe('rotationStepsToDegrees', () => {
   it('returns 0 degrees for step 0 (default orientation)', () => {
@@ -171,7 +171,7 @@ describe('canonicalizeHandlesForRotation', () => {
       expect(ids).toContain(def.id);
     }
     // Positions must differ from defaults (rotation was applied)
-    const movedCount = result.filter((h, i) => {
+    const movedCount = result.filter((h, _) => {
       const def = defaults.find(d => d.id === h.id);
       return def && (h.left !== def.left || h.top !== def.top);
     }).length;
