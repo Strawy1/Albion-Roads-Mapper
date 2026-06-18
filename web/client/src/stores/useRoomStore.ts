@@ -113,14 +113,14 @@ export const useRoomStore = defineStore('room', () => {
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function isNodeIsolated(nodeId: string, currentTime: number) {
-    if (chainSourceZoneIds.value.has(nodeId)) return false;
+    if (nodeId === homeZoneId.value || chainSourceZoneIds.value.has(nodeId)) return false;
     const nodeConnections = connections.value.filter(c => c.fromZoneId === nodeId || c.toZoneId === nodeId);
     if (nodeConnections.length === 0) return true;
     return nodeConnections.every(c => (c.isExpired ?? false) || (new Date(c.expiresAt).getTime() - currentTime) <= 0);
   }
 
   function isNodeExpired(nodeId: string, currentTime: number) {
-    if (chainSourceZoneIds.value.has(nodeId)) return false;
+    if (nodeId === homeZoneId.value || chainSourceZoneIds.value.has(nodeId)) return false;
 
     const nodeConnections = connections.value.filter(c => c.fromZoneId === nodeId || c.toZoneId === nodeId);
 

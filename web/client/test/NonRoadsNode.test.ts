@@ -74,10 +74,10 @@ describe('NonRoadsNode Styling', () => {
     expect(inner.classes()).toContain('bg-red-950')
   })
 
-  it('applies home-glow when isChainSource is true', () => {
+  it('applies bg-green-500 diamond when isChainSource is true', () => {
     const wrapper = mountNode({ isChainSource: true })
-    const container = wrapper.find('.non-roads-node .w-full.h-full.relative')
-    expect(container.classes()).toContain('home-glow')
+    const diamond = wrapper.find('.non-roads-node .w-full.h-full.relative [class*="bg-green-500"]')
+    expect(diamond.exists()).toBe(true)
   })
 
   it('applies goto-glow-animation when highlighted is true', () => {

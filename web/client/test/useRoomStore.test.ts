@@ -300,25 +300,25 @@ describe('useRoomStore', () => {
   it('sets wsStatus to auth_failed and disconnectReason to room_deleted on room_deleted message', () => {
     const store = useRoomStore();
     store.roomId = 'room-to-delete';
-    sessionStorage.setItem('token:room-to-delete', 'some-token');
+    localStorage.setItem('token:room-to-delete', 'some-token');
 
     store.applyMessage({ type: 'room_deleted' });
 
     expect(store.wsStatus).toBe('auth_failed');
     expect(store.disconnectReason).toBe('room_deleted');
-    expect(sessionStorage.getItem('token:room-to-delete')).toBeNull();
+    expect(localStorage.getItem('token:room-to-delete')).toBeNull();
   });
 
   it('sets wsStatus to auth_failed and disconnectReason to room_not_found on error message with Room not found', () => {
     const store = useRoomStore();
     store.roomId = 'ghost-room';
-    sessionStorage.setItem('token:ghost-room', 'old-token');
+    localStorage.setItem('token:ghost-room', 'old-token');
 
     store.applyMessage({ type: 'error', message: 'Room not found' });
 
     expect(store.wsStatus).toBe('auth_failed');
     expect(store.disconnectReason).toBe('room_not_found');
-    expect(sessionStorage.getItem('token:ghost-room')).toBeNull();
+    expect(localStorage.getItem('token:ghost-room')).toBeNull();
   });
 
   it('does NOT change wsStatus on error message with an unrelated message', () => {

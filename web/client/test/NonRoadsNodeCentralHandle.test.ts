@@ -44,8 +44,10 @@ describe('NonRoadsNode Central Handle', () => {
   it('renders exactly one central handle by default', () => {
     const wrapper = mountNode()
     const handles = wrapper.findAll('.handle-stub')
-    expect(handles.length).toBe(1)
-    expect(handles[0].attributes('id')).toBe('center')
+    // center + nw + ne + se + sw = 5 handles
+    expect(handles.length).toBe(5)
+    const ids = handles.map(h => h.attributes('id'))
+    expect(ids).toContain('center')
   })
 
   it('renders central handle and overlay when isConnecting is true', async () => {
@@ -55,7 +57,8 @@ describe('NonRoadsNode Central Handle', () => {
     await wrapper.vm.$nextTick()
     
     const handles = wrapper.findAll('.handle-stub')
-    expect(handles.length).toBe(2)
+    // center + nw + ne + se + sw + center-overlay = 6 handles
+    expect(handles.length).toBe(6)
     const ids = handles.map(h => h.attributes('id'))
     expect(ids).toContain('center')
     expect(ids).toContain('center-overlay')

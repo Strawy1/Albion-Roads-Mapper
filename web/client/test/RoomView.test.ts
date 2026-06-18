@@ -303,7 +303,7 @@ describe('RoomView', () => {
   });
 
   it('does not flash on initial load', async () => {
-    sessionStorage.setItem('token:room1', 'some-token');
+    localStorage.setItem('token:room1', 'some-token');
     
     const wrapper = mount(RoomView, {
       props: { id: 'room1' },
@@ -352,7 +352,7 @@ describe('RoomView', () => {
   });
 
   it('flashes on subsequent updates', async () => {
-    sessionStorage.setItem('token:room1', 'some-token');
+    localStorage.setItem('token:room1', 'some-token');
     
     const wrapper = mount(RoomView, {
       props: { id: 'room1' },

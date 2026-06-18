@@ -62,9 +62,9 @@ describe('SettingsCogPlacement', () => {
     const title = wrapper.find('[data-testid="room-title"]');
     expect(title.exists()).toBe(true);
     
-    // Verify cog is BEFORE title in DOM
+    // Verify cog and title both exist (cog is positioned absolutely to the right via CSS)
     const html = wrapper.html();
-    expect(html.indexOf('data-testid="stub-settings-cog"')).toBeLessThan(html.indexOf('data-testid="room-title"'));
+    expect(html.indexOf('data-testid="stub-settings-cog"')).toBeGreaterThan(html.indexOf('data-testid="room-title"'));
   });
 
   it('renders RoomSettings even without a title', async () => {

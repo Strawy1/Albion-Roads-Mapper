@@ -96,6 +96,25 @@ interface PingToast {
 const pingToasts = ref<PingToast[]>([]);
 let pingToastCounter = 0;
 const initialUpdateCount = ref(0);
+const lastUpdateFlash = ref(false);
+let flashTimeout: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => lastUpdate.value?.getTime(),
+  async () => {
+    if (initialUpdateCount.value < 2) {
+      initialUpdateCount.value++;
+      return;
+    }
+    lastUpdateFlash.value = false;
+    if (flashTimeout) clearTimeout(flashTimeout);
+    await nextTick();
+    flashTimeout = setTimeout(() => {
+      lastUpdateFlash.value = true;
+      flashTimeout = setTimeout(() => (lastUpdateFlash.value = false), 2000);
+    }, 50);
+  }
+);
 
 
 onMounted(() => {
@@ -985,7 +1004,7 @@ async function handleConnect(params: any) {
       // is just a handle reassignment, not a new portal link.
       const isReassigningRoadsHandle = existingNonRoadsHandle === newNonRoadsHandle;
 
-      if (!isReplacingCenter && !isMovingOtherEnd && !isReassigningRoadsHandle) {
+      if (!isReplacingCenter && !isMovingOtherEnd) {
         const isLoop = wouldCreateLongerLoop(store.connections, params.source, params.target);
         reportForm.value?.setConnection(
           params.source,
@@ -1359,7 +1378,7 @@ function isHandleOccupied(nodeId: string, handleId: string | null) {
   );
 }
 
-defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirmationModal, confirmationModalText, toast, toastType, reportForm });
+defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirmationModal, confirmationModalText, toast, toastType, reportForm, lastUpdateFlash });
 </script>
 
 <template>

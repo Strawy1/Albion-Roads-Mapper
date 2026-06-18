@@ -384,7 +384,7 @@ export type ServerMessage =
   | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; chains?: RoomChain[] }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
-  | { type: 'connection_removed'; connectionId: string; removedZoneIds?: string[] }
+  | { type: 'connection_removed'; connectionId?: string; removedZoneIds?: string[] }
   | { type: 'connection_expired'; connectionId: string }
   | { type: 'room_updated'; homeZoneId: string }
   | { type: 'room_reset' }

@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [vue()],
   define: {
     __VERCEL_ENV__: JSON.stringify(''),
+    __APP_VERSION__: JSON.stringify('test'),
+    __APP_COMMIT_SHA__: JSON.stringify('test'),
   },
   resolve: {
     alias: {

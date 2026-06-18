@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import { mount } from '@vue/test-utils';
 import RoomView from '../src/views/RoomView.vue';
 import { useRoomStore } from '../src/stores/useRoomStore';
@@ -8,7 +9,7 @@ describe('Hideout Draggable', () => {
   it('should make hideout nodes draggable even if it is the only node', async () => {
     setActivePinia(createPinia());
     const store = useRoomStore();
-    sessionStorage.setItem('token:room1', 'some-token');
+    localStorage.setItem('token:room1', 'some-token');
     
     // Qiient-Al-Nusom is a roadsHideout
     store.applyMessage({ 
@@ -22,9 +23,11 @@ describe('Hideout Draggable', () => {
       watching: 0, totalConnected: 0
     });
 
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div/>' } }] });
     const wrapper = mount(RoomView, {
       props: { id: 'room1' },
       global: {
+        plugins: [router],
         stubs: {
           ReportForm: true,
           DebugTray: true,
