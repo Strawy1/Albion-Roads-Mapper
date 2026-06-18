@@ -431,8 +431,8 @@ describe('useRoomStore', () => {
       roomId: 'room1',
       fromZoneId: 'zone-a',
       toZoneId: 'zone-b',
-      fromHandleId: null,
-      toHandleId: null, // was center
+      fromHandleId: undefined,
+      toHandleId: undefined, // was center
       expiresAt: new Date(now + 100000).toISOString(),
       reportedAt: new Date(now).toISOString(),
     };
