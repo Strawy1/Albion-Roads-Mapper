@@ -156,6 +156,9 @@ onMounted(() => {
         Collaborate with your guildmates in <b>real-time</b> to track Roads of Avalon portal zones and map content. Locate and track Cores and Treasure Chests with real time-timers, Map Resources (and sizes), Avalonian Chests, and easily find connections to the Royal Continent, Outlands portals and rest zones.
       </p>
       <p class="text-white text-center">
+        You are able to set your starting location from a Hideout Zone in the Roads, Royal Continent, Outlands of even Brecillen, and relocate it whenever you choose.
+      </p>
+      <p class="text-white text-center">
         All Rooms are secured with a password, which you can rotate at any time.
       </p>
        <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
