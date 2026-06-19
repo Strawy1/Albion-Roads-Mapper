@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import { useRoomStore } from '@/stores/useRoomStore';
+import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { storeToRefs } from 'pinia';
 import { Z_INDEX } from '@/constants/Layers';
@@ -10,10 +11,11 @@ const SPLASH_SEEN_KEY = 'splash:v12:seen';
 const CTA_DISMISSED_KEY = 'cta:chainManagement:dismissed';
 
 const store = useRoomStore();
+const memoryStore = useRoomMemoryStore();
 const { nodePositions, connections } = storeToRefs(store);
 
 const hasMapHistory = computed(() =>
-  nodePositions.value.length > 1 || connections.value.length > 0
+  memoryStore.memory.size > 0
 );
 
 const hasOpenedChainManager = computed(() =>
