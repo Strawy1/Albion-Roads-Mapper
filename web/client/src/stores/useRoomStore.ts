@@ -168,10 +168,12 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
+  const autoFixedZones = new Set<string>();
   const rotationErrors = ref<string[]>([]);
 
-  function validateNodeRotations(positions: NodePosition[]) {
+  function validateNodeRotations(positions: NodePosition[], autoFix = false) {
     const errors: string[] = [];
+    const toFix: { zoneId: string, rotation: number }[] = [];
     for (const node of positions) {
       const zone = ZONE_BY_ID.get(node.zoneId);
       if (!zone || zone.type === 'roadsHideout') continue;
@@ -193,6 +195,7 @@ export const useRoomStore = defineStore('room', () => {
             `but no custom handles — layout is inconsistent.`
           );
           errors.push(node.zoneId);
+          toFix.push({ zoneId: node.zoneId, rotation: stored0 });
         }
         continue;
       }
@@ -213,6 +216,7 @@ export const useRoomStore = defineStore('room', () => {
           `data is inconsistent with shape "${shape}".`
         );
         errors.push(node.zoneId);
+        toFix.push({ zoneId: node.zoneId, rotation: stored });
         continue;
       }
 
@@ -223,9 +227,11 @@ export const useRoomStore = defineStore('room', () => {
           `[RotationValidation] Zone "${node.zoneId}" handles do not match any rotation of shape "${shape}".`
         );
         errors.push(node.zoneId);
+        toFix.push({ zoneId: node.zoneId, rotation: stored });
         continue;
       }
 
+      console.debug(`[RotationValidation] Zone "${node.zoneId}" inferred rotation: ${inferred}, stored: ${stored}`);
       if (inferred !== stored) {
         console.warn(
           `[RotationValidation] Mismatch on zone "${node.zoneId}": ` +
@@ -233,9 +239,19 @@ export const useRoomStore = defineStore('room', () => {
           `The stored rotation value may be stale due to a sync race condition.`
         );
         errors.push(node.zoneId);
+        toFix.push({ zoneId: node.zoneId, rotation: stored });
       }
     }
     rotationErrors.value = errors;
+
+    if (autoFix && toFix.length > 0) {
+      for (const { zoneId, rotation } of toFix) {
+        if (autoFixedZones.has(zoneId)) continue;
+        autoFixedZones.add(zoneId);
+        console.info(`[RotationValidation] Auto-fixing rotation error for zone "${zoneId}"`);
+        send({ type: 'rotate_zone', zoneId, rotation });
+      }
+    }
   }
 
   function clearRotationError(zoneId: string) {
@@ -251,7 +267,7 @@ export const useRoomStore = defineStore('room', () => {
         chains.value = msg.chains ?? [];
         roomTitle.value = msg.title || '';
         nodePositions.value = msg.nodePositions;
-        validateNodeRotations(msg.nodePositions);
+        validateNodeRotations(msg.nodePositions, true);
         lastUpdate.value = new Date(msg.lastUpdatedAt);
         watchingCount.value = msg.watching;
         totalConnected.value = msg.totalConnected;
@@ -484,13 +500,13 @@ export const useRoomStore = defineStore('room', () => {
               ...existing,
               x: p.x,
               y: p.y,
-              virtualGridPos: p.virtualGridPos ?? existing.virtualGridPos,
-              proximityTo: p.proximityTo ?? existing.proximityTo,
-              features: p.features ?? existing.features,
-              customHandles: p.customHandles ?? existing.customHandles,
-              rotation: p.rotation ?? existing.rotation,
+              virtualGridPos: p.virtualGridPos !== undefined ? p.virtualGridPos : existing.virtualGridPos,
+              proximityTo: p.proximityTo !== undefined ? p.proximityTo : existing.proximityTo,
+              features: p.features !== undefined ? p.features : existing.features,
+              customHandles: p.customHandles !== undefined ? p.customHandles : existing.customHandles,
+              rotation: p.rotation !== undefined ? p.rotation : existing.rotation,
               explored: p.explored || existing.explored,
-              chainId: p.chainId ?? existing.chainId,
+              chainId: p.chainId !== undefined ? p.chainId : existing.chainId,
             };
           });
           // Append any new entries the broadcast added.
@@ -498,7 +514,7 @@ export const useRoomStore = defineStore('room', () => {
           nodePositions.value = next;
           // Re-validate after applying authoritative server data so the UI
           // reflects the corrected/uncorrected state of any changed zones.
-          validateNodeRotations(nodePositions.value);
+          validateNodeRotations(nodePositions.value, true);
         }
         if (msg.updateLastUpdated) {
           lastUpdate.value = new Date();
@@ -624,14 +640,14 @@ export const useRoomStore = defineStore('room', () => {
         ...existing,
         x: p.x,
         y: p.y,
-        virtualGridPos: p.virtualGridPos ?? existing.virtualGridPos,
-        proximityTo: p.proximityTo ?? existing.proximityTo,
-        features: p.features ?? existing.features,
-        customHandles: p.customHandles ?? existing.customHandles,
+        virtualGridPos: p.virtualGridPos !== undefined ? p.virtualGridPos : existing.virtualGridPos,
+        proximityTo: p.proximityTo !== undefined ? p.proximityTo : existing.proximityTo,
+        features: p.features !== undefined ? p.features : existing.features,
+        customHandles: p.customHandles !== undefined ? p.customHandles : existing.customHandles,
         explored: p.explored || existing.explored,
         // Preserve chainId so a position-only update (e.g. dragging a freshly
         // created chain source) doesn't strip the chain membership locally.
-        chainId: p.chainId ?? existing.chainId,
+        chainId: p.chainId !== undefined ? p.chainId : existing.chainId,
       };
     });
     // Append any incoming entries that aren't yet in the store.
@@ -926,8 +942,6 @@ export const useRoomStore = defineStore('room', () => {
     lastUpdate,
     lastPing,
     watchingCount,
-    rotationErrors,
-    clearRotationError,
     totalConnected,
     token: computed(getToken),
     roomId,

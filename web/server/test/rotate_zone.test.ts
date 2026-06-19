@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setupTestApp } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
-import { getShapeHandlePositions, canonicalizeHandlesForRotation } from 'shared';
+import { getShapeHandlePositions, canonicalizeHandlesForRotation, inferRotationFromHandles } from 'shared';
 
 // A roads zone that has mapShape = 'c' — confirmed present in the zone DB.
 const ROADS_ZONE = 'cases-ugumlos';
@@ -448,6 +448,150 @@ describe('rotate_zone: out-of-range and edge cases', () => {
       currentHandles = expected ?? [];
       currentRotation = target;
     }
+
+    socket.close();
+  });
+});
+
+// ─── oouitos-alaiam bad-data regression ──────────────────────────────────────
+//
+// This test reproduces the real-world scenario where a zone was stored with
+// rotation=3 but the portal handle positions (especially o-p2) were corrupted
+// / desynced from the shape definition.  The test verifies that:
+//   1. The bad data is detected (inferRotationFromHandles returns null).
+//   2. A clockwise rotate (to rotation 0) corrects the handles on the server.
+//   3. A counter-clockwise rotate (back to rotation 3) produces the canonical
+//      position for rotation 3, so o-p2 is now in the right place.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('rotate_zone: oouitos-alaiam bad-data self-heal', () => {
+  const BAD_ZONE = 'oouitos-alaiam';
+  const BAD_SHAPE = 'o';
+
+  // Exact bad handle data from the bug report (rotation field says 3, but
+  // o-p2 is at top=11.20%/left=61.20% instead of the shape-correct position).
+  const BAD_HANDLES = [
+    { id: 'o-p1', top: '38.00%', left: '12.00%' },
+    { id: 'o-p2', top: '11.20%', left: '61.20%' },
+    { id: 'o-p3', top: '31.40%', left: '81.40%' },
+    { id: 'o-p4', top: '61.20%', left: '88.80%' },
+    { id: 'o-p5', top: '88.00%', left: '62.00%' },
+    { id: 'o-p6', top: '68.80%', left: '18.80%' },
+  ];
+
+  /** Auth/sync mock pointing at the oouitos-alaiam zone. */
+  function mockAuthSyncBad(existingPositionRow?: object) {
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ id: roomId, home_zone_id: BAD_ZONE, created_at: new Date().toISOString(), chain_migrated: true }],
+    }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'chain-1', source_zone_id: BAD_ZONE }] }); // chains
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({
+      rows: existingPositionRow ? [existingPositionRow] : [],
+    }); // node positions
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory
+  }
+
+  it('step 1: detects bad handle data — inferRotationFromHandles returns null', () => {
+    const defaults = getShapeHandlePositions(BAD_SHAPE);
+    const result = inferRotationFromHandles(BAD_HANDLES, defaults);
+    // The bad data cannot be matched to any valid rotation of shape 'o'.
+    expect(result).toBeNull();
+  });
+
+  it('step 2 & 3: self-heals via CW (→0) then CCW (→3) — o-p2 is correct after round-trip', async () => {
+    const defaults = getShapeHandlePositions(BAD_SHAPE);
+
+    // Stateful mock: starts with the bad data, then tracks whatever the server
+    // writes back so the second rotate sees the corrected handles.
+    let currentHandles: any[] = BAD_HANDLES;
+    let currentRotation = 3;
+
+    const mockClient = {
+      query: vi.fn().mockImplementation((q: string, params?: any[]) => {
+        if (q.includes('SELECT home_zone_id FROM rooms'))
+          return Promise.resolve({ rows: [{ home_zone_id: BAD_ZONE }] });
+        if (q.includes('SELECT zone_id, x, y, features, custom_handles'))
+          return Promise.resolve({
+            rows: [{
+              zone_id: BAD_ZONE,
+              x: 1565.7727,
+              y: 2532.0774,
+              features: { slots: 7 },
+              custom_handles: currentHandles,
+              rotation: currentRotation,
+              explored: true,
+              chain_id: 'chain-1',
+            }],
+          });
+        // Capture the UPDATE so we can advance state for the second rotation call.
+        if (q.includes('UPDATE room_node_positions SET rotation') && params) {
+          currentRotation = params[2];
+          currentHandles = JSON.parse(params[3]);
+        }
+        return Promise.resolve({ rows: [], rowCount: 1 });
+      }),
+      release: vi.fn(),
+    };
+
+    mockAuthSyncBad({
+      zone_id: BAD_ZONE,
+      x: 1565.7727,
+      y: 2532.0774,
+      features: { slots: 7 },
+      custom_handles: BAD_HANDLES,
+      rotation: 3,
+      explored: true,
+    });
+    mockDb.connect.mockResolvedValue(mockClient);
+
+    await app.listen({ port: 0 });
+    const { socket } = await connectWs(roomId);
+    const messages: unknown[] = [];
+    socket.on('message', (data) => messages.push(JSON.parse(data.toString())));
+
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 200));
+
+    // ── Step 2: Rotate CW (bad rotation 3 → target 0) ─────────────────────
+    messages.length = 0;
+    socket.send(JSON.stringify({ type: 'rotate_zone', zoneId: BAD_ZONE, rotation: 0 }));
+    await new Promise((r) => setTimeout(r, 200));
+
+    const cwUpdate = messages.find((m) => (m as any).type === 'node_positions_updated') as any;
+    expect(cwUpdate).toBeDefined();
+    const cwPos = cwUpdate.nodePositions[0];
+    expect(cwPos.rotation).toBe(0);
+
+    // Server must have canonicalised from the bad handles to rotation 0.
+    const expectedAt0 = canonicalizeHandlesForRotation('roads', BAD_SHAPE, BAD_HANDLES, 0);
+    expect(cwPos.customHandles).toEqual(expectedAt0);
+
+    // ── Step 3: Rotate CCW (back to rotation 3) ───────────────────────────
+    messages.length = 0;
+    socket.send(JSON.stringify({ type: 'rotate_zone', zoneId: BAD_ZONE, rotation: 3 }));
+    await new Promise((r) => setTimeout(r, 200));
+
+    const ccwUpdate = messages.find((m) => (m as any).type === 'node_positions_updated') as any;
+    expect(ccwUpdate).toBeDefined();
+    const ccwPos = ccwUpdate.nodePositions[0];
+    expect(ccwPos.rotation).toBe(3);
+
+    // The canonical handles for rotation 3 must now match the shape definition.
+    const expectedAt3 = canonicalizeHandlesForRotation('roads', BAD_SHAPE, defaults, 3);
+    expect(ccwPos.customHandles).toEqual(expectedAt3);
+
+    // Specifically verify o-p2 is at the correct canonical position for rotation 3.
+    const op2 = (ccwPos.customHandles as any[]).find((h: any) => h.id === 'o-p2');
+    const op2Expected = expectedAt3?.find((h) => h.id === 'o-p2');
+    expect(op2).toBeDefined();
+    expect(op2Expected).toBeDefined();
+    expect(op2.top).toBe(op2Expected!.top);
+    expect(op2.left).toBe(op2Expected!.left);
+
+    // Confirm o-p2 is no longer at the original bad position.
+    expect(op2.top).not.toBe('11.20%');
+    expect(op2.left).not.toBe('61.20%');
 
     socket.close();
   });

@@ -130,6 +130,21 @@ describe('inferRotationFromHandles', () => {
     const mixed = defaults.map((h, i) => i % 2 === 0 ? h : { ...h, left: '50.00%', top: '0.00%' });
     expect(inferRotationFromHandles(mixed, defaults)).toBeNull();
   });
+
+  it('returns null for the problematic oouitos-alaiam data (desynced handle)', () => {
+    const defaults = getShapeHandlePositions('o');
+    const problematic = [
+      { id: "o-p1", top: "38.00%", left: "12.00%" },
+      { id: "o-p2", top: "11.20%", left: "61.20%" },
+      { id: "o-p3", top: "31.40%", left: "81.40%" },
+      { id: "o-p4", top: "61.20%", left: "88.80%" },
+      { id: "o-p5", top: "88.00%", left: "62.00%" },
+      { id: "o-p6", top: "68.80%", left: "18.80%" }
+    ];
+    // In previous versions this might have returned 3 (due to rounding)
+    // but with tolerance check it should return null because o-p2 is way off.
+    expect(inferRotationFromHandles(problematic, defaults)).toBeNull();
+  });
 });
 
 // ─── canonicalizeHandlesForRotation ──────────────────────────────────────────

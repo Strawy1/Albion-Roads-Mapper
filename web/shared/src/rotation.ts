@@ -68,12 +68,22 @@ export function inferRotationFromHandles(
 
     const diff = tActual - tDefault;
     const steps = Math.round(((diff % 4) + 4) % 4);
+    const error = Math.abs(((diff % 4) + 4) % 4 - steps);
+    const wrappedError = Math.min(error, 4 - error);
+    
+    if (wrappedError > 0.1) {
+      console.warn(`[RotationValidation] Handle "${def.id}" has too much error: ${wrappedError.toFixed(3)} (diff=${diff.toFixed(3)}, steps=${steps})`);
+      return null;
+    }
     rotationVotes.push(steps);
   }
 
   // All handles must agree on the same rotation step
   const allAgree = rotationVotes.every(v => v === rotationVotes[0]);
-  if (!allAgree) return null;
+  if (!allAgree) {
+    console.warn(`[RotationValidation] Handles disagree on rotation: ${rotationVotes.join(', ')}`);
+    return null;
+  }
 
   return rotationVotes[0];
 }

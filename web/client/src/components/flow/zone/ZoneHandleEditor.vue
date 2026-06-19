@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import type { CustomHandle } from 'shared';
-import { rotateClockwise, rotateCounterClockwise } from 'shared';
+import { rotateClockwise, rotateCounterClockwise, canonicalizeHandlesForRotation } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<{
@@ -139,18 +139,31 @@ function save() {
 
 
 function rotate(clockwise: boolean) {
-  rotationSteps.value = clockwise ? rotateClockwise(rotationSteps.value) : rotateCounterClockwise(rotationSteps.value);
+  const nextRotation = clockwise ? rotateClockwise(rotationSteps.value) : rotateCounterClockwise(rotationSteps.value);
+  rotationSteps.value = nextRotation;
   visualRotation.value += clockwise ? 90 : -90;
-  handles.value = handles.value.map(h => {
-    const x = parseFloat(h.left);
-    const y = parseFloat(h.top);
-    const t = getTFromPos(x, y);
-    const nextT = clockwise ? (t + 1) % 4 : (t + 3) % 4;
-    return {
-      ...h,
-      ...getPosFromT(nextT)
-    };
-  });
+
+  if (props.isToggleMode && props.mapShape) {
+    // Rebuild handles from scratch to fix any inconsistencies
+    handles.value = canonicalizeHandlesForRotation(
+      'roads',
+      props.mapShape,
+      handles.value,
+      nextRotation
+    );
+  } else {
+    // Legacy blind rotation for custom handles
+    handles.value = handles.value.map(h => {
+      const x = parseFloat(h.left);
+      const y = parseFloat(h.top);
+      const t = getTFromPos(x, y);
+      const nextT = clockwise ? (t + 1) % 4 : (t + 3) % 4;
+      return {
+        ...h,
+        ...getPosFromT(nextT)
+      };
+    });
+  }
 }
 
 function getHandleFacing(left: string, top: string): string {

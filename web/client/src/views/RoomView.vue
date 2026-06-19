@@ -47,14 +47,6 @@ watch(() => store.lastPing, (ping) => {
   }
 });
 
-watch(() => store.rotationErrors, (errors) => {
-  if (errors.length === 0) return;
-  for (const zoneId of errors) {
-    const name = ZONE_BY_ID.get(zoneId)?.name ?? zoneId;
-    showToast(`Zone rotation issue on ${name}, please click on the hourglass button and reset the zone.`, 'error', 0);
-  }
-}, { deep: true });
-
 provide('goToNode', goToNode);
 
 // ── Toast ────────────────────────────────────────────────────────────────────
