@@ -168,7 +168,7 @@ function startRoutePlot() {
             <!-- Chain Management -->
             <div v-if="slides[currentSlide].id === 'chains'" class="space-y-4">
               <p class="text-base text-gray-300 leading-relaxed">
-                Chains let you create <strong>multiple independent groups of zones</strong> within a single room — perfect for exploring outwards from Black Zones into Roads of Avalon. Each chain has its own source zone and updatable colour.
+                Chains let you create <strong>multiple independent groups of zones</strong> within a single room — perfect for exploring outwards from Outlands, Royal Continent or Brecillien into Roads of Avalon. Each chain has its own source zone and updatable colour.
               </p>
               <div class="flex flex-col gap-3">
                 <p class="text-base text-gray-300 leading-relaxed">
