@@ -6381,11 +6381,10 @@
     "mapName": "Setitos-Obobrom",
     "mapType": "roads",
     "tier": 6,
-    "isRoadsHideout": true,
-    "mapShape": "rest",
-    "socketCount": 4,
+    "mapShape": "s",
+    "socketCount": 8,
     "largeSocketCount": 2,
-    "smallSocketCount": 2,
+    "smallSocketCount": 6,
     "knownFeatures": []
   },
   {
@@ -6393,11 +6392,10 @@
     "mapName": "Setos-Aiaitum",
     "mapType": "roads",
     "tier": 6,
-    "isRoadsHideout": true,
-    "mapShape": "rest",
-    "socketCount": 4,
+    "mapShape": "s",
+    "socketCount": 8,
     "largeSocketCount": 2,
-    "smallSocketCount": 2,
+    "smallSocketCount": 6,
     "knownFeatures": [
       "logs",
       "ore"
