@@ -3,8 +3,11 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import RecentlyViewedRooms from '../components/RecentlyViewedRooms.vue';
+import V1dot2SplashModal from '../components/version-announcements/V1dot2SplashModal.vue';
 
 const router = useRouter();
+
+const splashModal = ref<InstanceType<typeof V1dot2SplashModal> | null>(null);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const currentTime = ref(0);
@@ -125,12 +128,35 @@ onMounted(() => {
 </style>
 
 <template>
-  <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4">
-     <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center px-4">
+  <div class="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start pt-4 relative overflow-x-hidden">
+    <div class="w-full flex justify-center px-4 mb-4">
+      <div class="w-full max-w-3xl bg-indigo-900/40 border border-indigo-500/50 rounded-lg p-3 flex flex-col md:flex-row items-center justify-between gap-3 shadow-lg backdrop-blur-sm">
+        <div class="flex items-center gap-3">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500 text-white animate-pulse">
+            ✨
+          </span>
+          <div>
+            <p class="font-bold text-indigo-100">Update v1.2 is here!</p>
+            <p class="text-xs text-indigo-200/80">Map Zone Chains, enhanced route plotting, room renaming and more!</p>
+          </div>
+        </div>
+        <button
+          @click="splashModal?.show()"
+          class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-md transition-all shadow-md active:scale-95"
+        >
+          See What's New
+        </button>
+      </div>
+    </div>
+
+    <div class="w-full max-w-md md:max-w-3xl flex flex-col gap-4 items-center px-4">
       <h1 class="text-4xl font-bold text-indigo-600 text-center">Albion Online Roads Mapper</h1>
       <RecentlyViewedRooms />
       <p class="text-white text-center">
         Collaborate with your guildmates in <b>real-time</b> to track Roads of Avalon portal zones and map content. Locate and track Cores and Treasure Chests with real time-timers, Map Resources (and sizes), Avalonian Chests, and easily find connections to the Royal Continent, Outlands portals and rest zones.
+      </p>
+      <p class="text-white text-center">
+        You are able to set your starting location from a Hideout Zone in the Roads, Royal Continent, Outlands of even Brecillen, and relocate it whenever you choose.
       </p>
       <p class="text-white text-center">
         All Rooms are secured with a password, which you can rotate at any time.
@@ -149,8 +175,9 @@ onMounted(() => {
            <a
           href="https://discord.gg/uFq2PJuZ3r"
           target="_blank"
-          class="px-4 py-1.5 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center duration-500"
+          class="px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center duration-500 flex items-center gap-2"
         >
+          <img src="/images/discord.png" alt="Discord" class="h-5 w-auto" />
           Discord
         </a>
         <a
@@ -221,8 +248,9 @@ onMounted(() => {
         class="w-full min-[1200px]:border-2 min-[1200px]:border-gray-500 min-[1200px]:rounded-lg"
       />
     </div>
-  </div>
-  <div class="fixed bottom-2 left-0 right-0 text-center pointer-events-none">
-    <CopyrightNotice />
+    <div class="w-full text-center pb-8 pointer-events-none">
+      <CopyrightNotice class="pointer-events-auto" />
+    </div>
+    <V1dot2SplashModal ref="splashModal" />
   </div>
 </template>

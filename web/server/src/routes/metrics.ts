@@ -139,10 +139,11 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const alltimePeak = parseInt(alltimeRows[0]?.alltime_peak ?? '0', 10);
     const alltimeAvg = parseFloat(alltimeRows[0]?.alltime_avg ?? '0');
 
-    const { rows: alltimeGlobalRows } = await app.db.query<{ tokens_issued: string }>(
-      'SELECT SUM(tokens_issued) AS tokens_issued FROM analytics_global_daily',
+    const { rows: alltimeGlobalRows } = await app.db.query<{ tokens_issued: string; room_data_updates: string }>(
+      'SELECT SUM(tokens_issued) AS tokens_issued, SUM(room_data_updates) AS room_data_updates FROM analytics_global_daily',
     );
     const totalTokensIssued = parseInt(alltimeGlobalRows[0]?.tokens_issued ?? '0', 10);
+    const totalRoomDataUpdates = parseInt(alltimeGlobalRows[0]?.room_data_updates ?? '0', 10);
 
     // --- All-time room cleanup stats ---
     const { rows: cleanupAlltimeRows } = await app.db.query<{
@@ -152,18 +153,8 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const totalRoomsAborted  = parseInt(cleanupAlltimeRows[0]?.rooms_aborted  ?? '0', 10);
     const totalRoomsAbandoned = parseInt(cleanupAlltimeRows[0]?.rooms_abandoned ?? '0', 10);
 
-    const { rows: alltimeRoomRows } = await app.db.query<{ room_id: string; tokens_issued: string }>(
-      'SELECT room_id, tokens_issued FROM analytics_room_alltime WHERE tokens_issued > 0',
-    );
-
-    // --- All-time data update stats from room daily analytics ---
-    const { rows: alltimeDataUpdatesRows } = await app.db.query<{ total: string }>(
-      'SELECT COALESCE(SUM(data_updates), 0) AS total FROM analytics_room_daily',
-    );
-    const alltimeDataUpdates = parseInt(alltimeDataUpdatesRows[0]?.total ?? '0', 10);
-
-    const { rows: alltimeRoomDataUpdatesRows } = await app.db.query<{ room_id: string; total: string }>(
-      'SELECT room_id, COALESCE(SUM(data_updates), 0) AS total FROM analytics_room_daily GROUP BY room_id',
+    const { rows: alltimeRoomRows } = await app.db.query<{ room_id: string; tokens_issued: string; data_updates: string }>(
+      'SELECT room_id, tokens_issued, data_updates FROM analytics_room_alltime WHERE tokens_issued > 0 OR data_updates > 0',
     );
 
     // --- Map History stats ---
@@ -190,6 +181,16 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
        WHERE rnm.zone_id != r.home_zone_id`
     );
     const totalHistoryEntries = parseInt(totalHistoryRows[0]?.total ?? '0', 10);
+
+    // --- Latest created rooms (top 10 by created_at) ---
+    const { rows: latestRoomRows } = await app.db.query<{ room_id: string; created_at: Date; created_at_london: string }>(
+      `SELECT id AS room_id,
+              created_at,
+              to_char(created_at AT TIME ZONE 'Europe/London', 'YYYY-MM-DD"T"HH24:MI:SS') AS created_at_london
+       FROM rooms
+       ORDER BY created_at DESC
+       LIMIT 10`,
+    );
 
     const lines: string[] = [];
 
@@ -222,6 +223,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
        GROUP BY rnp.room_id`,
     );
 
+    const { rows: zoneInRoomsRows } = await app.db.query<{ zone_id: string; room_count: string }>(
+      `SELECT rnp.zone_id, COUNT(DISTINCT rnp.room_id) AS room_count
+       FROM room_node_positions rnp
+       JOIN rooms r ON r.id = rnp.room_id
+       WHERE rnp.zone_id != r.home_zone_id
+       GROUP BY rnp.zone_id`,
+    );
+
     // --- Active rooms (DB-level room state) ---
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
     lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection (live now)', 'gauge', liveRooms));
@@ -229,8 +238,6 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_rooms_inactive', 'Number of rooms with no active WebSocket connections', 'gauge', inactiveRooms));
     lines.push(metric('albionmapper_rooms_empty', 'Number of rooms with no connections added', 'gauge', emptyRooms));
     lines.push(metric('albionmapper_rooms_expired', 'Number of rooms where all connections have expired', 'gauge', expiredRooms));
-    lines.push(metric('albionmapper_rooms_aborted_total', 'All-time total rooms auto-deleted for being created but never used', 'gauge', totalRoomsAborted));
-    lines.push(metric('albionmapper_rooms_abandoned_total', 'All-time total rooms auto-deleted for being abandoned after modification', 'gauge', totalRoomsAbandoned));
 
     // --- Zone counts ---
     lines.push(metric('albionmapper_zones_total', 'Total number of zones entered into the system (excluding home zones)', 'gauge', totalZones));
@@ -239,6 +246,12 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       .filter(s => s.value > 0);
     if (perRoomZoneSeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_zones_total', 'Total number of zones entered per room (excluding home zone)', 'gauge', perRoomZoneSeries));
+    }
+    const zoneInRoomsSeries = zoneInRoomsRows
+      .map(r => ({ labels: { zone_id: r.zone_id }, value: parseInt(r.room_count ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (zoneInRoomsSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_zone_in_rooms_total', 'Number of distinct rooms each zone currently appears in (excluding home zones)', 'gauge', zoneInRoomsSeries));
     }
 
     // --- Hourly connection stats ---
@@ -263,22 +276,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
 
     // --- Global cumulative stats ---
     lines.push(metric('albionmapper_tokens_issued_total', 'Total number of authenticated tokens issued since tracking began', 'gauge', totalTokensIssued));
-    lines.push(metric('albionmapper_alltime_data_updates_total', 'Lifetime total room data update events across all rooms', 'gauge', alltimeDataUpdates));
+    lines.push(metric('albionmapper_alltime_data_updates_total', 'Total number of room data update events across all rooms since tracking began', 'gauge', totalRoomDataUpdates));
 
     // Per-room cumulative stats
-    const roomDataUpdatesAlltimeSeries = alltimeRoomDataUpdatesRows
-      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.total ?? '0', 10) }))
+    const roomTokensIssuedSeries = alltimeRoomRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.tokens_issued ?? '0', 10) }))
       .filter(s => s.value > 0);
-    if (roomDataUpdatesAlltimeSeries.length > 0) {
-      lines.push(metricLabeled('albionmapper_room_data_updates_alltime', 'Lifetime total room data update events per room', 'gauge', roomDataUpdatesAlltimeSeries));
-    }
-
-    const roomTokensIssuedSeries = alltimeRoomRows.map(r => ({
-      labels: { room_id: r.room_id },
-      value: parseInt(r.tokens_issued ?? '0', 10),
-    }));
     if (roomTokensIssuedSeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_tokens_issued_total', 'Total number of authenticated tokens issued per room', 'gauge', roomTokensIssuedSeries));
+    }
+    const roomDataUpdatesAlltimeSeries = alltimeRoomRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.data_updates ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (roomDataUpdatesAlltimeSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_data_updates_alltime', 'Total number of room data update events per room since tracking began', 'gauge', roomDataUpdatesAlltimeSeries));
     }
 
     // Per-room daily stats for today
@@ -326,6 +337,10 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_daily_routes_plotted_total', 'Routes plotted today (Europe/London)', 'gauge', parseInt(daily?.routes_plotted ?? '0', 10)));
     lines.push(metric('albionmapper_daily_tokens_issued_total', 'Tokens issued today (Europe/London)', 'gauge', parseInt(daily?.tokens_issued ?? '0', 10)));
 
+    // --- All-time room cleanup stats ---
+    lines.push(metric('albionmapper_rooms_aborted_total', 'All-time total rooms auto-deleted for being created but never used', 'gauge', totalRoomsAborted));
+    lines.push(metric('albionmapper_rooms_abandoned_total', 'All-time total rooms auto-deleted for being abandoned after modification', 'gauge', totalRoomsAbandoned));
+
     // --- Map History stats ---
     lines.push(metric('albionmapper_history_entries_total', 'Total number of unique room-map history entries (excluding home zones)', 'gauge', totalHistoryEntries));
 
@@ -341,6 +356,15 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       .filter(s => s.value > 0);
     if (roomHistorySeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history (excluding home zone)', 'gauge', roomHistorySeries));
+    }
+
+    // --- Latest created rooms (top 10) ---
+    const latestRoomSeries = latestRoomRows.map(r => ({
+      labels: { room_id: r.room_id, created_at: r.created_at_london },
+      value: Math.floor(new Date(r.created_at).getTime() / 1000),
+    }));
+    if (latestRoomSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_latest_rooms_created', 'Latest 10 rooms created, with creation time in Europe/London as a label and value as unix epoch seconds', 'gauge', latestRoomSeries));
     }
 
     return reply

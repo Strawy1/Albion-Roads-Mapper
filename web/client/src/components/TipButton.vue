@@ -2,7 +2,6 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 // @ts-ignore
 import VueKofi from 'vue-kofi';
-import { Z_INDEX } from '@/constants/Layers';
 
 const isJiggling = ref(false);
 const kofiColor = ref('#4338ca');
@@ -34,8 +33,8 @@ function handleKoFiClick() {
 
 <template>
   <div
-    class="tip-button fixed left-2 md:left-4 bottom-16 md:bottom-[4.5rem] cursor-pointer"
-    :class="[Z_INDEX.UI_OVERLAY, { 'jiggle': isJiggling }]"
+    class="tip-button cursor-pointer"
+    :class="{ 'jiggle': isJiggling }"
     @click="handleKoFiClick"
   >
     <VueKofi 
@@ -72,18 +71,4 @@ function handleKoFiClick() {
   transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out !important;
 }
 
-/* Landscape phone: keep tip button bottom-left */
-@media (max-height: 500px) {
-  .tip-button {
-    left: 1rem;
-    right: auto;
-  }
-}
-
-/* Small phones: push button up to bottom-18 */
-@media (max-width: 560px) {
-  .tip-button {
-    bottom: 5.5rem;
-  }
-}
 </style>

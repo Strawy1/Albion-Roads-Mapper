@@ -11,10 +11,11 @@ import ZoneNode from '../components/flow/ZoneNode.vue';
 import NonRoadsNode from '../components/flow/NonRoadsNode.vue';
 import ConnectionEdge from '../components/flow/ConnectionEdge.vue';
 import ConnectionLine from '../components/flow/ConnectionLine.vue';
-import TipButton from '../components/TipButton.vue';
+import BottomLeftToolbar from '../components/room/BottomLeftToolbar.vue';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import MegaToast from '../components/common/MegaToast.vue';
 import ConfirmationModal from '../components/common/ConfirmationModal.vue';
+import ChainManager from '../components/ChainManager.vue';
 import TitleSegment from '../components/room/TitleSegment.vue';
 import TopToolbar from '../components/room/TopToolbar.vue';
 import RouteBottleneckPill from '../components/room/RouteBottleneckPill.vue';
@@ -28,10 +29,11 @@ import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
-import { formatTime, formatExpiresIn } from '@/utils/formatters';
+import { formatExpiresIn } from '@/utils/formatters';
 import { addConnection, deleteConnection, updateConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
-import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateCycle, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
+import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
+import V1dot2SplashModal from "@/components/version-announcements/V1dot2SplashModal.vue";
 
 const props = defineProps<{ id: string }>();
 const store = useRoomStore();
@@ -45,14 +47,6 @@ watch(() => store.lastPing, (ping) => {
   }
 });
 
-watch(() => store.rotationErrors, (errors) => {
-  if (errors.length === 0) return;
-  for (const zoneId of errors) {
-    const name = ZONE_BY_ID.get(zoneId)?.name ?? zoneId;
-    showToast(`Zone rotation issue on ${name}, please click on the hourglass button and reset the zone.`, 'error', 0);
-  }
-}, { deep: true });
-
 provide('goToNode', goToNode);
 
 // ── Toast ────────────────────────────────────────────────────────────────────
@@ -65,6 +59,10 @@ const confirmationModalText = ref("");
 const pendingConnection = ref<any>(null);
 const showOccupiedModal = ref(false);
 const pendingOccupiedConnection = ref<{ params: any; occupiedConn: any } | null>(null);
+const showAddChainModal = ref(false);
+watch(() => store.chainManagementOpen, (v) => {
+  if (v) { showAddChainModal.value = true; store.chainManagementOpen = false; }
+});
 
 function isRoads(zoneId: string): boolean {
   const zone = ZONE_BY_ID.get(zoneId);
@@ -90,6 +88,25 @@ interface PingToast {
 const pingToasts = ref<PingToast[]>([]);
 let pingToastCounter = 0;
 const initialUpdateCount = ref(0);
+const lastUpdateFlash = ref(false);
+let flashTimeout: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => lastUpdate.value?.getTime(),
+  async () => {
+    if (initialUpdateCount.value < 2) {
+      initialUpdateCount.value++;
+      return;
+    }
+    lastUpdateFlash.value = false;
+    if (flashTimeout) clearTimeout(flashTimeout);
+    await nextTick();
+    flashTimeout = setTimeout(() => {
+      lastUpdateFlash.value = true;
+      flashTimeout = setTimeout(() => (lastUpdateFlash.value = false), 2000);
+    }, 50);
+  }
+);
 
 
 onMounted(() => {
@@ -328,21 +345,19 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
         }
     });
 
-    // If new nodes were added, update the store.
-    const hasNewPositions = positions.some(p => !nodePositions.value.find(np => np.zoneId === p.zoneId));
-    if (hasNewPositions) {
-        const updatedPositions = positions.map(p => ({ 
-            zoneId: p.zoneId, 
-            x: p.x, 
-            y: p.y, 
-            features: p.features,
-            customHandles: p.customHandles,
-            virtualGridPos: p.virtualGridPos,
-            proximityTo: p.proximityTo || ZONE_BY_ID.get(p.zoneId)?.proximityTo,
-            explored: p.explored ?? false
-        }));
-        store.updateNodePositionsInStore(updatedPositions);
-    }
+    // NOTE: previously, this watcher detected zones referenced by connections
+    // (or the home zone) that were missing from `nodePositions` and auto-sent
+    // a full snapshot back to the server via `updateNodePositionsInStore`.
+    // That had two bad side-effects when a new chain was added:
+    //   1. it caused the client to emit an `update_node_positions` message
+    //      with a (0,0) entry for the newly created chain's source zone,
+    //   2. the server's handler does DELETE+reinsert for the room and then
+    //      re-broadcasts a `node_positions_updated` to everyone — so all
+    //      clients saw the freshly added node "pull" other nodes around as
+    //      the snapshot raced with the server's own broadcast.
+    // The server is now the sole authority for adding new node positions, so
+    // we no longer auto-persist anything from this watcher. The local
+    // `positions` array is still used for rendering only.
     
     // 2. Map to VueFlow nodes
     const newNodes = positions.map((pos: NodePosition) => {
@@ -356,7 +371,8 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
         position: { x: pos.x, y: pos.y },
         draggable: true,
         data: {
-          isHome: pos.zoneId === homeZoneId.value,
+          isChainSource: store.chainSourceZoneIds.has(pos.zoneId),
+          chainId: pos.chainId,
           tier: zone?.tier ?? 0,
           zoneName: zone?.name ?? pos.zoneId,
           type: zone?.type ?? 'other',
@@ -407,8 +423,8 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
       });
     }
 
-    // Remove nodes that are no longer present
-    flowNodes.value = flowNodes.value.filter(n => newNodes.find(nn => nn.id === n.id));
+    // Remove nodes that are no longer present (but keep transient ghosts)
+    flowNodes.value = flowNodes.value.filter(n => n.data?.isGhost || newNodes.find(nn => nn.id === n.id));
 
     // 3. Map to VueFlow edges
     flowEdges.value = connections.value.map((conn: Connection) => {
@@ -427,6 +443,10 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
           connection: { ...conn },
           now: now.value,
           isPlotted: plotRouteStore.plottedConnectionIds.has(conn.id),
+          isReversedPlotted: plotRouteStore.reversedConnectionIds.has(conn.id),
+          isGhostRoute: plotRouteStore.ghostConnectionIds.has(conn.id),
+          isGhostRouteReversed: plotRouteStore.ghostReversedConnectionIds.has(conn.id),
+          isGreyedByChain: plotRouteStore.isSelectingTo && (() => { const srcChain = nodePositions.value.find(n => n.zoneId === conn.fromZoneId)?.chainId ?? null; return srcChain !== plotRouteStore.chainId; })(),
           onDelete: async (id: string) => {
             try {
               await deleteConnection(props.id, store.token!, id);
@@ -477,7 +497,7 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
           onUpdateSlots: (connId: string, slots: 7 | 20) => {
             const targetNodePos = store.nodePositions.find(n => n.zoneId === conn.toZoneId);
             if (targetNodePos) {
-              store.updateNodeFeatures(conn.toZoneId, { ...(targetNodePos.features || {}), slots });
+              store.updateNodeFeatures(conn.toZoneId, { ...(targetNodePos.features || {}), slots }, false);
             }
           },
           hasChildren: conn.toZoneId !== homeZoneId.value && connections.value.some(c => c.fromZoneId === conn.toZoneId),
@@ -531,18 +551,26 @@ watch(now, () => {
   });
 });
 
-// Update isPlotted on edges when the route changes
-watch(() => plotRouteStore.plottedConnectionIds, () => {
+// Update isPlotted/ghost on edges when the route or ghost preview changes
+watch(() => [plotRouteStore.plottedConnectionIds, plotRouteStore.ghostConnectionIds, plotRouteStore.reversedConnectionIds, plotRouteStore.ghostReversedConnectionIds, plotRouteStore.isSelectingTo, plotRouteStore.chainId], () => {
   flowEdges.value.forEach((edge) => {
     edge.data.isPlotted = plotRouteStore.plottedConnectionIds.has(edge.id);
+    edge.data.isReversedPlotted = plotRouteStore.reversedConnectionIds.has(edge.id);
+    edge.data.isGhostRoute = plotRouteStore.ghostConnectionIds.has(edge.id);
+    edge.data.isGhostRouteReversed = plotRouteStore.ghostReversedConnectionIds.has(edge.id);
+    const edgeConn = store.connections.find(c => c.id === edge.id);
+    edge.data.isGreyedByChain = plotRouteStore.isSelectingTo && edgeConn ? (() => { const srcChain = nodePositions.value.find(n => n.zoneId === edgeConn.fromZoneId)?.chainId ?? null; return srcChain !== plotRouteStore.chainId; })() : false;
   });
 }, { deep: true });
 
 // Show toast when a route is plotted (either locally or from server)
-watch(() => plotRouteStore.destinationZoneId, (newId) => {
-  if (newId) {
-    const destNode = flowNodes.value.find((n: any) => n.id === newId);
-    routePlottedToast.value = destNode?.data?.zoneName || newId;
+watch(() => plotRouteStore.toZoneId, (newId) => {
+  if (newId && plotRouteStore.hasRoute) {
+    const fromNode = flowNodes.value.find((n: any) => n.id === plotRouteStore.fromZoneId);
+    const toNode = flowNodes.value.find((n: any) => n.id === newId);
+    const fromName = fromNode?.data?.zoneName || plotRouteStore.fromZoneId || '';
+    const toName = toNode?.data?.zoneName || newId;
+    routePlottedToast.value = `${fromName} → ${toName}`;
     if (routePlottedToastTimeout) clearTimeout(routePlottedToastTimeout);
     routePlottedToastTimeout = setTimeout(() => (routePlottedToast.value = ''), 5000);
   } else {
@@ -563,14 +591,129 @@ function handleKeyDown(e: KeyboardEvent) {
   if (e.key === 'Escape' && plotRouteStore.isPlotRouteMode) {
     plotRouteStore.exitPlotRouteMode();
   }
+  if (e.key === 'Escape' && store.pendingChainSourceZoneId) {
+    store.cancelPlacingChain();
+  }
 }
+
+// ── New-chain ghost-on-cursor placement ──────────────────────────────────────
+// Roads nodes are 400x400, non-roads nodes are 250x250 — anchor ghost so the cursor is dead-center.
+const CHAIN_GHOST_ROADS_HALF = 200;
+const CHAIN_GHOST_NON_ROADS_HALF = 125;
+const CHAIN_GHOST_ID = '__chain-placement-ghost__';
+let chainGhostNode: any = null;
+
+function makeChainGhostNode(zoneId: string, pos: { x: number; y: number }) {
+  const zone = ZONE_BY_ID.get(zoneId);
+  const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  const half = isRoads ? CHAIN_GHOST_ROADS_HALF : CHAIN_GHOST_NON_ROADS_HALF;
+  return {
+    id: CHAIN_GHOST_ID,
+    type: isRoads ? 'zone' : 'non-roads',
+    position: { x: pos.x - half, y: pos.y - half },
+    selectable: false,
+    draggable: false,
+    data: {
+      isGhost: true,
+      isChainSource: true,
+      zoneName: zone?.name ?? zoneId,
+      type: zone?.type ?? 'roadsHideout',
+      tier: zone?.tier ?? 0,
+      features: {},
+    },
+  };
+}
+
+function removeChainGhost() {
+  if (chainGhostNode) {
+    flowNodes.value = flowNodes.value.filter(n => n.id !== CHAIN_GHOST_ID);
+    chainGhostNode = null;
+  }
+}
+
+function onPendingChainMouseMove(e: MouseEvent) {
+  const zoneId = store.pendingChainSourceZoneId;
+  if (!zoneId) return;
+  const flow = screenToFlowCoordinate({ x: e.clientX, y: e.clientY });
+  const zone = ZONE_BY_ID.get(zoneId);
+  const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  const half = isRoads ? CHAIN_GHOST_ROADS_HALF : CHAIN_GHOST_NON_ROADS_HALF;
+  const nextPos = { x: flow.x - half, y: flow.y - half };
+  if (!chainGhostNode) {
+    chainGhostNode = makeChainGhostNode(zoneId, flow);
+    flowNodes.value.push(chainGhostNode);
+  } else {
+    // Mutate in place + call VueFlow's updateNode so the diamond/zone visually
+    // moves with the cursor (same pattern the position-sync watcher uses).
+    const existing = flowNodes.value.find(n => n.id === CHAIN_GHOST_ID);
+    if (existing) {
+      existing.position = nextPos;
+      updateNode(CHAIN_GHOST_ID, { position: nextPos });
+    }
+  }
+}
+
+async function onPendingChainClick(e: MouseEvent) {
+  const zoneId = store.pendingChainSourceZoneId;
+  if (!zoneId) return;
+  // Right-click / middle-click → cancel.
+  if (e.button !== 0) {
+    store.cancelPlacingChain();
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  const flow = screenToFlowCoordinate({ x: e.clientX, y: e.clientY });
+  // Persist the node so its center sits on the click.
+  const zone = ZONE_BY_ID.get(zoneId);
+  const isRoads = zone?.type === 'roads' || zone?.type === 'roadsHideout';
+  const half = isRoads ? CHAIN_GHOST_ROADS_HALF : CHAIN_GHOST_NON_ROADS_HALF;
+  const placedX = flow.x - half;
+  const placedY = flow.y - half;
+  // Clear pending immediately so the ghost vanishes; on error we re-show a toast.
+  store.cancelPlacingChain();
+  try {
+    await store.addChain(zoneId, { x: placedX, y: placedY });
+  } catch (err: any) {
+    showToast(err?.message ?? 'Failed to add chain', 'error');
+  }
+}
+
+function onPendingChainContextMenu(e: MouseEvent) {
+  if (!store.pendingChainSourceZoneId) return;
+  e.preventDefault();
+  store.cancelPlacingChain();
+}
+
+watch(() => store.pendingChainSourceZoneId, (id) => {
+  if (id) {
+    window.addEventListener('mousemove', onPendingChainMouseMove);
+  } else {
+    window.removeEventListener('mousemove', onPendingChainMouseMove);
+    removeChainGhost();
+  }
+});
 const showMobileSummary = ref(false);
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 function onNodeClick(event: any) {
-  if (plotRouteStore.isPlotRouteMode && !event.node.data.isHome && !event.node.data.isGhost) {
-    plotRouteStore.selectDestination(store.homeZoneId, event.node.id, store.connections);
+  if (plotRouteStore.isPlotRouteMode && !event.node.data.isGhost) {
+    const nodeChainId = nodePositions.value.find((n: any) => n.zoneId === event.node.id)?.chainId ?? null;
+    plotRouteStore.selectZone(event.node.id, nodeChainId, store.connections);
   }
+}
+
+function onNodeMouseEnter(event: any) {
+  if (!plotRouteStore.isSelectingTo || event.node.data.isGhost) return;
+  const nodeChainId = nodePositions.value.find((n: any) => n.zoneId === event.node.id)?.chainId ?? null;
+  // Only show ghost preview for zones in the same chain
+  if (nodeChainId !== plotRouteStore.chainId) return;
+  plotRouteStore.updateGhostPreview(event.node.id, store.connections);
+}
+
+function onNodeMouseLeave(_event: any) {
+  if (!plotRouteStore.isSelectingTo) return;
+  plotRouteStore.updateGhostPreview(null, store.connections);
 }
 
 function onNodeDragStop() {
@@ -768,6 +911,14 @@ async function handleConnect(params: any) {
     return;
   }
 
+  // Block cross-chain connections
+  const srcPos = store.nodePositions.find(np => np.zoneId === params.source);
+  const tgtPos = store.nodePositions.find(np => np.zoneId === params.target);
+  if (srcPos?.chainId && tgtPos?.chainId && srcPos.chainId !== tgtPos.chainId) {
+    showToast('You cannot connect zones from different chains.', 'error');
+    return;
+  }
+
   // Block connections using disabled handles
   const srcNode = getNode.value(params.source);
   const tgtNode = getNode.value(params.target);
@@ -815,6 +966,24 @@ async function handleConnect(params: any) {
     }
   }
 
+  // If a connection already exists between these two zones in the opposite direction,
+  // normalize the new connection's direction to match the existing one so we don't
+  // create a reverse-direction duplicate (which the server rejects as a cycle).
+  const existingAnyDirection = store.connections.find(c =>
+    !c.isExpired &&
+    ((c.fromZoneId === params.source && c.toZoneId === params.target) ||
+     (c.fromZoneId === params.target && c.toZoneId === params.source))
+  );
+  if (existingAnyDirection && existingAnyDirection.fromZoneId === params.target) {
+    // Swap source/target so directionality matches the existing connection
+    const tmp = params.source;
+    params.source = params.target;
+    params.target = tmp;
+    const tmpHandle = params.sourceHandle;
+    params.sourceHandle = params.targetHandle;
+    params.targetHandle = tmpHandle;
+  }
+
   // Check for existing connection between these two zones (to update it)
   const existing = store.connections.find(c =>
     !c.isExpired &&
@@ -857,6 +1026,9 @@ async function handleConnect(params: any) {
 
       const isReplacingCenter = existingRoadsHandle === 'center' || newRoadsHandle === 'center';
       const isMovingOtherEnd = existingRoadsHandle === newRoadsHandle;
+      // Reassigning the roads-side portal while keeping the non-roads handle pinned
+      // is just a handle reassignment, not a new portal link.
+      const isReassigningRoadsHandle = existingNonRoadsHandle === newNonRoadsHandle;
 
       if (!isReplacingCenter && !isMovingOtherEnd) {
         const isLoop = wouldCreateLongerLoop(store.connections, params.source, params.target);
@@ -921,11 +1093,6 @@ async function handleConnect(params: any) {
     return;
   }
 
-  if (wouldCreateCycle(store.connections, params.source, params.target)) {
-    showToast("This connection would create a cycle.", "error");
-    return;
-  }
-
   const isLoop = wouldCreateLongerLoop(store.connections, params.source, params.target);
 
   const sourceNode = getNode.value(params.source);
@@ -975,12 +1142,14 @@ async function handleConfirmOccupied() {
     }
   }
 
-  // Compute secondsRemaining from the occupied connection's expiresAt
-  const secondsRemaining = Math.max(1, Math.round((new Date(occupiedConn.expiresAt).getTime() - Date.now()) / 1000));
+  const isPermanentConn = !isRoads(params.source) && !isRoads(params.target);
 
-  // Get slots from the target node's features, defaulting to 7
+  // Compute secondsRemaining from the occupied connection's expiresAt (for non-permanent connections)
+  const secondsRemaining = isPermanentConn ? null : Math.max(1, Math.round((new Date(occupiedConn.expiresAt).getTime() - Date.now()) / 1000));
+
+  // Get slots from the target node's features, defaulting to 7 (for non-permanent connections)
   const targetNodePos = store.nodePositions.find(np => np.zoneId === params.target);
-  const slots: 7 | 20 = (targetNodePos?.features?.slots === 20 ? 20 : 7);
+  const slots: 7 | 20 | null = isPermanentConn ? null : (targetNodePos?.features?.slots === 20 ? 20 : 7);
 
   try {
     await addConnection(
@@ -992,6 +1161,9 @@ async function handleConfirmOccupied() {
       slots,
       params.sourceHandle || 'center',
       params.targetHandle || 'center',
+      undefined,
+      undefined,
+      isPermanentConn,
     );
   } catch (err: any) {
     showToast(err.message || 'Failed to add connection.', 'error');
@@ -1195,7 +1367,7 @@ function handleConnectEnd(event?: MouseEvent) {
          isGhost: true,
          features: {},
          tier: 0,
-         isHome: false,
+         isChainSource: false,
        },
        selectable: false,
        draggable: false,
@@ -1237,13 +1409,15 @@ function isHandleOccupied(nodeId: string, handleId: string | null) {
   );
 }
 
-defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirmationModal, confirmationModalText, toast, toastType, reportForm });
+defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirmationModal, confirmationModalText, toast, toastType, reportForm, lastUpdateFlash });
 </script>
 
 <template>
   <div class="h-dvh relative bg-gray-950 text-white">
     <TitleSegment :room-title="roomTitle" :class="Z_INDEX.UI_OVERLAY" @logout="exitRoom" @fit-view="fitView({ padding: 0.2, duration: 300 })" />
-    <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" />
+    <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" @add-chain="showAddChainModal = true" />
+    <ChainManager v-model="showAddChainModal" />
+    <V1dot2SplashModal />
 
     <ReportForm
       ref="reportForm"
@@ -1274,6 +1448,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         @connect-start="handleConnectStart"
         @connect-end="handleConnectEnd"
         @node-click="onNodeClick"
+        @node-mouse-enter="onNodeMouseEnter"
+        @node-mouse-leave="onNodeMouseLeave"
       >
         <template #connection-line="connectionLineProps">
           <ConnectionLine v-bind="connectionLineProps" :is-occupied="isHandleOccupied(connectionLineProps.sourceNode.id, connectionLineProps.sourceHandle?.id ?? null)" />
@@ -1281,6 +1457,17 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         <Background />
         <Controls />
       </VueFlow>
+
+      <!-- New-chain ghost placement: transparent click-catcher above VueFlow.
+           The actual ghost is a real VueFlow node pushed into flowNodes so it
+           lives in flow coordinate space (zooms/pans correctly). -->
+      <div
+        v-if="store.pendingChainSourceZoneId"
+        class="absolute inset-0 cursor-crosshair"
+        :class="Z_INDEX.OVERLAY"
+        @click="onPendingChainClick"
+        @contextmenu="onPendingChainContextMenu"
+      ></div>
 
       <!-- Ping Toasts -->
       <div class="absolute top-20 md:top-24 left-1/2 -translate-x-1/2 pointer-events-none w-full max-w-[95vw] flex flex-col items-center gap-2 px-4" :class="Z_INDEX.TOAST">
@@ -1325,7 +1512,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
       <div class="absolute top-20 md:top-24 left-1/2 -translate-x-1/2 pointer-events-none w-full max-w-[95vw] flex flex-col items-center gap-2 px-4" :class="Z_INDEX.TOAST">
         <Transition name="ping-toast">
           <MegaToast
-            v-if="plotRouteStore.isPlotRouteMode"
+            v-if="plotRouteStore.isSelectingFrom"
             :visible="true"
             :fading-out="false"
             :fill-duration="9999"
@@ -1333,7 +1520,19 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
             fill-color="rgba(59, 130, 246, 0.15)"
             bg-class="bg-blue-900/40"
             border-class="border-blue-400"
-          >🗺️ Click on a zone to plot a route</MegaToast>
+          >🗺️ Click on a zone to set the route <b>start</b></MegaToast>
+        </Transition>
+        <Transition name="ping-toast">
+          <MegaToast
+            v-if="plotRouteStore.isSelectingTo"
+            :visible="true"
+            :fading-out="false"
+            :fill-duration="9999"
+            :enable-internal-animation="false"
+            fill-color="rgba(59, 130, 246, 0.15)"
+            bg-class="bg-blue-900/40"
+            border-class="border-blue-400"
+          >🗺️ Now click on a zone in the same chain to set the route <b>end</b></MegaToast>
         </Transition>
         <Transition name="ping-toast">
           <MegaToast
@@ -1344,7 +1543,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
             fill-color="rgba(59, 130, 246, 0.35)"
             bg-class="bg-blue-600/30 backdrop-blur-md"
             border-class="border-blue-300"
-          >✅ Route plotted to {{ routePlottedToast }}</MegaToast>
+          >✅ Route plotted: {{ routePlottedToast }}</MegaToast>
         </Transition>
       </div>
 
@@ -1410,8 +1609,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         </button>
       </div>
     </Transition>
-    <!-- Ko-fi button -->
-    <TipButton />
+    <!-- Bottom-left toolbar (Ko-fi + Discord) -->
+    <BottomLeftToolbar />
     
     <ConfirmationModal
       v-model="showConfirmationModal"

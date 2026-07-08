@@ -15,6 +15,7 @@ export const Z_INDEX = {
   HANDLE: 'z-[98]',
   RESTRICTED_NODE: 'z-[100]',
   EDITOR_TRAY: 'z-[100]',
+  CHAIN_ID_PILL: 'z-[101]',
   TUTORIAL_EXIT: 'z-[1000]',
   DEBUG_SHAPE: 'z-[1100]',
   HANDLE_OVERLAY: 'z-[2000]',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { inject, type Ref, ref } from 'vue';
 import IconUnlocked from '../../icons/IconUnlocked.vue';
+import ChainIdPill from '../../common/ChainIdPill.vue';
 
 interface ActiveCore {
   zoneId: string;
@@ -55,6 +56,7 @@ const config = {
         >
           {{ core.zoneName }}
         </span>
+        <ChainIdPill :zone-id="core.zoneId" small />
       </div>
       <span 
         class="rounded shrink-0 flex items-center justify-center transition-colors"

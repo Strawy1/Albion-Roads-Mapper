@@ -109,7 +109,7 @@ describe('ZoneNode Features and Styling', () => {
           type: 'zone',
           data: {
             type: 'roads',
-            isHome: true,
+            isChainSource: true,
             tier: 5,
             zoneName: 'Zone A',
             customHandles: [{ id: 'e', left: '100%', top: '50%' }],
@@ -177,7 +177,7 @@ describe('ZoneNode Features and Styling', () => {
           type: 'zone',
           data: {
             type: 'roads',
-            isHome: false,
+            isChainSource: false,
             tier: 5,
             zoneName: 'Zone A',
             customHandles: [{ id: 'e', left: '100%', top: '50%' }],
@@ -214,7 +214,6 @@ describe('ZoneNode Features and Styling', () => {
       const wrapper = mountNode('roads', true)
       const nodeDiv = wrapper.find('.min-w-\\[400px\\]')
       expect(nodeDiv.classes()).not.toContain('border-[3px]')
-      expect(nodeDiv.classes()).toContain('home-glow')
     })
 
     it('does not apply 3px border for home zones', () => {

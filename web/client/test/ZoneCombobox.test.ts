@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
-import { useRoomStore } from '../src/stores/useRoomStore.js';
+import { useRoomStore } from '@/stores/useRoomStore.js';
 import { ZONES } from 'shared';
-import ZoneCombobox from '../src/components/ZoneCombobox.vue';
+import ZoneCombobox from '@/components/ZoneCombobox.vue';
 
 // We test the filtering logic by inspecting the component's internal computed
 // rather than fighting reka-ui's portal teleportation in jsdom.
@@ -252,6 +252,92 @@ describe('ZoneCombobox Tab key accepts single result', () => {
     wrapper.vm.triggerTabKeydown();
 
     expect(wrapper.emitted('update:modelValue')).toBeFalsy();
+    wrapper.unmount();
+  });
+});
+
+describe('ZoneCombobox chain manager disabled zones', () => {
+  it('source zone IDs passed as disabledIds are not selectable', () => {
+    setActivePinia(createPinia());
+    // 'adrens-hill' is a real zone; simulate it being a chain source zone
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '', disabledIds: ['adrens-hill'], showAlreadyAdded: false },
+      global: { plugins: [createPinia()] },
+    });
+
+    wrapper.vm.setTestQuery('Adrens Hill');
+    const filtered: any[] = wrapper.vm.getTestFilteredZones();
+    const zone = filtered.find((z: any) => z.id === 'adrens-hill');
+    expect(zone).toBeTruthy();
+
+    // Attempting to select it should not emit
+    wrapper.vm.triggerTabKeydown();
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy();
+
+    wrapper.unmount();
+  });
+
+  it('chain member zone IDs passed as disabledIds are not selectable', () => {
+    setActivePinia(createPinia());
+    // 'anklesnag-mire' is a real zone; simulate it being a member of a chain
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '', disabledIds: ['anklesnag-mire'], showAlreadyAdded: false },
+      global: { plugins: [createPinia()] },
+    });
+
+    wrapper.vm.setTestQuery('Anklesnag Mire');
+    const filtered: any[] = wrapper.vm.getTestFilteredZones();
+    const zone = filtered.find((z: any) => z.id === 'anklesnag-mire');
+    expect(zone).toBeTruthy();
+
+    wrapper.vm.triggerTabKeydown();
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy();
+
+    wrapper.unmount();
+  });
+
+  it('zones not in disabledIds remain selectable', () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '', disabledIds: ['adrens-hill'], showAlreadyAdded: false },
+      global: { plugins: [createPinia()] },
+    });
+
+    wrapper.vm.setTestQuery('Saddle Tor');
+    const filtered: any[] = wrapper.vm.getTestFilteredZones();
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].id).toBe('saddle-tor');
+
+    wrapper.vm.triggerTabKeydown();
+    const emitted = wrapper.emitted('update:modelValue');
+    expect(emitted).toBeTruthy();
+    expect(emitted![0][0]).toBe('saddle-tor');
+
+    wrapper.unmount();
+  });
+
+  it('disabled zones do not appear without a query', () => {
+    setActivePinia(createPinia());
+    const store = useRoomStore();
+    // Put 'adrens-hill' in connections so it would normally appear
+    store.connections = [{
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      roomId: 'room1',
+      fromZoneId: 'adrens-hill',
+      toZoneId: 'brecillien',
+      expiresAt: new Date().toISOString(),
+      reportedAt: new Date().toISOString(),
+    }];
+
+    const wrapper = mount(ZoneCombobox, {
+      props: { modelValue: '', disabledIds: ['adrens-hill'], showAlreadyAdded: false },
+      global: { plugins: [createPinia()] },
+    });
+
+    // No query — disabled zones should not appear
+    const filtered: any[] = wrapper.vm.getTestFilteredZones();
+    expect(filtered.find((z: any) => z.id === 'adrens-hill')).toBeUndefined();
+
     wrapper.unmount();
   });
 });

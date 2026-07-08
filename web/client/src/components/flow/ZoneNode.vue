@@ -14,9 +14,11 @@ import ZoneChestButton from './zone/ZoneChestButton.vue';
 import ZoneChestModal from './zone/ZoneChestModal.vue';
 import ZoneHandleEditor from './zone/ZoneHandleEditor.vue';
 import ZoneHandleEditorButton from './zone/ZoneHandleEditorButton.vue';
+import ZoneNodeHandles from './ZoneNodeHandles.vue';
 import PingButton from './zone/PingButton.vue';
 import RoomMemoryButton from './zone/RoomMemoryButton.vue';
 import BluePrompt from '@/components/ui/BluePrompt.vue';
+import ChainIdPill from '@/components/common/ChainIdPill.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
@@ -27,7 +29,7 @@ import { onClickOutside, useRafFn } from '@vueuse/core';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<NodeProps<{ 
-  isHome: boolean; 
+  isChainSource: boolean; 
   tier: number; 
   zoneName: string; 
   type: string; 
@@ -45,7 +47,7 @@ const props = defineProps<NodeProps<{
 const store = useRoomStore();
 const memoryStore = useRoomMemoryStore();
 const plotRouteStore = usePlotRouteStore();
-const { connections, homeZoneId, isConnecting } = storeToRefs(store);
+const { connections, homeZoneId, isConnecting, nodePositions, connectingSourceNodeId } = storeToRefs(store);
 const memoryEntry = computed(() => memoryStore.getEntry(props.id));
 const featuresRequireUpdate = computed(() => {
   const entry = memoryEntry.value;
@@ -75,15 +77,27 @@ const featuresRequireUpdate = computed(() => {
 const { updateNodeData, findNode, viewport, viewportRef } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
 
+
 const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
 const isExpired = computed(() => store.isNodeExpired(props.id, now.value));
 const isRestricted = computed(() => isIsolated.value || isExpired.value);
-const isUnexplored = computed(() => !props.data.isHome && !props.data.isGhost && !props.data.explored);
+const isUnexplored = computed(() => !props.data.isChainSource && !props.data.isGhost && !props.data.explored);
 
 const isRoadsHideout = computed(() => props.data.type === 'roadsHideout');
 const isHovered = ref(false);
-const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isHome && !props.data.isGhost && isHovered.value);
-const isRouteDestination = computed(() => plotRouteStore.destinationZoneId === props.id && plotRouteStore.hasRoute);
+const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isGhost && isHovered.value);
+const isRouteFromZone = computed(() => plotRouteStore.fromZoneId === props.id && plotRouteStore.hasRoute);
+const isRouteToZone = computed(() => plotRouteStore.toZoneId === props.id && plotRouteStore.hasRoute);
+const isRouteDestination = computed(() => isRouteFromZone.value || isRouteToZone.value);
+// During selectingTo: the chosen start zone should glow blue even before the route is committed
+const isSelectingFromZone = computed(() => plotRouteStore.isSelectingTo && plotRouteStore.fromZoneId === props.id);
+// During selectingTo: zones not in the selected chain should be dimmed
+const thisNodeChainId = computed(() => nodePositions.value.find(n => n.zoneId === props.id)?.chainId ?? null);
+const isGreyedByChain = computed(() =>
+  plotRouteStore.isSelectingTo &&
+  !props.data.isGhost &&
+  thisNodeChainId.value !== plotRouteStore.chainId
+);
 const hasCustomHandles = computed(() => (props.data.customHandles?.length ?? 0) > 0);
 const needsCustomHandles = computed(() => isRoadsHideout.value && !hasCustomHandles.value);
 
@@ -230,13 +244,17 @@ const handles = computed(() => {
     h.push({ id: 'center', left: '50%', top: '50%', position: Position.Right });
   }
 
+  // Hide this node's own center handle while dragging a connection from it,
+  // so the source zone doesn't show a center snap target on itself.
+  const isSource = isConnecting.value && store.connectingSourceNodeId === props.id;
+
   // Add overlay handle if connecting to allow for easy center snapping
-  if (isConnecting.value) {
+  if (isConnecting.value && !isSource) {
     h.push({ id: 'center-overlay', left: '50%', top: '50%', position: Position.Right });
   }
 
   // Keep disabled handles visible but non-interactive (shown as hollow/greyed out)
-  return h;
+  return isSource ? h.filter(x => x.id !== 'center') : h;
 });
 
 function getHandlePosition(left: string, top: string) {
@@ -248,49 +266,11 @@ function getHandlePosition(left: string, top: string) {
 }
 
 
-const hoveredHandleId = ref<string | null>(null);
-
 const { onMoveStart, onMoveEnd, onNodeDragStart, onConnectStart, onConnectEnd, updateNode } = useVueFlow();
 
 watch(isMapFeaturesModalOpen, (val) => {
   updateNode(props.id, { zIndex: val ? 9999 : 0 });
 });
-
-const isPulsing = (handleId: string) => {
-    return isConnecting.value &&
-           (handleId === store.connectingSourceHandleId && props.id === store.connectingSourceNodeId || handleId === hoveredHandleId.value) &&
-           handleId !== 'center-overlay';
-};
-
-const isIdle = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    if (isPulsing(handleId)) return false;
-
-    if (isConnecting.value) return true;
-    return handleId !== 'center';
-};
-
-const isActive = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    return isConnecting.value && !isPulsing(handleId);
-};
-
-const handleEdgeClass = (handleId: string): string => {
-  if (handleId === 'center' || handleId === 'center-overlay') return '';
-  const conn = connections.value.find(c =>
-    (c.fromZoneId === props.id && c.fromHandleId === handleId) ||
-    (c.toZoneId === props.id && c.toHandleId === handleId)
-  );
-  if (!conn) return '';
-  if (plotRouteStore.plottedConnectionIds.has(conn.id)) return store.animationsEnabled ? 'handle-edge-plotted' : 'handle-edge-blue';
-  if (isRestricted.value || store.isEdgeIsolated(conn.id, now.value)) return 'handle-edge-grey';
-  const remainingMs = new Date(conn.expiresAt).getTime() - now.value;
-  const style = connectionStyle(remainingMs, conn.isExpired ?? false);
-  if (style.stroke === '#0ee25e') return 'handle-edge-green';
-  if (style.stroke === '#f59e0b') return 'handle-edge-orange';
-  if (style.stroke === '#ef4444') return 'handle-edge-red';
-  return 'handle-edge-grey';
-};
 const isViewportMoving = ref(false);
 onMoveStart(() => {
   isViewportMoving.value = true;
@@ -692,7 +672,7 @@ const diamondOuterClass = computed(() => {
 
   if (hasReds.value) {
     classes.push('bg-red-500/80');
-  } else if (props.data.isHome && !hasReds.value) {
+  } else if (props.data.isChainSource && !hasReds.value) {
     classes.push('bg-green-500');
   } else {
     classes.push(getBorderBgClass(props.data.type));
@@ -954,42 +934,29 @@ function lockCore(core: string) {
 
 <template>
   <div class="zone-node relative" ref="zoneNodeRef" :class="{ 'ghost-node': props.data.isGhost }" @mousedown="onNodeMouseDown">
+    <!-- Chain ID pill at the very top of the node.
+         Always shown when the zone belongs to any chain (including the only/primary one). -->
+    <ChainIdPill :zone-id="props.id" :position-style="{'z-index': '30' }" />
     <div :class="[isConnecting ? 'connecting-mode' : '']">
-        <template v-if="!isHandleEditorOpen && !isMapFeaturesModalOpen && !isChestModalOpen" v-for="handle in handles" :key="handle.id">
-          <div
-            v-if="handle.disabled"
-            class="handle absolute"
-            :class="[
-              Z_INDEX.HANDLE,
-              `facing-${getHandleFacing(handle.left, handle.top)}`,
-              'is-disabled'
-            ]"
-            :style="{ left: handle.left, top: handle.top }"
-          />
-          <template v-else>
-          <Handle
-            type="source"
-            :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
-            :id="handle.id"
-            :style="{ left: handle.left, top: handle.top }"
-            :class="[
-              'handle', 
-              handle.id === 'center-overlay' ? Z_INDEX.HANDLE_OVERLAY : Z_INDEX.HANDLE,
-              handle.id === 'center' || handle.id === 'center-overlay' ? 'center-handle' : '',
-              handle.id === 'center-overlay' ? 'center-handle-snap' : '',
-              handle.id !== 'center' && handle.id !== 'center-overlay' ? `facing-${getHandleFacing(handle.left, handle.top)}` : '',
-              isIdle(handle.id) && !isConnecting ? 'handle-default' : '',
-              isActive(handle.id) ? 'handle-active' : '',
-              isPulsing(handle.id) ? 'pulsing-handle' : '',
-              handleEdgeClass(handle.id)
-            ]"
-            @mouseenter="hoveredHandleId = handle.id === 'center-overlay' ? 'center' : handle.id"
-            @mouseleave="(e: MouseEvent) => { if (!(e.relatedTarget as HTMLElement)?.closest?.('.vue-flow__handle')) hoveredHandleId = null }"
-          />
-          </template>
-        </template>
+      <ZoneNodeHandles
+        v-if="!isHandleEditorOpen && !isMapFeaturesModalOpen && !isChestModalOpen"
+        :node-id="props.id"
+        :node-type="props.data.type"
+        :handles="handles"
+        :is-restricted="isRestricted"
+        :now="now"
+      />
     </div>
     
+    <!-- Plot route mode overlay: intercepts clicks on inner elements (cores, buttons, etc.) so only the node-level click registers.
+         We drive isHovered from here so the glow activates even though this div sits on top of the inner content. -->
+    <div
+      v-if="plotRouteStore.isPlotRouteMode && !props.data.isGhost"
+      class="absolute inset-0 z-[200] cursor-pointer"
+      @mouseenter="isHovered = true"
+      @mouseleave="isHovered = false"
+    />
+
     <div v-if="isRestricted" class="absolute inset-0 cursor-pointer diamond-shape" :class="[Z_INDEX.RESTRICTED_NODE, { 'bg-transparent': !showDeleteOverlay, 'bg-black/80': showDeleteOverlay }]" @click="showDeleteOverlay = true">
        <div v-if="showDeleteOverlay" class="flex flex-col items-center justify-center h-full rounded-lg" @click.stop>
          <p class="text-white mb-4">Node is expired. Delete it?</p>
@@ -1010,12 +977,12 @@ function lockCore(core: string) {
         class="text-white text-xs text-center min-w-[400px] min-h-[400px] relative transition-all duration-300"
         :class="[
           hasReds ? 'red-glow' : '',
-          props.data.isHome ? 'home-glow' : '',
           props.data.highlighted ? 'goto-glow-animation' : '',
           isPinged ? 'ping-animation' : '',
           props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',
+          isGreyedByChain ? 'opacity-30 grayscale' : '',
           isPlotRouteTarget && store.animationsEnabled ? 'plot-route-hover' : (isPlotRouteTarget ? 'plot-route-hover-static' : ''),
-          isRouteDestination && store.animationsEnabled ? 'plot-route-destination' : (isRouteDestination ? 'plot-route-destination-static' : '')
+          (isRouteDestination || isSelectingFromZone) && store.animationsEnabled ? 'plot-route-destination' : ((isRouteDestination || isSelectingFromZone) ? 'plot-route-destination-static' : '')
         ]"
         @animationend="(e: AnimationEvent) => { if (e.animationName === 'goto-glow') updateNodeData(props.id, { highlighted: false }); if (e.animationName === 'ping-glow' || e.animationName === 'ping-glow-home') isPinged = false; }"
         @mouseenter="isHovered = true"
@@ -1157,7 +1124,7 @@ function lockCore(core: string) {
             <ZoneHeader
               :id="props.id" 
               :zone-name="props.data.zoneName" 
-              :is-home="props.data.isHome" 
+              :is-chain-source="props.data.isChainSource" 
               :type="props.data.type as ZoneType" 
               :category="props.data.category"
               :map-shape="props.data.mapShape"
@@ -1252,8 +1219,8 @@ function lockCore(core: string) {
       >Pull on this handle to add a zone</BluePrompt>
 
       <!-- Room Memory Button (bottom tip) -->
-      <div class="absolute left-1/2 -translate-x-1/2 bottom-5 flex items-center justify-center" :class="Z_INDEX.CONTENT_LOW" v-if="!props.data.isHome">
-        <RoomMemoryButton :entry="memoryEntry ?? null" :zone-name="props.data.zoneName || props.id" :zone-id="props.id" :has-rotation-error="store.rotationErrors.includes(props.id)" />
+      <div class="absolute left-1/2 -translate-x-1/2 bottom-5 flex items-center justify-center" :class="Z_INDEX.CONTENT_LOW" v-if="!props.data.isChainSource">
+        <RoomMemoryButton :entry="memoryEntry ?? null" :zone-name="props.data.zoneName || props.id" :zone-id="props.id" />
       </div>
       
     </div>

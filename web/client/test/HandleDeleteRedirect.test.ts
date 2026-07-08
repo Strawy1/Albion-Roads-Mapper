@@ -67,7 +67,7 @@ describe('Handle delete redirect', () => {
         id: 'roads-hideout',
         data: {
           type: 'roadsHideout',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Roads Hideout',
           customHandles: [
@@ -143,7 +143,7 @@ describe('Handle delete redirect', () => {
         id: 'roads-hideout',
         data: {
           type: 'roadsHideout',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Roads Hideout',
           customHandles: [

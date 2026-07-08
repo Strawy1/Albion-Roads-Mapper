@@ -12,7 +12,7 @@ describe('NonRoadsNode Styling', () => {
         type: 'non-roads',
         data: {
           type: 'royalBlue',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Test Zone',
           ...data
@@ -74,10 +74,10 @@ describe('NonRoadsNode Styling', () => {
     expect(inner.classes()).toContain('bg-red-950')
   })
 
-  it('applies home-glow when isHome is true', () => {
-    const wrapper = mountNode({ isHome: true })
-    const container = wrapper.find('.non-roads-node .w-full.h-full.relative')
-    expect(container.classes()).toContain('home-glow')
+  it('applies bg-green-500 diamond when isChainSource is true', () => {
+    const wrapper = mountNode({ isChainSource: true })
+    const diamond = wrapper.find('.non-roads-node .w-full.h-full.relative [class*="bg-green-500"]')
+    expect(diamond.exists()).toBe(true)
   })
 
   it('applies goto-glow-animation when highlighted is true', () => {
@@ -100,7 +100,7 @@ describe('NonRoadsNode ping', () => {
         type: 'non-roads',
         data: {
           type: 'outlands',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Dusklight Fen',
         },
@@ -142,7 +142,7 @@ describe('NonRoadsNode ping', () => {
         type: 'non-roads',
         data: {
           type: 'outlands',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Dusklight Fen',
         },
@@ -177,7 +177,7 @@ describe('NonRoadsNode proximityTo', () => {
         type: 'non-roads',
         data: {
           type: 'outlands',
-          isHome: false,
+          isChainSource: false,
           tier: 5,
           zoneName: 'Battlebrae Peaks',
           proximityTo: "Arthur's Rest"

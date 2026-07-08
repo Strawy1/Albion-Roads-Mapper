@@ -22,10 +22,10 @@ describe('ZoneHandleEditor', () => {
       }
     });
 
-    expect(wrapper.text()).toContain('Press on a dot');
+    expect(wrapper.text()).toContain('Press on a handle to mark the portal as missing.');
     expect(wrapper.find('img[alt="Spoon reference"]').exists()).toBe(true);
     expect(wrapper.findAll('.is-active')).toHaveLength(1); // Active handle
-    expect(wrapper.findAll('.is-disabled')).toHaveLength(1); // Disabled handle
+    expect(wrapper.findAll('.handle-default')).toHaveLength(1); // Disabled handle
     expect(wrapper.text()).not.toContain('Clear All');
   });
 
@@ -40,7 +40,7 @@ describe('ZoneHandleEditor', () => {
     });
 
     expect(wrapper.text()).not.toContain('Press on a dot to turn off the location of the portal.');
-    expect(wrapper.text()).toContain('If there is a golden "spoon" looking area');
+    expect(wrapper.text()).toContain('If there is a golden "spoon" (or a portal)');
     expect(wrapper.find('img[alt="Spoon reference"]').exists()).toBe(true);
   });
 
@@ -57,7 +57,7 @@ describe('ZoneHandleEditor', () => {
     await activeHandle.trigger('click');
 
     expect(wrapper.findAll('.is-active')).toHaveLength(0);
-    expect(wrapper.findAll('.is-disabled')).toHaveLength(2);
+    expect(wrapper.findAll('.handle-default')).toHaveLength(2);
   });
 
   it('rotates handles clockwise', async () => {
@@ -150,9 +150,10 @@ describe('ZoneHandleEditor', () => {
 
     expect(wrapper.findAll('.handle')).toHaveLength(2);
 
-    const clearBtn = wrapper.findAll('button').find(b => b.text() === 'Clear All');
-    expect(clearBtn).toBeTruthy();
-    await clearBtn?.trigger('click');
+    // Handles are removed via double-click; clear all by dblclicking each
+    for (const handle of wrapper.findAll('.handle')) {
+      await handle.trigger('dblclick');
+    }
 
     expect(wrapper.findAll('.handle')).toHaveLength(0);
   });

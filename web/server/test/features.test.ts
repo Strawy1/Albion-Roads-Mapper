@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { setupTestApp } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -37,7 +37,8 @@ describe('Node features persistence', () => {
     const { socket } = await connectWs(roomId);
     
     // Auth mocks
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
     
@@ -112,7 +113,8 @@ describe('Node features persistence', () => {
 
   it('sends features back in sync message', async () => {
     const { app, mockDb, token } = testApp;
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [
         { 
@@ -148,7 +150,8 @@ describe('Node features persistence', () => {
     const { socket } = await connectWs(roomId);
 
     // Auth mocks (4 calls: room, connections, node_positions, memory)
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
@@ -211,7 +214,8 @@ describe('Node features persistence', () => {
     const { socket } = await connectWs(roomId);
 
     // Auth mocks
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // memory sync
@@ -279,7 +283,8 @@ describe('Node features persistence', () => {
     const { socket } = await connectWs(roomId);
     
     // Auth mocks
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString() }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
     mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
     

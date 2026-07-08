@@ -28,6 +28,16 @@ describe('ZoneNameParser', () => {
       var zone = { mapName: 'Zoros-In-Aum', mapID: 'zoros-in-aum' } as GameMap;
       expect(ZoneNameParser.parseMapShape(zone)).toBe('unknown');
     });
+
+    it('should return "s" for Setos-Aiaitum despite the Set prefix (not a real hideout)', () => {
+      var zone = { mapName: 'Setos-Aiaitum', mapID: 'setos-aiaitum' } as GameMap;
+      expect(ZoneNameParser.parseMapShape(zone)).toBe('s');
+    });
+
+    it('should return "s" for Setitos-Obobrom despite the Set prefix (not a real hideout)', () => {
+      var zone = { mapName: 'Setitos-Obobrom', mapID: 'setitos-obobrom' } as GameMap;
+      expect(ZoneNameParser.parseMapShape(zone)).toBe('s');
+    });
   });
 
   describe('parseGuaranteedContent', () => {

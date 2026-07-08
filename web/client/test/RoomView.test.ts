@@ -303,7 +303,7 @@ describe('RoomView', () => {
   });
 
   it('does not flash on initial load', async () => {
-    sessionStorage.setItem('token:room1', 'some-token');
+    localStorage.setItem('token:room1', 'some-token');
     
     const wrapper = mount(RoomView, {
       props: { id: 'room1' },
@@ -352,7 +352,7 @@ describe('RoomView', () => {
   });
 
   it('flashes on subsequent updates', async () => {
-    sessionStorage.setItem('token:room1', 'some-token');
+    localStorage.setItem('token:room1', 'some-token');
     
     const wrapper = mount(RoomView, {
       props: { id: 'room1' },
@@ -899,6 +899,240 @@ describe('RoomView Home Zone Protection', () => {
     expect(vm.ghostNode.position.x).toBe(initialPos.x);
     expect(vm.ghostNode.position.y).toBe(initialPos.y);
     
+    wrapper.unmount();
+  });
+});
+
+describe('RoomView cross-chain connection guard', () => {
+  function mountRoomView() {
+    return mount(RoomView, {
+      props: { id: 'room1' },
+      global: {
+        stubs: {
+          ReportForm: {
+            template: '<div id="report-form-stub"></div>',
+            setup(props: any, { expose }: any) {
+              const setConnection = vi.fn();
+              const focusTimeInput = vi.fn();
+              const setFromZoneId = vi.fn();
+              const open = vi.fn();
+              const setTargetPosition = vi.fn();
+              expose({ setConnection, focusTimeInput, setFromZoneId, open, setTargetPosition });
+              return { setConnection, focusTimeInput, setFromZoneId, open, setTargetPosition };
+            }
+          },
+          DebugTray: true,
+          RoomSettings: true,
+          VueFlow: true,
+          Background: true,
+          Controls: true,
+        },
+      },
+    });
+  }
+
+  it('blocks a connection between zones in different chains — setConnection is never called', async () => {
+    sessionStorage.setItem('token:room1', 'some-token');
+    const store = useRoomStore();
+    store.setCredentials('room1', 'some-token');
+
+    const now = new Date().toISOString();
+    store.applyMessage({
+      type: 'sync',
+      connections: [],
+      homeZoneId: 'qiient-nutis',
+      nodePositions: [
+        { zoneId: 'qiient-nutis', x: 0, y: 0, chainId: 'chain-1' },
+        { zoneId: 'qiient-in-odetum', x: 300, y: 0, chainId: 'chain-2' },
+      ],
+      lastUpdatedAt: now,
+      watching: 0,
+      totalConnected: 0,
+    });
+
+    const wrapper = mountRoomView();
+    await nextTick();
+
+    const vm = wrapper.vm as any;
+    await vm.handleConnect({
+      source: 'qiient-nutis',
+      sourceHandle: 'n',
+      target: 'qiient-in-odetum',
+      targetHandle: 'n',
+    });
+
+    // ReportForm should NOT have been called — connection was blocked
+    expect(vm.reportForm.setConnection).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('allows a connection between zones in the same chain — setConnection is called', async () => {
+    sessionStorage.setItem('token:room1', 'some-token');
+    const store = useRoomStore();
+    store.setCredentials('room1', 'some-token');
+
+    const now = new Date().toISOString();
+    store.applyMessage({
+      type: 'sync',
+      connections: [],
+      homeZoneId: 'qiient-nutis',
+      nodePositions: [
+        { zoneId: 'qiient-nutis', x: 0, y: 0, chainId: 'chain-1' },
+        { zoneId: 'qiient-in-odetum', x: 300, y: 0, chainId: 'chain-1' },
+      ],
+      lastUpdatedAt: now,
+      watching: 0,
+      totalConnected: 0,
+    });
+
+    const wrapper = mountRoomView();
+    await nextTick();
+
+    const vm = wrapper.vm as any;
+    await vm.handleConnect({
+      source: 'qiient-nutis',
+      sourceHandle: 'n',
+      target: 'qiient-in-odetum',
+      targetHandle: 'n',
+    });
+
+    // Connection should proceed — ReportForm.setConnection must be called
+    expect(vm.reportForm.setConnection).toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('allows a connection when zones have no chain assigned — setConnection is called', async () => {
+    sessionStorage.setItem('token:room1', 'some-token');
+    const store = useRoomStore();
+    store.setCredentials('room1', 'some-token');
+
+    const now = new Date().toISOString();
+    store.applyMessage({
+      type: 'sync',
+      connections: [],
+      homeZoneId: 'qiient-nutis',
+      nodePositions: [
+        { zoneId: 'qiient-nutis', x: 0, y: 0 },
+        { zoneId: 'qiient-in-odetum', x: 300, y: 0 },
+      ],
+      lastUpdatedAt: now,
+      watching: 0,
+      totalConnected: 0,
+    });
+
+    const wrapper = mountRoomView();
+    await nextTick();
+
+    const vm = wrapper.vm as any;
+    await vm.handleConnect({
+      source: 'qiient-nutis',
+      sourceHandle: 'n',
+      target: 'qiient-in-odetum',
+      targetHandle: 'n',
+    });
+
+    expect(vm.reportForm.setConnection).toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+});
+
+describe('RoomView second portal pair direction normalization', () => {
+  it('when dragging cieitos→quaent and quaent→cieitos already exists, setConnection is called with quaent as source', async () => {
+    sessionStorage.setItem('token:room1', 'some-token');
+    const store = useRoomStore();
+    store.setCredentials('room1', 'some-token');
+
+    const expiry = new Date(Date.now() + 3600000).toISOString();
+    const now = new Date().toISOString();
+
+    // Existing connection: quaent-al-nusis (e) → cieitos-obaelos (c-p1)
+    store.applyMessage({
+      type: 'sync',
+      connections: [
+        {
+          id: 'existing-1',
+          roomId: 'room1',
+          fromZoneId: 'quaent-al-nusis',
+          toZoneId: 'cieitos-obaelos',
+          fromHandleId: 'e',
+          toHandleId: 'c-p1',
+          expiresAt: expiry,
+          reportedAt: now,
+        },
+      ],
+      homeZoneId: 'quaent-al-nusis',
+      nodePositions: [
+        { zoneId: 'quaent-al-nusis', x: 0, y: 0, features: {}, customHandles: [
+          { id: 'e', top: '50%', left: '90%' },
+          { id: 'e2', top: '50%', left: '80%' },
+        ]},
+        { zoneId: 'cieitos-obaelos', x: 300, y: 200, features: {}, customHandles: [
+          { id: 'c-p1', top: '20%', left: '50%' },
+          { id: 'c-p2', top: '80%', left: '50%' },
+        ]},
+      ],
+      lastUpdatedAt: now,
+      watching: 0,
+      totalConnected: 0,
+    });
+
+    const wrapper = mount(RoomView, {
+      props: { id: 'room1' },
+      global: {
+        stubs: {
+          ReportForm: {
+            template: '<div id="report-form-stub"></div>',
+            setup(props, { expose }) {
+              const setConnection = vi.fn();
+              const focusTimeInput = vi.fn();
+              const setFromZoneId = vi.fn();
+              const open = vi.fn();
+              const setTargetPosition = vi.fn();
+              expose({ setConnection, focusTimeInput, setFromZoneId, open, setTargetPosition });
+              return { setConnection, focusTimeInput, setFromZoneId, open, setTargetPosition };
+            }
+          },
+          DebugTray: true,
+          RoomSettings: true,
+          VueFlow: true,
+          Background: true,
+          Controls: true
+        }
+      }
+    });
+
+    await nextTick();
+    await nextTick();
+
+    const vm = wrapper.vm as any;
+
+    // User drags FROM cieitos (c-p2) TO quaent (e2) — reverse of existing connection
+    await vm.handleConnect({
+      source: 'cieitos-obaelos',
+      sourceHandle: 'c-p2',
+      target: 'quaent-al-nusis',
+      targetHandle: 'e2',
+    });
+
+    // setConnection must be called with quaent-al-nusis as the SOURCE (first arg),
+    // matching the direction of the pre-existing connection, regardless of drag direction.
+    // Both zones are roads zones so a second portal pair triggers the multi-portal confirmation
+    // prompt — the 5th arg will be the warning string rather than false.
+    const rf = vm.reportForm;
+    expect(rf.setConnection).toHaveBeenCalledWith(
+      'quaent-al-nusis',
+      'e2',
+      'cieitos-obaelos',
+      'c-p2',
+      expect.anything()
+    );
+    // Crucially, source must be quaent (the original fromZoneId), not cieitos
+    expect(rf.setConnection.mock.calls[0][0]).toBe('quaent-al-nusis');
+    expect(rf.setConnection.mock.calls[0][2]).toBe('cieitos-obaelos');
+
     wrapper.unmount();
   });
 });

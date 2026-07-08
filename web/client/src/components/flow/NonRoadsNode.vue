@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { Handle, Position, useVueFlow } from '@vue-flow/core';
+import { Position, useVueFlow } from '@vue-flow/core';
 import type { NodeProps } from '@vue-flow/core';
-import { getHandlePosition, getBorderBgClass } from '@/utils/zoneStyles';
-import { getHandleFacing } from 'shared';
+import { getBorderBgClass } from '@/utils/zoneStyles';
+import ZoneNodeHandles from './ZoneNodeHandles.vue';
 import ZoneHeader from './zone/ZoneHeader.vue';
 import { computed, ref, inject, type Ref, watch } from 'vue';
-import { connectionStyle } from '@/utils/connectionStyle';
 import type { NodeFeatures } from 'shared';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
+import type { CustomHandle } from 'shared';
 import { deleteConnection, deleteNode } from '@/utils/roomOperations';
 import { Z_INDEX } from '@/constants/Layers';
 import { storeToRefs } from 'pinia';
 import { TooltipProvider } from 'reka-ui';
+import ChainIdPill from '@/components/common/ChainIdPill.vue';
 import PingButton from './zone/PingButton.vue';
 
 const props = defineProps<NodeProps<{ 
-  isHome: boolean; 
+  isChainSource: boolean;
   tier: number; 
   zoneName: string; 
   type: string; 
@@ -30,16 +31,24 @@ const props = defineProps<NodeProps<{
 
 const store = useRoomStore();
 const plotRouteStore = usePlotRouteStore();
-const { isConnecting, connections } = storeToRefs(store);
+const { isConnecting, nodePositions } = storeToRefs(store);
 const { updateNodeData } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
-const showPingToast = inject<(zoneName: string, nodeId?: string) => void>('showPingToast');
 
 const isPinged = ref(false);
 const pingKey = ref(0);
 const isHovered = ref(false);
-const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isHome && !props.data.isGhost && isHovered.value);
-const isRouteDestination = computed(() => plotRouteStore.destinationZoneId === props.id && plotRouteStore.hasRoute);
+const isPlotRouteTarget = computed(() => plotRouteStore.isPlotRouteMode && !props.data.isGhost && isHovered.value);
+const isRouteDestination = computed(() => (plotRouteStore.fromZoneId === props.id || plotRouteStore.toZoneId === props.id) && plotRouteStore.hasRoute);
+// During selectingTo: the chosen start zone should glow blue even before the route is committed
+const isSelectingFromZone = computed(() => plotRouteStore.isSelectingTo && plotRouteStore.fromZoneId === props.id);
+// During selectingTo: zones not in the selected chain should be dimmed
+const thisNodeChainId = computed(() => nodePositions.value.find(n => n.zoneId === props.id)?.chainId ?? null);
+const isGreyedByChain = computed(() =>
+  plotRouteStore.isSelectingTo &&
+  !props.data.isGhost &&
+  thisNodeChainId.value !== plotRouteStore.chainId
+);
 
 function handlePing() {
   store.send({ type: 'ping', zoneName: props.data.zoneName || props.id, nodeId: props.id });
@@ -58,43 +67,6 @@ const isIsolated = computed(() => store.isNodeIsolated(props.id, now.value));
 const isExpired = computed(() => store.isNodeExpired(props.id, now.value));
 const isRestricted = computed(() => isIsolated.value || isExpired.value);
 const hasReds = computed(() => !!props.data.features?.reds);
-
-const hoveredHandleId = ref<string | null>(null);
-
-const isPulsing = (handleId: string) => {
-    return isConnecting.value &&
-           (handleId === store.connectingSourceHandleId && props.id === store.connectingSourceNodeId || handleId === hoveredHandleId.value) &&
-           handleId !== 'center-overlay';
-};
-
-const isIdle = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    if (isPulsing(handleId)) return false;
-
-    if (isConnecting.value) return true;
-    return handleId !== 'center';
-};
-
-const isActive = (handleId: string) => {
-    if (handleId === 'center-overlay') return false;
-    return isConnecting.value && !isPulsing(handleId);
-};
-
-const handleEdgeClass = (handleId: string): string => {
-  if (handleId === 'center' || handleId === 'center-overlay') return '';
-  const conn = connections.value.find(c =>
-    (c.fromZoneId === props.id && c.fromHandleId === handleId) ||
-    (c.toZoneId === props.id && c.toHandleId === handleId)
-  );
-  if (!conn) return '';
-  if (plotRouteStore.plottedConnectionIds.has(conn.id)) return store.animationsEnabled ? 'handle-edge-plotted' : 'handle-edge-blue';
-  const remainingMs = new Date(conn.expiresAt).getTime() - now.value;
-  const style = connectionStyle(remainingMs, conn.isExpired ?? false);
-  if (style.stroke === '#0ee25e') return 'handle-edge-green';
-  if (style.stroke === '#f59e0b') return 'handle-edge-orange';
-  if (style.stroke === '#ef4444') return 'handle-edge-red';
-  return 'handle-edge-grey';
-};
 
 const { onConnectStart, onConnectEnd } = useVueFlow();
 
@@ -148,45 +120,52 @@ async function handleDelete() {
   showDeleteOverlay.value = false;
 }
 
-const handles = computed(() => {
-  const h = [
-    { id: 'center', left: '50%', top: '50%', position: Position.Right }
+const handles = computed<CustomHandle[]>(() => {
+  const h: CustomHandle[] = [
+    { id: 'center', left: '50%', top: '50%', position: Position.Right },
+    // Fixed handles at the midpoints of each of the diamond's four edges
+    // (i.e. the four "corners" of the bounding square). These are static —
+    // they cannot be moved by the user.
+    { id: 'nw', left: '25%', top: '25%', position: Position.Top },
+    { id: 'ne', left: '75%', top: '25%', position: Position.Top },
+    { id: 'se', left: '75%', top: '75%', position: Position.Bottom },
+    { id: 'sw', left: '25%', top: '75%', position: Position.Bottom },
   ];
-  
+
+  // Hide this node's own center handle while dragging a connection from it,
+  // so the source zone doesn't show a center snap target on itself.
+  const isSource = isConnecting.value && store.connectingSourceNodeId === props.id;
+
   // Add overlay handle if connecting to allow for easy center snapping
-  if (isConnecting.value) {
+  if (isConnecting.value && !isSource) {
     h.push({ id: 'center-overlay', left: '50%', top: '50%', position: Position.Right });
   }
 
-  return h;
+  return isSource ? h.filter(x => x.id !== 'center') : h;
 });
 </script>
 
 <template>
   <div class="non-roads-node relative" :class="{ 'ghost-node': props.data.isGhost }">
+    <ChainIdPill :zone-id="props.id" :position-style="{  'z-index': '30' }" />
     <div :class="[isConnecting ? 'connecting-mode' : '']">
-        <template v-for="handle in handles" :key="handle.id">
-          <Handle
-            type="source"
-            :position="(handle.position ? handle.position : getHandlePosition(handle.left, handle.top)) as Position"
-            :id="handle.id"
-            :style="{ left: handle.left, top: handle.top }"
-            :class="[
-              'handle', 
-              handle.id === 'center-overlay' ? Z_INDEX.HANDLE_OVERLAY : Z_INDEX.HANDLE,
-              handle.id === 'center' || handle.id === 'center-overlay' ? 'center-handle' : '',
-              handle.id === 'center-overlay' ? 'center-handle-snap' : '',
-              handle.id !== 'center' && handle.id !== 'center-overlay' ? `facing-${getHandleFacing(handle.left, handle.top)}` : '',
-              isIdle(handle.id) && !isConnecting ? 'handle-default' : '',
-              isActive(handle.id) ? 'handle-active' : '',
-              isPulsing(handle.id) ? 'pulsing-handle' : '',
-              handleEdgeClass(handle.id)
-            ]"
-            @mouseenter="hoveredHandleId = handle.id === 'center-overlay' ? 'center' : handle.id"
-            @mouseleave="(e: MouseEvent) => { if (!(e.relatedTarget as HTMLElement)?.closest?.('.vue-flow__handle')) hoveredHandleId = null }"
-          />
-        </template>
+        <ZoneNodeHandles
+          :node-id="props.id"
+          :node-type="props.data.type"
+          :handles="handles"
+          :is-restricted="isRestricted"
+          :now="now"
+        />
     </div>
+    <!-- Plot route mode overlay: intercepts clicks on inner elements so only the node-level click registers.
+         We drive isHovered from here so the glow activates even though this div sits on top of the inner content. -->
+    <div
+      v-if="plotRouteStore.isPlotRouteMode && !props.data.isGhost"
+      class="absolute inset-0 z-[200] cursor-pointer"
+      @mouseenter="isHovered = true"
+      @mouseleave="isHovered = false"
+    />
+
     <div v-if="isRestricted" class="absolute inset-0 cursor-pointer" :class="[Z_INDEX.RESTRICTED_NODE, { 'bg-transparent': !showDeleteOverlay, 'bg-black/80': showDeleteOverlay }]" @click="showDeleteOverlay = true">
        <div v-if="showDeleteOverlay" class="flex flex-col items-center justify-center h-full rounded-lg" @click.stop>
          <p class="text-white mb-4">Node is expired. Delete it?</p>
@@ -202,26 +181,26 @@ const handles = computed(() => {
       class="text-white text-xs text-center w-full h-full relative transition-all duration-300"
       :class="[
         hasReds ? 'red-glow' : '',
-        props.data.isHome ? 'home-glow' : '',
         props.data.highlighted ? 'goto-glow-animation' : '',
         isPinged ? 'ping-animation' : '',
         props.data.isGhost || isRestricted ? 'opacity-50 grayscale' : '',
+        isGreyedByChain ? 'opacity-30 grayscale' : '',
         isPlotRouteTarget && store.animationsEnabled ? 'plot-route-hover' : (isPlotRouteTarget ? 'plot-route-hover-static' : ''),
-        isRouteDestination && store.animationsEnabled ? 'plot-route-destination' : (isRouteDestination ? 'plot-route-destination-static' : '')
+        (isRouteDestination || isSelectingFromZone) && store.animationsEnabled ? 'plot-route-destination' : ((isRouteDestination || isSelectingFromZone) ? 'plot-route-destination-static' : '')
       ]"
       @animationend="(e: AnimationEvent) => { if (e.animationName === 'goto-glow') updateNodeData(props.id, { highlighted: false }); if (e.animationName === 'ping-glow' || e.animationName === 'ping-glow-home') isPinged = false; }"
       @mouseenter="isHovered = true"
       @mouseleave="isHovered = false"
     >
       <!-- Ping Button (top tip) -->
-      <div class="absolute left-1/2 -translate-x-1/2 top-5" :class="Z_INDEX.CONTENT_LOW">
+      <div class="absolute left-1/2 -translate-x-1/2 top-9" :class="Z_INDEX.CONTENT_LOW">
         <PingButton @ping="handlePing" />
       </div>
 
       <!-- Smaller Diamond Shape Background -->
       <div 
         class="absolute inset-0 diamond-shape transition-colors duration-300 pointer-events-none"
-        :class="[hasReds ? 'bg-red-500' : (props.data.zoneName === 'Brecillien' ? 'bg-purple-500 border-purple-200' : getBorderBgClass(props.data.type)), Z_INDEX.NODE_BASE]"
+        :class="[hasReds ? 'bg-red-500' : (props.data.isChainSource ? 'bg-green-500' : (props.data.zoneName === 'Brecillien' ? 'bg-purple-500 border-purple-200' : getBorderBgClass(props.data.type))), Z_INDEX.NODE_BASE]"
       ></div>
       <div 
         class="absolute inset-[4px] diamond-shape transition-colors duration-300 pointer-events-none"
@@ -233,7 +212,8 @@ const handles = computed(() => {
         <ZoneHeader
           :id="props.id" 
           :zone-name="props.data.zoneName" 
-          :is-home="props.data.isHome" 
+          :is-chain-source="props.data.isChainSource" 
+          icon-compact
           :type="props.data.type as any" 
           :category="props.data.category"
           :map-shape="props.data.mapShape"
@@ -254,8 +234,8 @@ const handles = computed(() => {
 @import './nodes.css';
 
 .non-roads-node {
-  width: 200px;
-  height: 200px;
+  width: 250px;
+  height: 250px;
 }
 
 .plot-route-hover {

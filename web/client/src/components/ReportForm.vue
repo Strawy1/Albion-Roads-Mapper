@@ -7,9 +7,10 @@ import TagTier from './common/TagTier.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { addConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
-import { ZONE_BY_ID, getHandleFacing } from 'shared';
+import { ZONE_BY_ID, ZONES, getHandleFacing } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
 import TagExtras from "@/components/common/TagExtras.vue";
+import ChainIdPill from "@/components/common/ChainIdPill.vue";
 
 const props = defineProps<{}>();
 
@@ -57,6 +58,35 @@ const isRoyalOrOutlands = computed(() => {
   const zone = ZONE_BY_ID.get(toZoneId.value);
   if (!zone) return false;
   return zone.type.startsWith('royal') || zone.type === 'outlands';
+});
+
+function isNonRoadsZoneId(zoneId: string): boolean {
+  const zone = ZONE_BY_ID.get(zoneId);
+  if (!zone) return false;
+  return zone.type !== 'roads' && zone.type !== 'roadsHideout';
+}
+
+// Returns zone IDs that cannot connect to the given zone due to type incompatibility:
+// Royal Continent (royalBlue/Yellow/Red) cannot connect to Outlands/other, and vice versa.
+const incompatibleZoneIds = computed<string[]>(() => {
+  if (!fromZoneId.value) return [];
+  const zone = ZONE_BY_ID.get(fromZoneId.value);
+  if (!zone) return [];
+  const isRoyal = zone.type === 'royalBlue' || zone.type === 'royalYellow' || zone.type === 'royalRed';
+  const isOutlandsOrOther = zone.type === 'outlands' || zone.type === 'other';
+  if (!isRoyal && !isOutlandsOrOther) return [];
+  return ZONES
+    .filter((z) => {
+      if (isRoyal) return z.type === 'outlands' || z.type === 'other';
+      // isOutlandsOrOther
+      return z.type === 'royalBlue' || z.type === 'royalYellow' || z.type === 'royalRed';
+    })
+    .map((z) => z.id);
+});
+
+const isPermanentConnection = computed(() => {
+  if (!fromZoneId.value || !toZoneId.value) return false;
+  return isNonRoadsZoneId(fromZoneId.value) && isNonRoadsZoneId(toZoneId.value);
 });
 watch([fromZoneId, toZoneId], () => {
   secondsRemaining.value = null;
@@ -127,6 +157,21 @@ const connectedToFromZone = computed(() => {
     .map((c) => (c.fromZoneId === fromZoneId.value ? c.toZoneId : c.fromZoneId));
 });
 
+// Zones that already belong to a different chain than the "From" zone — these
+// must not be selectable as a connection target (a chain is a closed graph).
+const wrongChainZoneIds = computed<string[]>(() => {
+  if (!fromZoneId.value) return [];
+  const fromChain = store.chainForZone(fromZoneId.value);
+  if (!fromChain) return [];
+  const ids: string[] = [];
+  for (const n of store.nodePositions) {
+    if (n.zoneId === fromZoneId.value) continue;
+    const otherChain = store.chainForZone(n.zoneId);
+    if (otherChain && otherChain.id !== fromChain.id) ids.push(n.zoneId);
+  }
+  return ids;
+});
+
 function isPortalOccupied(zoneId: string, handleId: string | null) {
   const hId = handleId || 'center';
   if (hId === 'center') return false;
@@ -139,7 +184,7 @@ function isPortalOccupied(zoneId: string, handleId: string | null) {
 }
 
 const canSubmit = computed(
-  () => fromZoneId.value && toZoneId.value && secondsRemaining.value !== null && !submitting.value,
+  () => fromZoneId.value && toZoneId.value && (isPermanentConnection.value || secondsRemaining.value !== null) && !submitting.value,
 );
 
 function getFallbackPosition(sourceZoneId: string, handleId: string | null): { x: number; y: number } | undefined {
@@ -202,12 +247,13 @@ async function submitAndAddMore() {
       store.token!,
       fromZoneId.value,
       toZoneId.value,
-      Number(secondsRemaining.value!),
-      slots.value,
+      isPermanentConnection.value ? null : Number(secondsRemaining.value!),
+      isPermanentConnection.value ? null : slots.value,
       fromHandleId.value || 'center',
       toHandleId.value || 'center',
       reportedBy.value || undefined,
       resolvedPosition,
+      isPermanentConnection.value,
     );
 
     emit('success', 'Connection added!');
@@ -364,6 +410,7 @@ defineExpose({
                 <div class="flex items-center gap-2 py-2.5 md:py-2 opacity-100 min-w-0">
                   <span class="flex-1 text-white text-base leading-none">{{ fromZone?.name ?? fromZoneId }}</span>
                   <TagExtras :zone-id="fromZoneId" />
+                  <ChainIdPill v-if="fromZoneId && fromZoneId !== store.homeZoneId" :zone-id="fromZoneId" small />
                   <TagZone v-if="fromZone" :type="fromZone.type" :category="fromZone.category" :map-shape="fromZone.mapShape" :zone-name="fromZone.name" :proximity-to="fromZone.proximityTo" />
                   <TagTier v-if="fromZone" :tier="fromZone.tier" :type="fromZone.type" />
                 </div>
@@ -380,6 +427,8 @@ defineExpose({
                     placeholder="To zone…"
                     :excluded-ids="[fromZoneId]"
                     :disabled-ids="connectedToFromZone"
+                    :wrong-chain-ids="wrongChainZoneIds"
+                    :incompatible-ids="incompatibleZoneIds"
                     :smart-already-added="true"
                     already-added-placement="bottom"
                     data-testid="to-combobox"
@@ -394,8 +443,13 @@ defineExpose({
             </div>
           </div><!-- end From/To wrapper -->
           
-          <!-- Time + Slots -->
-          <div class="grid grid-cols-2 gap-3">
+          <!-- Permanent connection notice (non-roads to non-roads) -->
+          <div v-if="isPermanentConnection" class="rounded-lg bg-emerald-900/40 border border-emerald-600 px-4 py-3 text-emerald-300 text-sm text-center">
+            🔗 This will be a <strong>Permanent Connection</strong> — no timer required.
+          </div>
+
+          <!-- Time + Slots (only for non-permanent connections) -->
+          <div v-if="!isPermanentConnection" class="grid grid-cols-2 gap-3">
             <div class="flex flex-col gap-1.5" ref="timeInputContainer">
               <label class="text-sm font-medium text-gray-400 text-center">Expires In</label>
               <TimeInput

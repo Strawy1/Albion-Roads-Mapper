@@ -25,6 +25,14 @@ type EdgeData = {
   targetFacing?: string;
   slots?: 7 | 20;
   isPlotted?: boolean;
+  /** True when the user selected this edge in the reverse direction (start→end opposes conn.fromZoneId→toZoneId) */
+  isReversedPlotted?: boolean;
+  /** True when this edge is part of the hover ghost preview */
+  isGhostRoute?: boolean;
+  /** True when the ghost preview edge is traversed in reverse */
+  isGhostRouteReversed?: boolean;
+  /** True when route-plotting is in selectingTo phase and this edge belongs to a different chain */
+  isGreyedByChain?: boolean;
 };
 
 const props = defineProps<EdgeProps<EdgeData>>();
@@ -95,8 +103,13 @@ const remainingMs = computed(() => {
   return expiresMs.value - props.data.now;
 });
 
+const isPermanent = computed(() => {
+  return props.data?.connection?.permanent === true;
+});
+
 const isDirectlyExpired = computed(() => {
   if (!props.data?.connection) return false;
+  if (isPermanent.value) return false;
   return (props.data.connection.isExpired ?? false) || remainingMs.value <= 0;
 });
 
@@ -120,6 +133,14 @@ const style = computed(() => {
       color: '#6366f1'
     };
   }
+  if (props.data?.isGhostRoute) {
+    return {
+      stroke: '#3b82f6',
+      strokeDasharray: '6,4',
+      animated: false,
+      color: '#1d4ed8'
+    };
+  }
   if (props.data?.isPlotted) {
     return {
       stroke: '#3b82f6',
@@ -132,6 +153,38 @@ const style = computed(() => {
 });
 
 const isPlotted = computed(() => props.data?.isPlotted ?? false);
+const isGhostRoute = computed(() => props.data?.isGhostRoute ?? false);
+const isGreyedByChain = computed(() => props.data?.isGreyedByChain ?? false);
+/** When true, chevrons should travel from target→source (reversed direction relative to stored edge) */
+const isEffectivelyReversed = computed(() =>
+  (isPlotted.value && (props.data?.isReversedPlotted ?? false)) ||
+  (isGhostRoute.value && (props.data?.isGhostRouteReversed ?? false))
+);
+/** Path reversed for chevron animation: swap source/target points so chevrons flow user-start → user-end */
+const reversedPath = computed(() => {
+  // Create a reversed SVG path by swapping the M and the last endpoint.
+  // For animateMotion we use a new path starting from target going to source.
+  const srcHandleId = props.sourceHandleId;
+  const tgtHandleId = props.targetHandleId || 'center';
+  const srcFacing = srcHandleId && !isCenter(srcHandleId)
+    ? (getHandleFacingFromId(srcHandleId, props.sourceNode) ?? props.data?.sourceFacing ?? props.sourcePosition)
+    : props.sourcePosition;
+  const tgtFacing = tgtHandleId && !isCenter(tgtHandleId)
+    ? (getHandleFacingFromId(tgtHandleId, props.targetNode) ?? props.data?.targetFacing ?? props.targetPosition)
+    : props.targetPosition;
+  return getConnectionPath({
+    sourceX: tgtCenter.value?.x ?? props.targetX,
+    sourceY: tgtCenter.value?.y ?? props.targetY,
+    targetX: srcCenter.value?.x ?? props.sourceX,
+    targetY: srcCenter.value?.y ?? props.sourceY,
+    sourcePosition: tgtFacing as any,
+    targetPosition: srcFacing as any,
+    sourceHandleId: tgtHandleId,
+    targetHandleId: srcHandleId,
+    forceStraight: false,
+  })[0];
+});
+const chevronPath = computed(() => isEffectivelyReversed.value ? reversedPath.value : path.value);
 
 // Pill uses time-based colours, but blue instead of green when plotted
 const pillStyle = computed(() => {
@@ -217,7 +270,7 @@ const isTargetUnexplored = computed(() => {
   if (props.targetNode?.type === 'non-roads') return false;
   const d = props.targetNode?.data as any;
   if (!d) return false;
-  if (d.isHome || d.isGhost) return false;
+  if (d.isChainSource || d.isGhost) return false;
   if (props.data?.connection?.toHandleId === 'center') return true;
   return !d.explored;
 });
@@ -235,20 +288,20 @@ defineExpose({
     :id="id"
     :path="path"
     :animated="false"
-    :style="{ stroke: isPlotted ? '#3b82f6' : style.stroke, strokeWidth: isPlotted ? 3 : 2, opacity: isRestricted ? 0.3 : 1, strokeDasharray: isPlotted ? 'none' : undefined, animation: !roomStore.animationsEnabled ? 'none' : (isPlotted ? 'pulse-blue-stroke 0.75s infinite ease-in-out' : (isRestricted ? 'none' : undefined)) }"
+    :style="{ stroke: (isPlotted || isGhostRoute) ? '#3b82f6' : (isGreyedByChain ? '#6b7280' : style.stroke), strokeWidth: (isPlotted || isGhostRoute) ? 3 : 2, opacity: isGhostRoute ? 0.5 : (isRestricted || isGreyedByChain ? 0.3 : 1), strokeDasharray: isGhostRoute ? '6,4' : (isPlotted ? 'none' : undefined), animation: (!roomStore.animationsEnabled || isGreyedByChain) ? 'none' : (isPlotted ? 'pulse-blue-stroke 0.75s infinite ease-in-out' : (isRestricted ? 'none' : undefined)) }"
     class="cursor-pointer"
     @click.stop="showPopover = !showPopover"
     @mousedown.stop
   />
   
   <!-- Animated chevrons -->
-  <g v-if="!props.data?.isGhost && !isRestricted && roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: chevronsVisible ? 1 : 0, transition: 'opacity 0.3s ease' }">
+  <g v-if="!props.data?.isGhost && !isRestricted && !isGreyedByChain && roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: isGhostRoute ? 0.6 : (chevronsVisible ? 1 : 0), transition: 'opacity 0.3s ease' }">
     <path
       v-for="i in numChevrons"
       :key="`${chevronEpoch}-${i}`"
-      :d="isPlotted ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
+      :d="(isPlotted || isGhostRoute) ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
       fill="none"
-      :stroke-width="isPlotted ? 4 : 3"
+      :stroke-width="(isPlotted || isGhostRoute) ? 4 : 3"
       stroke-linecap="round"
       stroke-linejoin="round"
       :stroke="style.stroke"
@@ -260,7 +313,7 @@ defineExpose({
         :dur="`${duration}s`"
         :begin="`${(i - 1) * (duration / numChevrons)}s`"
         repeatCount="indefinite"
-        :path="path"
+        :path="chevronPath"
         rotate="auto"
       />
       <animate 
@@ -275,13 +328,13 @@ defineExpose({
   </g>
 
   <!-- Static chevrons (animations disabled) -->
-  <g v-if="!props.data?.isGhost && !isRestricted && !roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: chevronsVisible ? 1 : 0, transition: 'opacity 0.3s ease' }">
+  <g v-if="!props.data?.isGhost && !isRestricted && !isGreyedByChain && !roomStore.animationsEnabled" class="pointer-events-none" :style="{ opacity: isGhostRoute ? 0.6 : (chevronsVisible ? 1 : 0), transition: 'opacity 0.3s ease' }">
     <path
       v-for="i in numChevrons"
       :key="`static-${chevronEpoch}-${i}`"
-      :d="isPlotted ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
+      :d="(isPlotted || isGhostRoute) ? 'M -18 -18 L 0 0 L -18 18' : 'M -6 -6 L 0 0 L -6 6'"
       fill="none"
-      :stroke-width="isPlotted ? 4 : 3"
+      :stroke-width="(isPlotted || isGhostRoute) ? 4 : 3"
       stroke-linecap="round"
       stroke-linejoin="round"
       :stroke="style.stroke"
@@ -293,13 +346,13 @@ defineExpose({
         keyTimes="0;1"
         calcMode="linear"
         fill="freeze"
-        :path="path"
+        :path="chevronPath"
         rotate="auto"
       />
     </path>
   </g>
 
-  <EdgeLabelRenderer v-if="!props.data?.isGhost">
+  <EdgeLabelRenderer v-if="!props.data?.isGhost && !isGhostRoute">
     <div
       :style="{
         transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
@@ -310,7 +363,7 @@ defineExpose({
       <!-- Unexplored target tooltip — right of the pill -->
       <div
         v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
-        class="absolute left-full top-1/2 -translate-y-1/2 ml-2 pb-4"
+        class="absolute left-full top-1/2 -translate-y-1/2"
         :class="Z_INDEX.TOAST"
       >
         <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />
@@ -319,11 +372,11 @@ defineExpose({
       <div
         data-trigger="true"
         class="text-xs px-3 py-2 inline-flex flex-col items-center justify-center gap-0.5 rounded-full text-white cursor-pointer backdrop-blur-md"
-        :style="{ backgroundColor: pillStyle.color + 'b3', border: `1px solid ${pillStyle.stroke}` }"
+        :style="isGreyedByChain ? { backgroundColor: '#374151b3', border: '1px solid #6b7280', opacity: 0.4 } : { backgroundColor: pillStyle.color + 'b3', border: `1px solid ${pillStyle.stroke}` }"
         @click.stop="showPopover = !showPopover"
         @mousedown.stop
       >
-        <span class="leading-none">{{ isIsolated ? 'Isolated' : (isDirectlyExpired ? 'Expired' : formatCountdown(remainingMs)) }}</span>
+        <span class="leading-none">{{ isIsolated ? 'Isolated' : (isPermanent ? 'Permanent' : (isDirectlyExpired ? 'Expired' : formatCountdown(remainingMs))) }}</span>
         <span
           v-if="props.data?.slots !== undefined && !isRestricted"
           class="text-[10px] leading-none mt-0.5 px-1.5 pt-0.5 pb-1 rounded-full font-bold border"
@@ -354,28 +407,33 @@ defineExpose({
           <span class="text-gray-400">By:</span> {{ data.connection.reportedBy }}
         </div>
         <div v-if="data?.connection" class="mb-2">
-          <div class="flex gap-2 text-center">
-            <div class="text-xs text-gray-400 flex-1">Created</div>
-            <div class="text-xs text-gray-400 flex-1">Expires</div>
-          </div>
-          <div class="flex gap-2 text-center">
-            <div class="text-xs flex-1">{{ new Date(data.connection.reportedAt).toLocaleTimeString() }}</div>
-            <div class="text-xs flex-1">{{ new Date(data.connection.expiresAt).toLocaleTimeString() }}</div>
-          </div>
-          <div class="text-xs text-gray-400 mt-2 mb-1 text-center">Time Remaining</div>
-          <div class="flex items-stretch gap-1">
-            <TimeInput v-model="newSecondsRemaining" compact class="flex-1" @enter="newSecondsRemaining !== null && data?.onUpdate?.(id, newSecondsRemaining!) && (showPopover = false)" />
-            <button
-              :disabled="newSecondsRemaining === null"
-              class="bg-indigo-700 hover:bg-indigo-600 text-white rounded px-2 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Update Connection"
-              @click.stop="data?.onUpdate?.(id, newSecondsRemaining!); showPopover = false"
-            >
-              Update
-            </button>
-          </div>
+          <template v-if="isPermanent">
+            <div class="text-xs text-emerald-400 text-center py-1">🔗 Permanent Connection</div>
+          </template>
+          <template v-else>
+            <div class="flex gap-2 text-center">
+              <div class="text-xs text-gray-400 flex-1">Created</div>
+              <div class="text-xs text-gray-400 flex-1">Expires</div>
+            </div>
+            <div class="flex gap-2 text-center">
+              <div class="text-xs flex-1">{{ new Date(data.connection.reportedAt).toLocaleTimeString() }}</div>
+              <div class="text-xs flex-1">{{ new Date(data.connection.expiresAt).toLocaleTimeString() }}</div>
+            </div>
+            <div class="text-xs text-gray-400 mt-2 mb-1 text-center">Time Remaining</div>
+            <div class="flex items-stretch gap-1">
+              <TimeInput v-model="newSecondsRemaining" compact class="flex-1" @enter="newSecondsRemaining !== null && data?.onUpdate?.(id, newSecondsRemaining!) && (showPopover = false)" />
+              <button
+                :disabled="newSecondsRemaining === null"
+                class="bg-indigo-700 hover:bg-indigo-600 text-white rounded px-2 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Update Connection"
+                @click.stop="data?.onUpdate?.(id, newSecondsRemaining!); showPopover = false"
+              >
+                Update
+              </button>
+            </div>
+          </template>
         </div>
-        <div class="mb-3">
+        <div v-if="!isPermanent" class="mb-3">
           <div class="text-xs text-gray-400 mb-1 text-center">Slots</div>
           <div class="flex gap-2">
             <button
@@ -391,6 +449,7 @@ defineExpose({
           </div>
           <hr class="border-gray-600 mt-3" />
         </div>
+        <hr v-if="isPermanent" class="border-gray-600 mb-3" />
         <div class="flex flex-col gap-2">
           <template v-if="data?.hasChildren">
             <div class="flex gap-2">

@@ -300,6 +300,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [] });
       return Promise.resolve({ rows: [], rowCount: 1 });
     });
@@ -331,6 +332,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [] });
       return Promise.resolve({ rows: [], rowCount: 1 });
     });
@@ -380,6 +382,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       if (q.includes('FROM room_node_memory') && q.includes('times_added')) {
         return Promise.resolve({ rows: [] }); // no existing memory → shouldAppend = true
       }
@@ -416,6 +419,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       // Non-roads zone existence check: return empty rows (zone not yet placed)
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [] });
       if (q.includes('custom_handles FROM room_node_positions')) return Promise.resolve({ rows: [] });
@@ -448,6 +452,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       // Non-roads zone existence check: return existing row (already placed)
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) {
         return Promise.resolve({ rows: [{ zone_id: VALID_ZONE_B }] });
@@ -482,6 +487,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       if (q.includes('FROM room_node_memory') && q.includes('times_added')) return Promise.resolve({ rows: [] });
       if (q.includes('FROM room_node_memory')) return Promise.resolve({ rows: [] });
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [] });
@@ -515,6 +521,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [] });
       if (q.includes('custom_handles FROM room_node_positions')) return Promise.resolve({ rows: [] });
       return Promise.resolve({ rows: [], rowCount: 1 });
@@ -551,6 +558,7 @@ describe('Analytics — node position updates via POST /connections', () => {
     mockDb.query.mockImplementation((q: string) => {
       if (q.includes('FROM rooms')) return Promise.resolve({ rows: [{ id: roomId }] });
       if (q.includes('FROM connections')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT chain_id FROM room_node_positions')) return Promise.resolve({ rows: [{ chain_id: 'test-chain-id' }] });
       // zone already exists — no zone discovery fires, only room_data_updates
       if (q.includes('FROM room_node_positions') && q.includes('SELECT zone_id')) return Promise.resolve({ rows: [{ zone_id: VALID_ZONE_B }] });
       if (q.includes('custom_handles FROM room_node_positions')) return Promise.resolve({ rows: [] });
@@ -734,7 +742,8 @@ describe('Analytics — node position updates via WebSocket', () => {
     socket.send(JSON.stringify({
       type: 'update_plot_route',
       plottedRoute: [VALID_ZONE_A, VALID_ZONE_B],
-      destinationZoneId: VALID_ZONE_B,
+      fromZoneId: VALID_ZONE_A,
+      toZoneId: VALID_ZONE_B,
     }));
 
     await new Promise((r) => setTimeout(r, 200));

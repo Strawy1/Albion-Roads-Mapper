@@ -20,19 +20,22 @@ import { deleteConnection, deleteNode } from '../src/utils/roomOperations';
 // dropping that zone — we simulate that too so the overlay disappears from the DOM.
 function simulateServerDelete(store: ReturnType<typeof useRoomStore>) {
   vi.mocked(deleteConnection).mockImplementation(async (_roomId, _token, connId) => {
-    store.applyMessage({ type: 'connection_removed', connectionId: connId });
-
-    // Determine which zones now have no connections and remove them from nodePositions
-    const remaining = store.connections;
+    // Determine which zones will have no connections after this removal
+    const remaining = store.connections.filter(c => c.id !== connId);
     const connectedZones = new Set<string>();
     for (const c of remaining) {
       connectedZones.add(c.fromZoneId);
       connectedZones.add(c.toZoneId);
     }
-    const newPositions = store.nodePositions.filter(
-      p => p.zoneId === store.homeZoneId || connectedZones.has(p.zoneId)
-    );
-    store.applyMessage({ type: 'node_positions_updated', nodePositions: newPositions });
+    const removedZoneIds = store.nodePositions
+      .filter(p => p.zoneId !== store.homeZoneId && !connectedZones.has(p.zoneId))
+      .map(p => p.zoneId);
+
+    store.applyMessage({ type: 'connection_removed', connectionId: connId, removedZoneIds });
+  });
+
+  vi.mocked(deleteNode).mockImplementation(async (_roomId, _token, zoneId) => {
+    store.applyMessage({ type: 'connection_removed', connectionId: undefined, removedZoneIds: [zoneId] });
   });
 }
 
@@ -48,14 +51,14 @@ const BASE_PROPS = {
   events: {} as any,
 };
 
-function mountZoneNode(id: string, isHome: boolean, now: number) {
+function mountZoneNode(id: string, isChainSource: boolean, now: number) {
   return mount(ZoneNode as any, {
     props: {
       ...BASE_PROPS,
       id,
       data: {
         type: 'roads',
-        isHome,
+        isChainSource,
         tier: 5,
         zoneName: 'Test Zone',
       },
@@ -240,8 +243,7 @@ describe('ZoneNode Delete Overlay', () => {
       store.setCredentials('room1', 'token1');
 
       vi.mocked(deleteNode).mockImplementation(async (_roomId, _token, zoneId) => {
-        const newPositions = store.nodePositions.filter(p => p.zoneId !== zoneId);
-        store.applyMessage({ type: 'node_positions_updated', nodePositions: newPositions });
+        store.applyMessage({ type: 'connection_removed', connectionId: undefined, removedZoneIds: [zoneId] });
       });
 
       store.applyMessage({

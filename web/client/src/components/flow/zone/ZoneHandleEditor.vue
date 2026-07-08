@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import type { CustomHandle } from 'shared';
-import { rotateClockwise, rotateCounterClockwise } from 'shared';
+import { rotateClockwise, rotateCounterClockwise, canonicalizeHandlesForRotation } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
 
 const props = defineProps<{
@@ -139,18 +139,31 @@ function save() {
 
 
 function rotate(clockwise: boolean) {
-  rotationSteps.value = clockwise ? rotateClockwise(rotationSteps.value) : rotateCounterClockwise(rotationSteps.value);
+  const nextRotation = clockwise ? rotateClockwise(rotationSteps.value) : rotateCounterClockwise(rotationSteps.value);
+  rotationSteps.value = nextRotation;
   visualRotation.value += clockwise ? 90 : -90;
-  handles.value = handles.value.map(h => {
-    const x = parseFloat(h.left);
-    const y = parseFloat(h.top);
-    const t = getTFromPos(x, y);
-    const nextT = clockwise ? (t + 1) % 4 : (t + 3) % 4;
-    return {
-      ...h,
-      ...getPosFromT(nextT)
-    };
-  });
+
+  if (props.isToggleMode && props.mapShape) {
+    // Rebuild handles from scratch to fix any inconsistencies
+    handles.value = canonicalizeHandlesForRotation(
+      'roads',
+      props.mapShape,
+      handles.value,
+      nextRotation
+    );
+  } else {
+    // Legacy blind rotation for custom handles
+    handles.value = handles.value.map(h => {
+      const x = parseFloat(h.left);
+      const y = parseFloat(h.top);
+      const t = getTFromPos(x, y);
+      const nextT = clockwise ? (t + 1) % 4 : (t + 3) % 4;
+      return {
+        ...h,
+        ...getPosFromT(nextT)
+      };
+    });
+  }
 }
 
 function getHandleFacing(left: string, top: string): string {
@@ -223,9 +236,9 @@ function getHandleFacing(left: string, top: string): string {
         />
 
         <!-- Center Content - Inside Diamond -->
-        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-12" :class="Z_INDEX.UI_OVERLAY">
-          <div class="flex flex-col items-center pointer-events-auto max-w-[280px] bg-gray-800/60 backdrop-blur-xs rounded-lg p-2">
-            <p class="text-gray-300 text-[11px] text-center mb-2 mx-2 leading-tight drop-shadow-md">
+        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" :class="Z_INDEX.UI_OVERLAY">
+          <div class="flex flex-col items-center pointer-events-auto max-w-[280px] bg-gray-700/60 backdrop-blur-xs drop-shadow-xl rounded-lg p-2">
+            <p class="text-gray-300 text-[11px] text-center mb-2 leading-tight drop-shadow-md">
               <template v-if="isToggleMode">
                 <template v-if="!isHideout">
                   Press on a handle to mark the portal as missing.<br>

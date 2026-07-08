@@ -56,6 +56,8 @@ export interface Connection {
   isExpired?: boolean;
   startHandle?: HandleCoordinates;
   endHandle?: HandleCoordinates;
+  chainId?: string;
+  permanent?: boolean;
 }
 
 export interface NodePosition {
@@ -68,6 +70,7 @@ export interface NodePosition {
   rotation?: number;
   proximityTo?: string;
   explored?: boolean;
+  chainId?: string;
 }
 
 export interface CustomHandle {
@@ -149,6 +152,9 @@ export interface Room {
   createdAt: string;
   updatedAt?: string;
   plottedRoute?: string[];
+  plottedRouteFromZoneId?: string;
+  plottedRouteToZoneId?: string;
+  plottedRouteChainId?: string;
 }
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
@@ -183,6 +189,8 @@ export const ConnectionSchema = z.object({
   expiresAt: z.string().datetime(),
   reportedAt: z.string().datetime(),
   reportedBy: z.string().optional(),
+  chainId: z.string().nullable().optional(),
+  permanent: z.boolean().optional(),
   startHandle: z.object({
     position: z.object({ x: z.number(), y: z.number() }),
   }).optional(),
@@ -220,12 +228,22 @@ export const CreateConnectionBodySchema = z.object({
   toZoneId: z.string().min(1),
   fromHandleId: z.string().nullable().optional(),
   toHandleId: z.string().nullable().optional(),
-  secondsRemaining: z.number().int().min(1).max(86400),
+  permanent: z.boolean().optional(),
+  secondsRemaining: z.number().int().min(1).max(86400).optional(),
   slots: z.union([z.literal(7), z.literal(20)], {
     errorMap: () => ({ message: 'slots is required and must be 7 or 20' }),
-  }),
+  }).optional(),
   reportedBy: z.string().optional(),
   targetPosition: z.object({ x: z.number(), y: z.number() }).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.permanent) {
+    if (data.secondsRemaining === undefined || data.secondsRemaining === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'secondsRemaining is required', path: ['secondsRemaining'] });
+    }
+    if (data.slots === undefined || data.slots === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'slots is required and must be 7 or 20', path: ['slots'] });
+    }
+  }
 });
 
 export const UpdateConnectionBodySchema = z.object({
@@ -238,6 +256,63 @@ export const ChangePasswordBodySchema = z.object({
   newPassword: z.string().min(1),
   adminPassword: z.string().min(1),
 });
+
+export const AddChainBodySchema = z.object({
+  sourceZoneId: z.string().min(1),
+  // Optional initial position. When provided, the server inserts the new
+  // chain's source node at these coords instead of (0,0). Used by the
+  // "ghost on cursor" placement flow in the client.
+  x: z.number().optional(),
+  y: z.number().optional(),
+});
+
+export type RoomChain = {
+  id: string;
+  sourceZoneId: string;
+  chainNumber: number;
+  chainColor: string;
+};
+
+// Default palette for chains. Index 0 is reserved for the primary chain;
+// subsequent chains cycle through indices 1..N. Kept in sync with the
+// `1777245947015_add-chain-number-and-color.js` migration.
+export const CHAIN_COLOR_PALETTE = [
+  '#10b981', // primary — emerald
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#f59e0b', // orange
+  '#22c55e', // green
+  '#a78bfa', // light purple
+  '#06b6d4', // cyan
+  '#ffffff', // white
+] as const;
+
+export const PRIMARY_CHAIN_COLOR = CHAIN_COLOR_PALETTE[0];
+
+// Hex colour validator used for the PATCH /chains/:chainId/color endpoint
+// and shared between client + server.
+export const ChainColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
+export const UpdateChainBodySchema = z.object({
+  chainColor: ChainColorSchema,
+});
+
+export const RelocateChainBodySchema = z.object({
+  sourceZoneId: z.string().min(1),
+});
+
+export const RenameRoomBodySchema = z.object({
+  title: z.string().max(50),
+  adminPassword: z.string().min(1),
+});
+
+// Pick a default colour for a chain at the given 1-based chain number.
+export function defaultChainColor(chainNumber: number): string {
+  if (chainNumber <= 1) return CHAIN_COLOR_PALETTE[0];
+  const cycleSize = CHAIN_COLOR_PALETTE.length - 1; // exclude the primary slot
+  const idx = 1 + ((chainNumber - 2) % cycleSize);
+  return CHAIN_COLOR_PALETTE[idx];
+}
 
 export const ResourceEntrySchema = z.object({
   type: z.enum(['fibre', 'leather', 'ore', 'stone', 'wood']),
@@ -288,6 +363,7 @@ export const NodePositionSchema = z.object({
   customHandles: z.array(CustomHandleSchema).nullable().optional(),
   rotation: z.number().optional(),
   explored: z.boolean().optional(),
+  chainId: z.string().nullable().optional(),
 });
 
 export const RoomMemoryEntrySchema = z.object({
@@ -311,19 +387,25 @@ export const ImportRoomBodySchema = z.object({
       expiresAt: z.string().datetime(),
       reportedAt: z.string().datetime().optional(),
       reportedBy: z.string().optional(),
+      chainId: z.string().nullable().optional(),
+      permanent: z.boolean().optional(),
   })),
   nodePositions: z.array(NodePositionSchema),
   roomHistory: z.array(RoomMemoryEntrySchema).optional(),
+  chains: z.array(z.object({
+    id: z.string().optional(),
+    sourceZoneId: z.string(),
+  })).optional(),
 });
 
 // ── WebSocket message types ───────────────────────────────────────────────────
 
 export type ServerMessage =
   | { type: 'auth_ok' }
-  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[] }
+  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[] }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
-  | { type: 'connection_removed'; connectionId: string }
+  | { type: 'connection_removed'; connectionId?: string; removedZoneIds?: string[] }
   | { type: 'connection_expired'; connectionId: string }
   | { type: 'room_updated'; homeZoneId: string }
   | { type: 'room_reset' }
@@ -334,9 +416,15 @@ export type ServerMessage =
   | { type: 'memory_sync'; memory: RoomMemoryEntry[] }
   | { type: 'memory_updated'; entry: RoomMemoryEntry }
   | { type: 'memory_deleted'; zoneId: string }
-  | { type: 'plot_route_updated'; plottedRoute: string[]; destinationZoneId?: string }
+  | { type: 'plot_route_updated'; plottedRoute: string[]; fromZoneId?: string; toZoneId?: string; chainId?: string }
   | { type: 'password_rotated' }
   | { type: 'room_deleted' }
+  | { type: 'force_reload' }
+  | { type: 'chain_added'; chain: RoomChain }
+  | { type: 'chain_removed'; chainId: string; removedZoneIds: string[]; removedConnectionIds: string[] }
+  | { type: 'chain_updated'; chain: RoomChain }
+  | { type: 'chain_relocated'; chain: RoomChain; removedZoneIds: string[]; removedConnectionIds: string[]; newHomeZoneId?: string; newSourceNodePosition: NodePosition }
+  | { type: 'room_title_updated'; title: string }
   | { type: 'session_expired'; reason: string }
   | { type: 'error'; message: string };
 
@@ -345,4 +433,6 @@ export type ClientMessage =
   | { type: 'ping'; zoneName: string; nodeId?: string }
   | { type: 'polo' }
   | { type: 'update_node_positions'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
-  | { type: 'update_plot_route'; plottedRoute: string[]; destinationZoneId?: string };
+  | { type: 'rotate_zone'; zoneId: string; rotation: number }
+  | { type: 'update_plot_route'; plottedRoute: string[]; fromZoneId?: string; toZoneId?: string; chainId?: string }
+  | { type: 'create_connection'; fromZoneId: string; toZoneId: string; fromHandleId?: string; toHandleId?: string; secondsRemaining: number; slots?: number; reportedBy?: string; targetPosition?: { x: number; y: number }; permanent?: boolean };

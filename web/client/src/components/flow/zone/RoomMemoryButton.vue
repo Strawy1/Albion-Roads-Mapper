@@ -21,7 +21,6 @@ const props = defineProps<{
   entry: RoomMemoryEntry | null;
   zoneName: string;
   zoneId: string;
-  hasRotationError?: boolean;
 }>();
 
 const dialogOpen = ref(false);
@@ -30,7 +29,7 @@ const roomStore = useRoomStore();
 const showToast = inject<(msg: string, type?: 'info' | 'error') => void>('showToast');
 
 const hasHistory = computed(() => !!props.entry && props.entry.timesAdded.length > 1);
-const isEnabled = computed(() => hasHistory.value || props.hasRotationError);
+const isEnabled = computed(() => hasHistory.value);
 
 const lastSeen = computed(() => {
   const arr = props.entry?.timesAdded;
@@ -51,7 +50,6 @@ async function deleteHistoryAndReset() {
     headers: { 'Authorization': `Bearer ${roomStore.token}` },
   });
   roomStore.resetZonePortals(props.zoneId);
-  roomStore.clearRotationError(props.zoneId);
   deleteResetConfirmOpen.value = false;
   dialogOpen.value = false;
   showToast?.('Zone history deleted and portals reset.');
@@ -65,7 +63,7 @@ async function deleteHistoryAndReset() {
         <TooltipTrigger asChild>
           <button
             class="room-memory-btn"
-            :class="{ 'room-memory-btn--disabled': !isEnabled, 'room-memory-btn--error': hasRotationError }"
+            :class="{ 'room-memory-btn--disabled': !isEnabled }"
             :disabled="!isEnabled"
             @click.stop="isEnabled && (dialogOpen = true)"
             aria-label="Room memory"
@@ -75,11 +73,7 @@ async function deleteHistoryAndReset() {
         </TooltipTrigger>
         <TooltipPortal>
           <TooltipContent class="bg-black text-white text-xs px-2 py-1 rounded shadow-lg z-[10000] text-center">
-            <template v-if="hasRotationError">
-              <div class="text-red-400 font-bold">⚠ Rotation mismatch detected!</div>
-              <div>Click to open and use "Delete history &amp; Reset"<br>to fix the portal layout for this zone.</div>
-            </template>
-            <template v-else-if="hasHistory">
+            <template v-if="hasHistory">
               <div v-if="lastSeen">Last seen: <b>{{ formatDate(lastSeen) }}</b></div>
               <div>Times seen: <b>{{ timesSeen }}</b></div>
             </template>
@@ -177,13 +171,5 @@ async function deleteHistoryAndReset() {
 .room-memory-btn--disabled {
   opacity: 0.4;
   cursor: default;
-}
-.room-memory-btn--error {
-  background: rgba(180, 30, 30, 0.85);
-  border-color: rgba(255, 80, 80, 0.8);
-}
-.room-memory-btn--error:hover {
-  background: rgba(220, 50, 50, 0.95);
-  border-color: rgba(255, 120, 120, 0.9);
 }
 </style>

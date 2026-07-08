@@ -105,14 +105,15 @@ describe('POST /api/rooms', () => {
     expect(res.json<{ error: string }>().error).toMatch(/zone catalogue/i);
   });
 
-  it('rejects when homeZoneId is not a roads home', async () => {
+  it('accepts any catalogue zone as homeZoneId (relaxed from roads-hideout-only)', async () => {
+    // After the multi-chain refactor, a room may be rooted at any zone in the catalogue,
+    // not only roads hideouts. Only zones missing from the catalogue are rejected.
     const res = await app.inject({
       method: 'POST',
       url: '/api/rooms',
       payload: { password: 'secret', adminPassword: 'admin', homeZoneId: 'willow-wood', vanityUrl: 'my-room' },
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ error: string }>().error).toMatch(/not a valid roads home/i);
+    expect([201, 409]).toContain(res.statusCode);
   });
 });
 
@@ -427,5 +428,172 @@ describe('Home Zone Node Protection', () => {
 
     // It should now return 404 since the route is removed
     expect(res.statusCode).toBe(404);
+  });
+});
+
+// Regression: a chain (primary or otherwise) must always retain its source
+// zone. The room state from the corrupt-room report had a chain whose only
+// remaining node was its own source — we want to guarantee no delete code
+// path can EVER orphan or remove a chain's source node.
+describe('Chain source zone deletion protection', () => {
+  it('DELETE /api/rooms/:id/nodes/:zoneId returns 400 when the target is the home zone', async () => {
+    const roomId = 'room-protect-home';
+    const token = app.jwt.sign({ roomId });
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [{ home_zone_id: VALID_ZONE_ID }] }); // SELECT rooms
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/nodes/${VALID_ZONE_ID}`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/home zone/i);
+    // Must not issue any DELETE for the home zone position.
+    const deletePositionCalls = mockDb.query.mock.calls.filter((c: any[]) =>
+      typeof c[0] === 'string' && c[0].includes('DELETE FROM room_node_positions')
+    );
+    expect(deletePositionCalls).toHaveLength(0);
+  });
+
+  it('DELETE /api/rooms/:id/nodes/:zoneId returns 400 when the target is a non-primary chain source', async () => {
+    const roomId = 'room-protect-chain-src';
+    const chainSourceZone = 'qiient-al-odesum';
+    const token = app.jwt.sign({ roomId });
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [{ home_zone_id: VALID_ZONE_ID }] }) // SELECT rooms (different home)
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] }); // SELECT 1 FROM room_chains — IS a chain source
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/nodes/${chainSourceZone}`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/chain source/i);
+    const deletePositionCalls = mockDb.query.mock.calls.filter((c: any[]) =>
+      typeof c[0] === 'string' && c[0].includes('DELETE FROM room_node_positions')
+    );
+    expect(deletePositionCalls).toHaveLength(0);
+  });
+
+  it('DELETE /api/rooms/:id/chains/:chainId rejects deleting the primary chain', async () => {
+    const roomId = 'room-protect-primary-chain';
+    const chainId = 'primary-chain-id';
+    const token = app.jwt.sign({ roomId });
+    mockDb.query
+      .mockResolvedValueOnce({ rows: [{ home_zone_id: VALID_ZONE_ID }] }) // SELECT rooms
+      .mockResolvedValueOnce({ rows: [{ id: chainId, source_zone_id: VALID_ZONE_ID }] }); // SELECT chain — source == home
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/chains/${chainId}`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/primary chain/i);
+    // Must not open a transaction or issue any DELETE for positions/connections.
+    expect(mockDb.connect).not.toHaveBeenCalled();
+  });
+
+  it('DELETE /api/rooms/:id/connections (reset) preserves ALL chain source node positions, not just home', async () => {
+    const bcrypt = await import('bcrypt');
+    const roomId = 'room-reset-preserve-chains';
+    const adminHash = await bcrypt.default.hash('admin-pw', 1);
+    const token = app.jwt.sign({ roomId });
+
+    const homeZone = VALID_ZONE_ID;
+    const secondaryChainSource = 'qiient-al-odesum';
+
+    const clientMock = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash, home_zone_id: homeZone }] }) // SELECT rooms
+        .mockResolvedValueOnce({ rows: [ // SELECT room_chains source_zone_ids
+          { source_zone_id: homeZone },
+          { source_zone_id: secondaryChainSource },
+        ] })
+        .mockResolvedValue({ rows: [], rowCount: 0 }), // remaining queries (DELETE connections / positions / UPDATE rooms / COMMIT)
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(204);
+
+    // The DELETE FROM room_node_positions query must exclude every chain
+    // source (home + every non-primary chain source), not just the home zone.
+    const positionDeleteCall = clientMock.query.mock.calls.find((c: any[]) =>
+      typeof c[0] === 'string' && c[0].includes('DELETE FROM room_node_positions')
+    );
+    expect(positionDeleteCall).toBeDefined();
+    const preservedArg = positionDeleteCall![1][1] as string[];
+    expect(Array.isArray(preservedArg)).toBe(true);
+    expect(preservedArg).toEqual(expect.arrayContaining([homeZone, secondaryChainSource]));
+    expect(preservedArg).toHaveLength(2);
+  });
+
+  it('DELETE /api/rooms/:id/connections (reset) self-heals chain source node positions and their chain_id', async () => {
+    // Regression for the corrupt-room scenario: a chain whose source zone
+    // either lost its node-position row, or kept the row but with a NULL /
+    // stale chain_id. After a reset, every chain MUST end up with its
+    // source zone row present and tagged with the correct chain_id.
+    const bcrypt = await import('bcrypt');
+    const roomId = 'room-reset-heal-chains';
+    const adminHash = await bcrypt.default.hash('admin-pw', 1);
+    const token = app.jwt.sign({ roomId });
+
+    const homeZone = VALID_ZONE_ID;
+    const primaryChainId = 'chain-primary';
+    const secondaryChainId = 'chain-secondary';
+    const secondaryChainSource = 'qiient-al-odesum';
+
+    const clientMock = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash, home_zone_id: homeZone }] }) // SELECT rooms
+        .mockResolvedValueOnce({ rows: [ // SELECT room_chains (id + source_zone_id)
+          { id: primaryChainId, source_zone_id: homeZone },
+          { id: secondaryChainId, source_zone_id: secondaryChainSource },
+        ] })
+        .mockResolvedValue({ rows: [], rowCount: 0 }), // remaining queries
+      release: vi.fn(),
+    };
+    mockDb.connect.mockResolvedValueOnce(clientMock);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(204);
+
+    const upsertCalls = clientMock.query.mock.calls.filter((c: any[]) =>
+      typeof c[0] === 'string'
+        && c[0].includes('INSERT INTO room_node_positions')
+        && c[0].includes('ON CONFLICT (room_id, zone_id)')
+    );
+    // One UPSERT per chain source — primary + secondary.
+    expect(upsertCalls).toHaveLength(2);
+
+    // Every chain source upsert must be called with [roomId, sourceZoneId, chainId]
+    // so a missing row gets reconstructed AND any stale/NULL chain_id is
+    // overwritten with the chain's id.
+    const upsertParams = upsertCalls.map((c: any[]) => c[1]);
+    expect(upsertParams).toEqual(expect.arrayContaining([
+      [roomId, homeZone, primaryChainId],
+      [roomId, secondaryChainSource, secondaryChainId],
+    ]));
   });
 });
