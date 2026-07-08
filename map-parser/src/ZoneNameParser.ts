@@ -7,8 +7,15 @@ export interface ZoneSocketInfo {
 }
 
 export class ZoneNameParser {
+  // Names that match one of the Avalonian Rest prefixes below but are regular
+  // roads maps, not roads hideouts.
+  private static readonly NON_HIDEOUT_PREFIX_MATCHES = new Set(['Setos-Aiaitum', 'Setitos-Obobrom']);
+
   public static isAvalonianRest(zone: GameMap): boolean {
     var name = zone.mapName;
+    if (this.NON_HIDEOUT_PREFIX_MATCHES.has(name)) {
+      return false;
+    }
     var prefixes = ['Qua', 'Qii', 'Sec', 'Set'];
     return prefixes.some(prefix => name.startsWith(prefix));
   }
