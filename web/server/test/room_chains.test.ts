@@ -351,8 +351,6 @@ describe('DELETE /api/rooms/:id/chains/:chainId', () => {
         .mockResolvedValueOnce({ rows: [], rowCount: 2 })
         // DELETE positions
         .mockResolvedValueOnce({ rows: [], rowCount: 2 })
-        // DELETE memory
-        .mockResolvedValueOnce({ rows: [], rowCount: 2 })
         // DELETE room_chains
         .mockResolvedValueOnce({ rows: [], rowCount: 1 })
         // UPDATE rooms.updated_at
@@ -382,6 +380,13 @@ describe('DELETE /api/rooms/:id/chains/:chainId', () => {
     expect(payload.chainId).toBe('chain-to-delete');
     expect(payload.removedConnectionIds).toEqual(['conn-1', 'conn-2']);
     expect(payload.removedZoneIds).toEqual([OTHER_ROADS_ZONE, 'some-other-zone']);
+
+    // Map history must survive a chain deletion — room_node_memory is only
+    // ever deleted via the explicit memory endpoints.
+    const memoryDeleteCalls = txClient.query.mock.calls.filter(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
+    );
+    expect(memoryDeleteCalls).toHaveLength(0);
   });
 });
 
@@ -425,8 +430,6 @@ describe('POST /api/rooms/:id/chains/:chainId/relocate', () => {
         // touching the orphan zone get dropped)
         .mockResolvedValueOnce({ rows: [{ id: 'conn-a' }], rowCount: 1 })
         // DELETE room_node_positions WHERE zone_id = ANY(...)
-        .mockResolvedValueOnce({ rows: [], rowCount: 2 })
-        // DELETE room_node_memory
         .mockResolvedValueOnce({ rows: [], rowCount: 2 })
         // INSERT new source node position
         .mockResolvedValueOnce({ rows: [], rowCount: 1 })
@@ -491,5 +494,12 @@ describe('POST /api/rooms/:id/chains/:chainId/relocate', () => {
     expect(payload.removedZoneIds).toContain(OLD_SOURCE);
     expect(payload.removedZoneIds).not.toContain(NEW_SOURCE_ZONE);
     expect(payload.removedConnectionIds).toContain('conn-a');
+
+    // Map history must survive a chain relocation — room_node_memory is only
+    // ever deleted via the explicit memory endpoints.
+    const memoryDeleteCalls = txClient.query.mock.calls.filter(
+      (call: any[]) => typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
+    );
+    expect(memoryDeleteCalls).toHaveLength(0);
   });
 });

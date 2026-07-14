@@ -382,9 +382,11 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       // Determine which of the connection's endpoint zones are now orphaned —
       // i.e. have no remaining connections and are NOT a chain source / home
       // zone. We compute this in a single set-based query (no per-zone loop)
-      // and delete all orphans + their memory in batch, then broadcast ONE
+      // and delete all orphan positions in batch, then broadcast ONE
       // `connection_removed` message containing both the connectionId and the
       // list of removed zoneIds so the client can update in a single step.
+      // Map history (room_node_memory) is deliberately left intact — history
+      // is only ever deleted when the user explicitly asks for it.
       const { rows: orphanRows } = await app.db.query<{ zone_id: string }>(
         `SELECT z.zone_id
          FROM unnest($2::text[]) AS z(zone_id)
@@ -408,10 +410,6 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       if (removedZoneIds.length > 0) {
         await app.db.query(
           'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = ANY($2::text[])',
-          [id, removedZoneIds]
-        );
-        await app.db.query(
-          'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = ANY($2::text[])',
           [id, removedZoneIds]
         );
         trackRoomModified(app.db, id);
@@ -462,12 +460,11 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'Cannot delete a chain source zone' });
       }
 
+      // Only the node position is removed — the zone's map history
+      // (room_node_memory) survives so a future re-add restores it. History
+      // is only deleted via the explicit memory endpoints.
       await app.db.query(
         'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = $2',
-        [id, zoneId]
-      );
-      await app.db.query(
-        'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = $2',
         [id, zoneId]
       );
 

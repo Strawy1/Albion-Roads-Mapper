@@ -895,8 +895,6 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: zoneB }] });
     // Batch DELETE from room_node_positions (ANY)
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-    // Batch DELETE from room_node_memory (ANY)
-    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
 
     const res = await app.inject({
       method: 'DELETE',
@@ -924,8 +922,6 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
     // (sourceZone), so only the downstream zone is returned.
     mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: downstreamZone }] });
     // Batch DELETE from room_node_positions
-    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
-    // Batch DELETE from room_node_memory
     mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
 
     const broadcastMock = vi.mocked(broadcast);
@@ -959,6 +955,105 @@ describe('DELETE /api/rooms/:id/connections/:connId', () => {
       connectionId: connId,
       removedZoneIds: [downstreamZone],
     });
+  });
+});
+
+describe('DELETE /api/rooms/:id/connections/:connId — map history preservation', () => {
+  // Map history (room_node_memory) must survive every implicit map edit —
+  // it is only ever deleted via the explicit memory endpoints
+  // (DELETE /api/rooms/:id/memory and /memory/:zoneId). These tests guard
+  // against the regression where orphan cleanup wiped a zone's entire
+  // times_added visit log as a side effect of deleting a connection.
+
+  it('preserves the orphaned zone\'s map history when its last connection is deleted', async () => {
+    const connId = 'conn-history-1';
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: connId, from_zone_id: VALID_ZONE_A, to_zone_id: VALID_ZONE_B }] }); // connection lookup
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM connections
+    mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: VALID_ZONE_B }] }); // orphan SELECT — zoneB now has no connections
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM room_node_positions
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections/${connId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(204);
+
+    // The orphaned zone's node position goes, but its map history stays.
+    const positionDeleteCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_positions')
+    );
+    expect(positionDeleteCalls).toHaveLength(1);
+    expect(positionDeleteCalls[0][1]).toEqual([roomId, [VALID_ZONE_B]]);
+
+    const memoryDeleteCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
+    );
+    expect(memoryDeleteCalls).toHaveLength(0);
+  });
+
+  it('leaves map history untouched when neither endpoint zone becomes orphaned', async () => {
+    const connId = 'conn-history-2';
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: connId, from_zone_id: VALID_ZONE_A, to_zone_id: VALID_ZONE_B }] }); // connection lookup
+    mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM connections
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // orphan SELECT — both zones still have other connections
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}/connections/${connId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const memoryDeleteCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
+    );
+    expect(memoryDeleteCalls).toHaveLength(0);
+  });
+
+  it('preserves the map history of every zone in a branch pruned leaf-to-root (recursive delete flow)', async () => {
+    // Mirrors the client's onDeleteRecursive / node delete flow: a branch
+    // home → Z1 → Z2 → Z3 is pruned by deleting its connections in reverse
+    // order. Each request orphans one more zone; every orphan's node position
+    // is removed but its history row must survive all three deletions.
+    const HOME = VALID_ZONE_A;
+    const Z1 = VALID_ZONE_B;
+    const Z2 = 'cetitos-aiayrom';
+    const Z3 = 'sases-aoarsum';
+
+    const branch = [
+      { connId: 'conn-z2-z3', from: Z2, to: Z3, orphaned: Z3 },
+      { connId: 'conn-z1-z2', from: Z1, to: Z2, orphaned: Z2 },
+      { connId: 'conn-home-z1', from: HOME, to: Z1, orphaned: Z1 },
+    ];
+
+    for (const step of branch) {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: step.connId, from_zone_id: step.from, to_zone_id: step.to }] }); // connection lookup
+      mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM connections
+      mockDb.query.mockResolvedValueOnce({ rows: [{ zone_id: step.orphaned }] }); // orphan SELECT — the to-zone is now orphaned
+      mockDb.query.mockResolvedValueOnce({ rowCount: 1, rows: [] }); // DELETE FROM room_node_positions
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/rooms/${roomId}/connections/${step.connId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(204);
+    }
+
+    // Every orphaned zone's position was removed…
+    const positionDeleteCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_positions')
+    );
+    expect(positionDeleteCalls.flatMap((call: any[]) => call[1][1])).toEqual([Z3, Z2, Z1]);
+
+    // …but not a single map history row was touched.
+    const memoryDeleteCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
+    );
+    expect(memoryDeleteCalls).toHaveLength(0);
   });
 });
 
