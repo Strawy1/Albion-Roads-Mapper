@@ -1,27 +1,13 @@
 import { z } from 'zod';
+import type { GameMap, KnownFeatures, MapType } from 'shared';
 
-export type MapType =
-  | 'royalBlue'
-  | 'royalYellow'
-  | 'royalRed'
-  | 'outlands'
-  | 'roads'
-  | 'other';
+// The domain types are owned by the shared package (web/shared/src/types.ts);
+// re-export them so map-parser code has a single source of truth.
+export type { GameMap, KnownFeatures, MapType };
 
-export type KnownFeatures = string[];
-
-export interface GameMap {
-  mapID: string;
-  mapName: string;
-  mapType: MapType;
-  tier: number;
-  category?: string;
-  isRoadsHideout?: true;
-  knownFeatures?: KnownFeatures;
-  mapShape?: string;
-  socketCount?: number;
-  largeSocketCount?: number;
-  smallSocketCount?: number;
+export interface GuaranteedContent {
+  type: 'LargeGreenChest' | 'LargeBlueChest' | 'LargeGoldChest';
+  category: 'chest';
 }
 
 export const MapTypeSchema = z.enum([
@@ -35,7 +21,9 @@ export const MapTypeSchema = z.enum([
 
 export const KnownFeaturesSchema = z.array(z.string());
 
-export const GameMapSchema = z.object({
+// Output validation for generated maps.json entries. Zod strips unknown keys,
+// so every GameMap field must be listed here or sync/migrate silently drops it.
+export const GameMapSchema: z.ZodType<GameMap> = z.object({
   mapID: z.string(),
   mapName: z.string(),
   mapType: MapTypeSchema,
@@ -47,4 +35,5 @@ export const GameMapSchema = z.object({
   socketCount: z.number().int().nonnegative().optional(),
   largeSocketCount: z.number().int().nonnegative().optional(),
   smallSocketCount: z.number().int().nonnegative().optional(),
+  proximityTo: z.string().optional(),
 });

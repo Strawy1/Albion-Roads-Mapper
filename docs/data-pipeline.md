@@ -56,8 +56,7 @@ Pipeline (`map-parser/scripts/syncMaps.ts`): fetch/read source → skip `EXCLUDE
 
 `map-parser/scripts/migrateMaps.ts` is a one-off in-place re-derivation over the existing `maps.json` (recomputes shapes/sockets/content).
 
-## Known drift (be careful)
+## Type ownership (be careful)
 
-- **Two independent `GameMap` definitions** exist — `web/shared/src/types.ts` and `map-parser/src/types.ts` (with its own Zod `GameMapSchema`). They must be kept consistent by hand when the data shape changes.
-- **`knownResources` vs `knownFeatures`:** the live data and interfaces use `knownFeatures`, but shared's `ZoneSchema` and parts of `web/shared/test/zonesAdapter.test.ts` still reference `knownResources` (the test filters to an empty set, so it passes vacuously).
-- `map-parser/src/ZoneNameParser.ts` imports a type-only `GuaranteedContent` symbol that `map-parser/src/types.ts` doesn't define (elided at runtime by tsx, so it works, but it's a dangling reference).
+- **`GameMap` is owned by shared** (`web/shared/src/types.ts`); `map-parser/src/types.ts` re-exports it and keeps only the Zod `GameMapSchema` (typed `z.ZodType<GameMap>` so a field-type mismatch fails typecheck). When adding a `GameMap` field, add it to the shared interface **and** to `GameMapSchema` — Zod strips unknown keys, and both `syncMaps` and `migrateMaps` write `parsed.data`, so a field missing from the schema is silently dropped from `maps.json`.
+- map-parser has **no build/typecheck step** in its scripts (`tsx` elides types at runtime) — run `npx tsc --noEmit` in `map-parser/` after touching its types.

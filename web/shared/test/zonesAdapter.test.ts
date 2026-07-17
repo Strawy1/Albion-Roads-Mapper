@@ -29,14 +29,15 @@ describe('zones adapter', () => {
     });
   });
 
-  it('keeps knownResources', () => {
-    const roadZonesWithOres = maps.filter(
-      (m) => m.mapType === 'roads' && m.knownResources && m.knownResources.length > 0,
+  it('keeps knownFeatures', () => {
+    const roadZonesWithFeatures = maps.filter(
+      (m) => m.mapType === 'roads' && m.knownFeatures && m.knownFeatures.length > 0,
     );
-    roadZonesWithOres.forEach((m) => {
+    expect(roadZonesWithFeatures.length).toBeGreaterThan(0);
+    roadZonesWithFeatures.forEach((m) => {
       const zone = ZONE_BY_ID.get(m.mapID);
       expect(zone).toBeDefined();
-      expect(zone!.knownResources).toEqual(m.knownResources);
+      expect(zone!.knownFeatures).toEqual(m.knownFeatures);
     });
   });
 

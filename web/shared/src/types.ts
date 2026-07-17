@@ -174,9 +174,11 @@ export const ZoneSchema = z.object({
   name: z.string(),
   type: ZoneTypeSchema,
   tier: z.number().int().min(1).max(8),
-  knownResources: z.array(z.string()).optional(),
+  knownFeatures: z.array(z.string()).optional(),
   isRoadsHome: z.boolean().optional(),
   category: z.string().optional(),
+  mapShape: z.string().optional(),
+  proximityTo: z.string().optional(),
 });
 
 export const ConnectionSchema = z.object({

@@ -142,7 +142,7 @@ async function main(): Promise<void> {
         category: getZoneCategory(name, type),
       };
 
-      if (type === 'roads' || type === 'roadsHideout') {
+      if (type === 'roads') {
         const resources = extractResources(icons);
         const shape = ZoneNameParser.parseMapShape({ mapName: name, mapID: id } as any);
         const socketInfo = ZoneNameParser.resolveSocketInfo(shape);

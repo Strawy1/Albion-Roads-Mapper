@@ -76,10 +76,10 @@ pnpm --filter client test
 ```
 
 **Test counts (all green):**
-- `map-parser` — 42 tests (data classification, sync logic)
-- `shared` — 32 tests (zones adapter, categorization)
-- `server` — 27 tests (rooms, connections, expiry, WebSocket)
-- `client` — 31 tests (connectionStyle, roomStore, ZoneCombobox, ReportForm)
+- `map-parser` — 57 tests (data classification, sync logic)
+- `shared` — 97 tests (zones adapter, categorization, rotation, connections)
+- `server` — 251 tests (rooms, connections, chains, expiry, WebSocket, analytics)
+- `client` — 288 tests (stores, components, connection/handle geometry, utils)
 
 ---
 
@@ -100,7 +100,7 @@ WebSocket at `/ws/rooms/:id`. Authenticated via JWT (sent as first `auth` messag
 
 ### Security
 - Passwords hashed with `bcrypt` (cost 12).
-- Short-lived JWT (24 h) for API and WS auth.
+- Per-room JWT (7 days, invalidated on password rotation) for API and WS auth.
 - Rate limiting: `POST /api/rooms` → 10/hour/IP; `POST /api/rooms/:id/auth` → 20/hour/IP.
 - Zone validation on every connection submission (both IDs must exist in catalogue, must differ).
 

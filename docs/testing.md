@@ -25,7 +25,7 @@ pnpm lint                          # eslint, all packages
 
 ## shared (`web/shared/test/`)
 
-- Node env. Suites: `zonesAdapter.test.ts` (GameMap→Zone mapping — note the stale `knownResources` references, see [data-pipeline.md](data-pipeline.md#known-drift-be-careful)), `zoneCategorization.test.ts` (exhaustive `getZoneCategory` coverage), `connections.test.ts` (cycle/loop detection), `rotation.test.ts` (rotation math + handle canonicalization).
+- Node env. Suites: `zonesAdapter.test.ts` (GameMap→Zone mapping), `zoneCategorization.test.ts` (exhaustive `getZoneCategory` coverage), `connections.test.ts` (cycle/loop detection), `rotation.test.ts` (rotation math + handle canonicalization).
 
 ## map-parser (`map-parser/test/`)
 
@@ -37,4 +37,6 @@ pnpm lint                          # eslint, all packages
 - Server: prefer `setupTestApp()`; mock query results in the exact order the handler issues them; if you touch broadcast behaviour, assert on the (mocked or real-WS) messages rather than internals.
 - Client: drive components through props/user events, not internal state; remember countdowns depend on the injected `globalNow` ref.
 - Anything touching zone data should use real ids from the catalogue (`ZONE_BY_ID`) so server-side zone validation passes.
+- Analytics tests must compute "today" with `londonDateString()` (from `src/analytics.ts`), never `toISOString().slice(0, 10)` — the analytics buckets are Europe/London, and UTC dates diverge around midnight during BST.
 - The README's per-package test counts drift out of date quickly — trust `pnpm test` output, not the README.
+- map-parser has no typecheck in its test script; run `npx tsc --noEmit` in `map-parser/` when changing its types.

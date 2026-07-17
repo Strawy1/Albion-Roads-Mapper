@@ -658,7 +658,8 @@ describe('Analytics — node position updates via WebSocket', () => {
 
     // Clear any state from previous tests before listening
     const { clearAnalyticsDate } = await import('../src/broadcast_analytics.js');
-    const today = new Date().toISOString().slice(0, 10);
+    const { londonDateString } = await import('../src/analytics.js');
+    const today = londonDateString();
     clearAnalyticsDate(today);
 
     await app.listen({ port: 0 });
@@ -687,7 +688,8 @@ describe('Analytics — node position updates via WebSocket', () => {
   it('counts the same token only once for unique_tokens on the same day', async () => {
     // Clear stale in-memory state from previous tests
     const { clearAnalyticsDate } = await import('../src/broadcast_analytics.js');
-    const today = new Date().toISOString().slice(0, 10);
+    const { londonDateString } = await import('../src/analytics.js');
+    const today = londonDateString();
     clearAnalyticsDate(today);
 
     // First connection

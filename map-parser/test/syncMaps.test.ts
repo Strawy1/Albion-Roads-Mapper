@@ -115,7 +115,7 @@ function processEntry(raw: RawEntry): GameMap | { skip: true; reason: string } |
   const mapType: MapType = typeResult === 'WARN_OTHER' ? 'other' : typeResult;
   const mapID = raw.name.toLowerCase().replace(/\s+/g, '-');
   const result: GameMap = { mapID, mapName: raw.name, mapType, tier: tierNum };
-  if (mapType === 'roads' || mapType === 'roadsHideout') {
+  if (mapType === 'roads') {
     result.knownFeatures = extractResources(raw.icons);
   }
   return result;
