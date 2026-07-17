@@ -338,14 +338,12 @@ export const useRoomStore = defineStore('room', () => {
         }
         // The server batches any zones that became orphaned (no remaining
         // connections, not a chain source / home zone) into the same message
-        // via `removedZoneIds`, so we remove them in one step here.
+        // via `removedZoneIds`, so we remove them in one step here. Map
+        // history is NOT touched — the server keeps room_node_memory and so
+        // do we; history only goes away via an explicit `memory_deleted`.
         if (msg.removedZoneIds && msg.removedZoneIds.length > 0) {
           const removedZones = new Set(msg.removedZoneIds);
           nodePositions.value = nodePositions.value.filter(p => !removedZones.has(p.zoneId));
-          try {
-            const memoryStore = useRoomMemoryStore();
-            for (const zoneId of removedZones) memoryStore.applyMemoryDeleted(zoneId);
-          } catch { /* memory store optional */ }
         }
         lastUpdate.value = new Date();
         break;
@@ -426,14 +424,9 @@ export const useRoomStore = defineStore('room', () => {
           connections.value = connections.value.filter(c => !removedConns.has(c.id));
         }
         // Drop every wiped node, then add the freshly-created source node row.
+        // Map history for the removed zones is intentionally kept.
         nodePositions.value = nodePositions.value.filter(p => !removedZones.has(p.zoneId));
         nodePositions.value = [...nodePositions.value, msg.newSourceNodePosition];
-        try {
-          const memoryStore = useRoomMemoryStore();
-          for (const zoneId of removedZones) {
-            memoryStore.applyMemoryDeleted(zoneId);
-          }
-        } catch { /* memory store optional */ }
         if (msg.newHomeZoneId) {
           homeZoneId.value = msg.newHomeZoneId;
         }
@@ -449,13 +442,8 @@ export const useRoomStore = defineStore('room', () => {
           connections.value = connections.value.filter(c => !removedConns.has(c.id));
         }
         if (removedZones.size > 0) {
+          // Map history for the removed zones is intentionally kept.
           nodePositions.value = nodePositions.value.filter(p => !removedZones.has(p.zoneId));
-          try {
-            const memoryStore = useRoomMemoryStore();
-            for (const zoneId of removedZones) {
-              memoryStore.applyMemoryDeleted(zoneId);
-            }
-          } catch { /* memory store optional */ }
         }
         lastUpdate.value = new Date();
         break;

@@ -507,12 +507,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       removedConnectionIds = deletedConns.map((r) => r.id);
 
       if (removedZoneIds.length > 0) {
+        // Positions only — map history (room_node_memory) is preserved and
+        // only ever deleted via the explicit memory endpoints.
         await client.query(
           'DELETE FROM room_node_positions WHERE room_id = $1 AND zone_id = ANY($2::text[])',
-          [id, removedZoneIds]
-        );
-        await client.query(
-          'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = ANY($2::text[])',
           [id, removedZoneIds]
         );
       }
@@ -627,14 +625,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       );
       removedZoneIds = posRows.map((r) => r.zone_id);
 
+      // Map history (room_node_memory) is preserved for the removed zones —
+      // it is only ever deleted via the explicit memory endpoints.
       await client.query('DELETE FROM connections WHERE room_id = $1 AND chain_id = $2', [id, chainId]);
       await client.query('DELETE FROM room_node_positions WHERE room_id = $1 AND chain_id = $2', [id, chainId]);
-      if (removedZoneIds.length > 0) {
-        await client.query(
-          'DELETE FROM room_node_memory WHERE room_id = $1 AND zone_id = ANY($2::text[])',
-          [id, removedZoneIds]
-        );
-      }
       await client.query('DELETE FROM room_chains WHERE id = $1 AND room_id = $2', [chainId, id]);
       await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
 
