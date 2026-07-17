@@ -23,7 +23,7 @@ Route: `GET /ws/rooms/:id` — handler in `web/server/src/ws.ts`; broadcast regi
 | `polo` | — | `marcopolo.ts` | Heartbeat reply |
 | `create_connection` | `{ fromZoneId, toZoneId, fromHandleId?, toHandleId?, secondsRemaining, slots?, reportedBy?, targetPosition?, permanent? }` | `operations/create_connection.ts` | Same rules as HTTP POST plus an explicit duplicate-edge check |
 | `update_node_positions` | `{ nodePositions, updateLastUpdated? }` | `operations/update_node_positions.ts` | Dedup by zoneId, rotation self-heal, delete+reinsert preserving `chain_id`, roads memory update |
-| `rotate_zone` | `{ zoneId, rotation }` | `operations/rotate_zone.ts` | Normalizes rotation, canonicalizes handles under a `FOR UPDATE` room lock, mirrors into memory |
+| `rotate_zone` | `{ zoneId, rotation, customHandles? }` | `operations/rotate_zone.ts` | Normalizes rotation, canonicalizes handles under a `FOR UPDATE` room lock, upserts the memory mirror and broadcasts `memory_updated`. When `customHandles` is present (the ZoneHandleEditor save path) it is the source of truth for the handle set; otherwise the stored handles are used. The resulting single-row `node_positions_updated` goes to **all clients including the sender** — this is what lets the editing user see their own portal changes live (previously the editor saved via `rotate_zone` + `update_node_positions`, and the rotate echo carried stale handles back to the sender while the handles broadcast excluded them) |
 | `update_plot_route` | `{ plottedRoute, fromZoneId?, toZoneId?, chainId? }` | `operations/update_plot_route.ts` | Persists the plotted route on `rooms` |
 
 Operation plumbing: `src/operations/types.ts` (`OperationContext` / `OperationHandler`).
@@ -57,7 +57,7 @@ Operation plumbing: `src/operations/types.ts` (`OperationContext` / `OperationHa
 ## Broadcast semantics
 
 - Registry: `roomSockets: Map<roomId, Set<WebSocket>>` — **authenticated sockets only** (`broadcast.ts`).
-- `broadcast(roomId, message, exclude?)` serializes once and sends to every open socket in the room; `exclude` is used for echoes the sender already applied optimistically (e.g. `update_node_positions`, `update_plot_route` exclude the sender).
+- `broadcast(roomId, message, exclude?)` serializes once and sends to every open socket in the room; `exclude` is used for echoes the sender already applied optimistically (e.g. `update_node_positions`, `update_plot_route` exclude the sender). `rotate_zone` deliberately does **not** exclude the sender — its echo is the authoritative reapply for handle/rotation edits. A mutation whose authoritative result must reach the sender therefore cannot ride on an excluded broadcast issued by a *different* message (this was the hideout-portal-save bug).
 - `broadcastAll(message)` reaches every socket in every room (used for global `watching` totals).
 - **Full-array positions:** after most node mutations the server re-reads the room's *entire* `room_node_positions` set and broadcasts it as `node_positions_updated` — clients replace-merge rather than patch. Exceptions that send a **single-row** array: `POST /chains` (just the new source node, to avoid clobbering concurrent drags) and `rotate_zone`.
 - Connections are *not* re-sent wholesale after the initial `sync`; they flow as granular `connection_*` events.

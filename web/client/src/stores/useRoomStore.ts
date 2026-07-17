@@ -689,6 +689,27 @@ export const useRoomStore = defineStore('room', () => {
     track('update_node_handles');
   }
 
+  function saveZoneHandles(zoneId: string, customHandles: CustomHandle[], rotation?: number) {
+    const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
+    if (index === -1) return;
+    // The server drops rotate_zone messages whose rotation isn't a number, so
+    // fall back to the node's current rotation rather than lose the save.
+    const effectiveRotation = typeof rotation === 'number' ? rotation : (nodePositions.value[index].rotation ?? 0);
+    const newNodePositions = [...nodePositions.value];
+    newNodePositions[index] = { ...newNodePositions[index], customHandles, rotation: effectiveRotation, explored: true };
+    nodePositions.value = newNodePositions; // Optimistic update
+    lastUpdate.value = new Date();
+    // Handles + rotation travel in ONE rotate_zone message so the server can
+    // canonicalize and persist them atomically, then broadcast the
+    // authoritative row to every client *including this one*. Sending them as
+    // two messages (rotate_zone, then update_node_positions) made the rotate
+    // echo carry the stale DB handles back to the sender, reverting the edit
+    // on the sender's screen until a reload.
+    send({ type: 'rotate_zone', zoneId, rotation: effectiveRotation, customHandles });
+    clearRotationError(zoneId);
+    track('update_node_handles');
+  }
+
   function resetZonePortals(zoneId: string) {
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
@@ -702,21 +723,6 @@ export const useRoomStore = defineStore('room', () => {
     send({ type: 'rotate_zone', zoneId, rotation: 0 });
     clearRotationError(zoneId);
     track('reset_zone_portals');
-  }
-
-  function updateNodeRotation(zoneId: string, rotation: number) {
-    const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
-    if (index === -1) return;
-    const newNodePositions = [...nodePositions.value];
-    newNodePositions[index] = { ...newNodePositions[index], rotation, explored: true };
-    nodePositions.value = newNodePositions;
-    lastUpdate.value = new Date();
-    // Dedicated rotate endpoint — the server is the single source of truth for
-    // rotation/handle consistency and will re-broadcast the canonical state
-    // to all clients (including this one).
-    send({ type: 'rotate_zone', zoneId, rotation });
-    clearRotationError(zoneId);
-    track('update_node_rotation');
   }
 
   // Recently Viewed Rooms
@@ -957,7 +963,7 @@ export const useRoomStore = defineStore('room', () => {
     markNodeExplored,
     updateNodeFeatures,
     updateNodeCustomHandles,
-    updateNodeRotation,
+    saveZoneHandles,
     isNodeIsolated,
     isNodeExpired,
     isNodeRestricted,

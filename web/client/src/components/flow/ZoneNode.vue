@@ -129,7 +129,6 @@ function openHandleEditor() {
 }
 
 async function saveCustomHandles(newHandles: CustomHandle[], newRotation: number) {
-  store.updateNodeRotation(props.id, newRotation);
   updateNodeData(props.id, { rotation: newRotation });
 
   const currentHandles = getInitialHandles();
@@ -170,7 +169,9 @@ async function saveCustomHandles(newHandles: CustomHandle[], newRotation: number
     }
   }
 
-  store.updateNodeCustomHandles(props.id, newHandles);
+  // Handles + rotation are saved in a single atomic message; the server echoes
+  // the authoritative result back to this client as well as everyone else.
+  store.saveZoneHandles(props.id, newHandles, newRotation);
   isHandleEditorOpen.value = false;
   if (typeof showToast !== 'undefined') showToast('Handle positions updated', 'info', 8000);
 }

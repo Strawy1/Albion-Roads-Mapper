@@ -435,6 +435,6 @@ export type ClientMessage =
   | { type: 'ping'; zoneName: string; nodeId?: string }
   | { type: 'polo' }
   | { type: 'update_node_positions'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
-  | { type: 'rotate_zone'; zoneId: string; rotation: number }
+  | { type: 'rotate_zone'; zoneId: string; rotation: number; customHandles?: CustomHandle[] }
   | { type: 'update_plot_route'; plottedRoute: string[]; fromZoneId?: string; toZoneId?: string; chainId?: string }
   | { type: 'create_connection'; fromZoneId: string; toZoneId: string; fromHandleId?: string; toHandleId?: string; secondsRemaining: number; slots?: number; reportedBy?: string; targetPosition?: { x: number; y: number }; permanent?: boolean };
