@@ -155,6 +155,26 @@ export function incrementRoomAlltime(db: Pool, roomId: string, counters: RoomAll
 }
 
 /**
+ * Records the exact time a route was plotted, per room and globally.
+ * Fire-and-forget — never throws.
+ */
+export function recordRouteLastPlotted(db: Pool, roomId: string): void {
+  void db
+    .query(
+      `INSERT INTO analytics_room_alltime (room_id, routes_last_plotted_at) VALUES ($1, NOW())
+       ON CONFLICT (room_id) DO UPDATE SET routes_last_plotted_at = NOW()`,
+      [roomId],
+    )
+    .catch((err) => console.error('[analytics] recordRouteLastPlotted (room) error:', err));
+  void db
+    .query(
+      `INSERT INTO analytics_global_alltime (id, routes_last_plotted_at) VALUES (1, NOW())
+       ON CONFLICT (id) DO UPDATE SET routes_last_plotted_at = NOW()`,
+    )
+    .catch((err) => console.error('[analytics] recordRouteLastPlotted (global) error:', err));
+}
+
+/**
  * Recalculates active_rooms, inactive_rooms, and total_rooms on the global daily row for a given
  * UTC date string (YYYY-MM-DD). Called after every analytics_room_daily upsert and after a room
  * deletion so the snapshot always reflects current reality.

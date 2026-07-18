@@ -4,6 +4,7 @@ import {
   incrementRoomDaily,
   incrementRoomAlltime,
   recalculateRoomCounts,
+  recordRouteLastPlotted,
   londonDateString,
 } from '../analytics.js';
 
@@ -43,6 +44,7 @@ export function trackRoutePlotted(db: Pool, roomId: string): void {
   incrementGlobal(db, { routes_plotted: 1, room_data_updates: 1 });
   incrementRoomDaily(db, roomId, { routes_plotted: 1 });
   incrementRoomAlltime(db, roomId, { routes_plotted: 1 });
+  recordRouteLastPlotted(db, roomId);
 }
 
 export function trackTokenIssued(db: Pool, roomId: string): void {

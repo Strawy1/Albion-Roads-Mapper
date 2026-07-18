@@ -755,6 +755,9 @@ describe('Analytics — node position updates via WebSocket', () => {
     expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'room_data_updates')).toBe(true);
     expect(hasAnalyticsQuery(mockDb, 'analytics_room_daily', 'routes_plotted')).toBe(true);
     expect(hasAnalyticsQuery(mockDb, 'analytics_room_alltime', 'routes_plotted')).toBe(true);
+    // Exact last-plotted timestamps, per room and globally
+    expect(hasAnalyticsQuery(mockDb, 'analytics_room_alltime', 'routes_last_plotted_at')).toBe(true);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_global_alltime', 'routes_last_plotted_at')).toBe(true);
 
     socket.close();
   });
@@ -779,6 +782,7 @@ describe('Analytics — node position updates via WebSocket', () => {
     await new Promise((r) => setTimeout(r, 200));
 
     expect(hasAnalyticsQuery(mockDb, 'analytics_global_daily', 'routes_plotted')).toBe(false);
+    expect(hasAnalyticsQuery(mockDb, 'analytics_room_alltime', 'routes_last_plotted_at')).toBe(false);
 
     socket.close();
   });
