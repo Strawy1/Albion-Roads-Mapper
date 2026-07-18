@@ -43,13 +43,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const liveRooms = roomSockets.size;
 
     // --- DB stats ---
-    const { rows: roomRows } = await app.db.query<{ total: string; inactive: string; empty: string; expired: string; active: string }>(
+    const { rows: roomRows } = await app.db.query<{ total: string; inactive: string; empty: string; expired: string; active: string; locked: string }>(
       `SELECT
          COUNT(*) AS total,
          COUNT(*) - $1 AS inactive,
          COUNT(*) FILTER (WHERE id NOT IN (SELECT DISTINCT room_id FROM connections)) AS empty,
          COUNT(*) FILTER (WHERE id IN (SELECT DISTINCT room_id FROM connections) AND id NOT IN (SELECT DISTINCT room_id FROM connections WHERE expires_at > NOW())) AS expired,
-         COUNT(*) FILTER (WHERE id IN (SELECT DISTINCT room_id FROM connections WHERE expires_at > NOW())) AS active
+         COUNT(*) FILTER (WHERE id IN (SELECT DISTINCT room_id FROM connections WHERE expires_at > NOW())) AS active,
+         COUNT(*) FILTER (WHERE locked) AS locked
        FROM rooms`,
       [liveRooms],
     );
@@ -58,6 +59,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const emptyRooms = parseInt(roomRows[0]?.empty ?? '0', 10);
     const expiredRooms = parseInt(roomRows[0]?.expired ?? '0', 10);
     const activeRooms = parseInt(roomRows[0]?.active ?? '0', 10);
+    const lockedRooms = parseInt(roomRows[0]?.locked ?? '0', 10);
 
     // --- Latest hourly connection stats from DB ---
     // avg_connections is the mean of all per-minute scrape samples recorded in that hour bucket
@@ -238,6 +240,7 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_rooms_inactive', 'Number of rooms with no active WebSocket connections', 'gauge', inactiveRooms));
     lines.push(metric('albionmapper_rooms_empty', 'Number of rooms with no connections added', 'gauge', emptyRooms));
     lines.push(metric('albionmapper_rooms_expired', 'Number of rooms where all connections have expired', 'gauge', expiredRooms));
+    lines.push(metric('albionmapper_rooms_locked', 'Number of rooms currently locked (read-only for non-admins)', 'gauge', lockedRooms));
 
     // --- Zone counts ---
     lines.push(metric('albionmapper_zones_total', 'Total number of zones entered into the system (excluding home zones)', 'gauge', totalZones));

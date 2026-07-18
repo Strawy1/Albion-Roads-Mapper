@@ -18,7 +18,7 @@ describe('GET /metrics', () => {
     expect(body).toMatch(/albionmapper_websocket_connections_active \d+/);
   });
 
-  it('exposes active, inactive, total, expired and empty room gauges', async () => {
+  it('exposes active, inactive, total, expired, empty and locked room gauges', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;
     expect(body).toContain('albionmapper_rooms_active');
@@ -26,6 +26,21 @@ describe('GET /metrics', () => {
     expect(body).toContain('albionmapper_rooms_total');
     expect(body).toContain('albionmapper_rooms_expired');
     expect(body).toContain('albionmapper_rooms_empty');
+    expect(body).toContain('albionmapper_rooms_locked');
+  });
+
+  it('reports the locked-rooms count from the rooms aggregate query', async () => {
+    // First DB query in the metrics handler is the rooms aggregate.
+    ctx.mockDb.query.mockResolvedValueOnce({
+      rows: [{ total: '5', inactive: '1', empty: '0', expired: '0', active: '4', locked: '3' }],
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_rooms_locked Number of rooms currently locked (read-only for non-admins)');
+    expect(res.body).toContain('# TYPE albionmapper_rooms_locked gauge');
+    expect(res.body).toMatch(/albionmapper_rooms_locked 3\b/);
+    // The aggregate SQL must count locked rooms.
+    const call = ctx.mockDb.query.mock.calls.find((c: any[]) => typeof c[0] === 'string' && c[0].includes('FROM rooms') && c[0].includes('AS locked'));
+    expect(call[0]).toContain('FILTER (WHERE locked)');
   });
 
   it('exposes hourly connection max and min gauges', async () => {
