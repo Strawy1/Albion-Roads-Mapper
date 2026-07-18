@@ -11,6 +11,7 @@ export interface OperationContext {
   sessionToken: string | null;
   setSessionToken: (val: string | null) => void;
   verifySession: () => boolean;
+  verifyWriteAccess: () => Promise<boolean>;
   send: (msg: ServerMessage) => void;
   authTimeout: NodeJS.Timeout;
 }

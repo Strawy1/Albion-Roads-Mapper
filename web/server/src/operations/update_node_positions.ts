@@ -10,7 +10,7 @@ export const handleUpdateNodePositions: OperationHandler<Extract<ClientMessage, 
 ) => {
   if (!ctx.authenticated) return;
   if (!msg.nodePositions) return;
-  if (!ctx.verifySession()) return;
+  if (!(await ctx.verifyWriteAccess())) return;
 
   // Deduplicate nodePositions by zoneId to prevent unique constraint violations
   const deduplicatedRaw = Array.from(

@@ -3,7 +3,10 @@ import { ref } from 'vue';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import RoomSettings from '../RoomSettings.vue';
 import RenameRoomModal from '../RenameRoomModal.vue';
+import { useRoomStore } from '@/stores/useRoomStore';
 import { Z_INDEX } from '@/constants/Layers';
+
+const store = useRoomStore();
 
 defineProps<{
   roomTitle?: string;
@@ -29,6 +32,13 @@ function copyLink() {
   <!-- Logo + room title, top-left -->
   <div :class="['absolute top-2 md:top-3 left-4 md:left-6 flex items-center gap-3 pr-16 md:pr-0', Z_INDEX.OVERLAY]">
     <img src="/iconportal.png" class="w-10 h-10 cursor-pointer shrink-0" alt="Site Logo" @click="emit('logout')" />
+    <!-- Mobile-only lock indicator: desktop shows the LockedRoomFrame badge instead -->
+    <span
+      v-if="store.locked"
+      class="md:hidden shrink-0 rounded-full bg-yellow-400 text-gray-900 text-xs font-bold px-2 py-1 shadow"
+      data-testid="locked-title-indicator"
+      title="This room is locked (read-only)"
+    >🔒</span>
     <div v-if="roomTitle" class="flex items-center gap-1">
       <TooltipProvider :delay-duration="0">
         <TooltipRoot>

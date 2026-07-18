@@ -8,10 +8,10 @@ Route: `GET /ws/rooms/:id` — handler in `web/server/src/ws.ts`; broadcast regi
 2. Client sends `{ type: 'auth', token }` (`src/operations/auth.ts`). Bad token → close `4401 "Invalid token"`; token for another room → close `4401 "Token room mismatch"`.
 3. On success the socket is registered in the room's broadcast set and receives, in order:
    - `{ type: 'auth_ok' }`
-   - `{ type: 'sync', connections, homeZoneId, title?, nodePositions, lastUpdatedAt, watching, totalConnected, plottedRoute?, plottedRouteFromZoneId?, plottedRouteToZoneId?, plottedRouteChainId?, chains? }` — full room state. Connections are filtered to permanent-or-within-6h-grace.
+   - `{ type: 'sync', connections, homeZoneId, title?, nodePositions, lastUpdatedAt, watching, totalConnected, plottedRoute?, plottedRouteFromZoneId?, plottedRouteToZoneId?, plottedRouteChainId?, chains?, locked? }` — full room state. Connections are filtered to permanent-or-within-6h-grace.
    - `{ type: 'memory_sync', memory: RoomMemoryEntry[] }` — roads/roadsHideout zones only.
 4. Any other message while unauthenticated → close `4401 "Not authenticated"`. Invalid JSON → `{ type: 'error', message: 'Invalid JSON' }`.
-5. Each mutating operation re-verifies the stored token (`verifySession()`); on failure the server sends `session_expired` and closes `4401`. Close code `4401` tells the client **not** to auto-reconnect (it redirects to the auth page instead); any other close triggers exponential-backoff reconnect (1 s → 30 s).
+5. Each mutating operation re-verifies the stored token via `verifyWriteAccess()` (`ws.ts`); on token failure the server sends `session_expired` and closes `4401`. Close code `4401` tells the client **not** to auto-reconnect (it redirects to the auth page instead); any other close triggers exponential-backoff reconnect (1 s → 30 s). `verifyWriteAccess()` also runs the room-lock guard (`utils/roomGuard.ts`): when the room is **locked** and the session token lacks `role: 'admin'`, the mutation is rejected with `{ type: 'error', message: 'Room is locked' }` — the socket stays open, so read-only viewers keep receiving broadcasts.
 6. **Lazy chain migration:** if `rooms.chain_migrated` is false at auth time, the server backfills the primary chain in a transaction and broadcasts `force_reload` instead of syncing.
 
 ## Client → server messages
@@ -50,6 +50,7 @@ Operation plumbing: `src/operations/types.ts` (`OperationContext` / `OperationHa
 | `ping` | `{ zoneName, nodeId? }` | Relayed user ping |
 | `marco` | — | Heartbeat probe (client must reply `polo`) |
 | `watching` | `{ roomId, count, totalConnected }` | Socket join/leave and each heartbeat cycle |
+| `room_lock_changed` | `{ locked }` | Admin locked/unlocked the room via PATCH `/api/rooms/:id/lock` (sent to all sockets, including any admin sessions) |
 | `password_rotated` / `room_deleted` / `session_expired` | (`session_expired` has `{ reason }`) | Client clears its token and redirects to the auth page with a reason banner |
 | `force_reload` | — | Client must reload (e.g. after lazy chain migration) |
 | `error` | `{ message }` | Bad JSON / operation errors |

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { wrapDbWithGuardDispatch } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
 import { getInitialFeatures } from '../src/utils/nodeFeatures.js';
 
@@ -45,7 +46,7 @@ describe('Auto-pre-population in routes', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 

@@ -9,7 +9,7 @@ export const handleRotateZone: OperationHandler<Extract<ClientMessage, { type: '
   msg
 ) => {
   if (!ctx.authenticated) return;
-  if (!ctx.verifySession()) return;
+  if (!(await ctx.verifyWriteAccess())) return;
   if (!msg.zoneId || typeof msg.rotation !== 'number') return;
 
   const targetRotation = normalizeRotationSteps(msg.rotation);

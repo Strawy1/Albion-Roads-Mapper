@@ -13,7 +13,7 @@ export const handleCreateConnection: OperationHandler<Extract<ClientMessage, { t
   msg
 ) => {
   if (!ctx.authenticated) return;
-  if (!ctx.verifySession()) return;
+  if (!(await ctx.verifyWriteAccess())) return;
 
   const { fromZoneId, toZoneId, fromHandleId, toHandleId, reportedBy, targetPosition } = msg;
   const permanent = msg.permanent === true;

@@ -17,6 +17,7 @@ interface DbRoom {
   plotted_route_to_zone_id: string | null;
   plotted_route_chain_id: string | null;
   chain_migrated: boolean;
+  locked: boolean | null;
 }
 
 interface DbConnection {
@@ -171,7 +172,7 @@ export const handleAuth: OperationHandler<Extract<ClientMessage, { type: 'auth' 
         lastUpdated: row.last_updated,
       }));
 
-    ctx.send({ type: 'sync', connections, homeZoneId: room.home_zone_id, title: room.title || undefined, nodePositions, lastUpdatedAt, watching: getWatchingCount(ctx.roomId), totalConnected: getTotalSocketCount(), plottedRoute: room.plotted_route ?? undefined, plottedRouteFromZoneId: room.plotted_route_from_zone_id ?? undefined, plottedRouteToZoneId: room.plotted_route_to_zone_id ?? undefined, plottedRouteChainId: room.plotted_route_chain_id ?? undefined, chains });
+    ctx.send({ type: 'sync', connections, homeZoneId: room.home_zone_id, title: room.title || undefined, nodePositions, lastUpdatedAt, watching: getWatchingCount(ctx.roomId), totalConnected: getTotalSocketCount(), plottedRoute: room.plotted_route ?? undefined, plottedRouteFromZoneId: room.plotted_route_from_zone_id ?? undefined, plottedRouteToZoneId: room.plotted_route_to_zone_id ?? undefined, plottedRouteChainId: room.plotted_route_chain_id ?? undefined, chains, locked: room.locked ?? false });
     ctx.send({ type: 'memory_sync', memory });
   } catch {
     ctx.socket.close(4401, 'Invalid token');

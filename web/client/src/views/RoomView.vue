@@ -24,6 +24,7 @@ import TopRightToolbar from '../components/room/TopRightToolbar.vue';
 import BottomRightPins from '../components/room/BottomRightPins.vue';
 import MobileRoomSummary from '../components/room/MobileRoomSummary.vue';
 import WebsocketStatusBar from '../components/room/WebsocketStatusBar.vue';
+import LockedRoomFrame from '../components/room/LockedRoomFrame.vue';
 import { VueFlow, useVueFlow, ConnectionMode, type Node, type Edge, type OnConnectStartParams } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
@@ -317,7 +318,7 @@ watch(nodePositions, (newPositions) => {
   initialRedsHandled.value = true;
 }, { deep: true });
 
-watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
+watch([homeZoneId, nodePositions, connections, () => store.canEdit], (newVal, oldVal) => {
     if (!homeZoneId.value) return;
 
     const existingNodeIds = new Set<string>();
@@ -369,7 +370,9 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
         id: pos.zoneId,
         type: isRoads ? 'zone' : 'non-roads',
         position: { x: pos.x, y: pos.y },
-        draggable: true,
+        // Per-node draggable overrides the global :nodes-draggable prop, so it
+        // must honour the room lock too (read-only for non-admins).
+        draggable: store.canEdit,
         data: {
           isChainSource: store.chainSourceZoneIds.has(pos.zoneId),
           chainId: pos.chainId,
@@ -400,6 +403,7 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
         
         existingNode.position = newNode.position;
         existingNode.data = newNode.data;
+        existingNode.draggable = newNode.draggable;
         updateNode(newNode.id, newNode);
 
         if (oldHandles !== newHandles) {
@@ -448,6 +452,7 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
           isGhostRouteReversed: plotRouteStore.ghostReversedConnectionIds.has(conn.id),
           isGreyedByChain: plotRouteStore.isSelectingTo && (() => { const srcChain = nodePositions.value.find(n => n.zoneId === conn.fromZoneId)?.chainId ?? null; return srcChain !== plotRouteStore.chainId; })(),
           onDelete: async (id: string) => {
+            if (!guardEdit()) return;
             try {
               await deleteConnection(props.id, store.token!, id);
             } catch (err: any) {
@@ -456,6 +461,7 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
             }
           },
           onDeleteRecursive: async (id: string) => {
+            if (!guardEdit()) return;
             try {
               const toDelete = new Set<string>();
               const visitedZones = new Set<string>();
@@ -492,6 +498,7 @@ watch([homeZoneId, nodePositions, connections], (newVal, oldVal) => {
             }
           },
           onUpdate: async (id: string, secondsRemaining: number) => {
+            if (!guardEdit()) return;
             await updateConnection(props.id, store.token!, id, { secondsRemaining: Number(secondsRemaining) });
           },
           onUpdateSlots: (connId: string, slots: 7 | 20) => {
@@ -716,7 +723,19 @@ function onNodeMouseLeave(_event: any) {
   plotRouteStore.updateGhostPreview(null, store.connections);
 }
 
+/**
+ * Client-side write gate for a locked room: shows a toast and returns false
+ * for non-admin sessions. The server enforces this independently — this is
+ * UX (prevent/revert) only.
+ */
+function guardEdit(): boolean {
+  if (store.canEdit) return true;
+  showToast('Room is locked — read-only', 'error');
+  return false;
+}
+
 function onNodeDragStop() {
+  if (!guardEdit()) return;
   const positions: NodePosition[] = flowNodes.value.map((n: any) => ({
     zoneId: n.id,
     x: n.position.x,
@@ -886,6 +905,7 @@ function handleReportClose() {
 }
 
 async function onEdgeUpdate({ edge, connection }: any) {
+  if (!guardEdit()) return;
   if (edge.source === connection.source && edge.target === connection.target) {
     try {
       await updateConnection(props.id, store.token!, edge.id, {
@@ -900,6 +920,7 @@ async function onEdgeUpdate({ edge, connection }: any) {
 
 async function handleConnect(params: any) {
   wasConnected = true;
+  if (!guardEdit()) return;
 
   // Normalize center-overlay to center
   if (params.sourceHandle === 'center-overlay') params.sourceHandle = 'center';
@@ -1428,6 +1449,7 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
     />
 
     <WebsocketStatusBar />
+    <LockedRoomFrame />
 
     <!-- Graph -->
     <div class="absolute inset-0">
@@ -1440,6 +1462,9 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         :fit-view-on-init="true"
         :min-zoom="0.1"
         :connection-mode="ConnectionMode.Loose"
+        :nodes-draggable="store.canEdit"
+        :nodes-connectable="store.canEdit"
+        :edges-updatable="store.canEdit"
         class="transition-colors duration-1000 !absolute inset-0"
         :class="megaToastBackgroundActive ? 'bg-red-950' : (pingToastBackgroundActive ? 'bg-blue-950' : 'bg-gray-950')"
         @node-drag-stop="onNodeDragStop"

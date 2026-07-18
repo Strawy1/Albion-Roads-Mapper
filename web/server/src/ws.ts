@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { ClientMessage, ServerMessage } from 'shared';
+import type { ClientMessage, RoomTokenPayload, ServerMessage } from 'shared';
+import { fetchRoomGuardState } from './utils/roomGuard.js';
 import { removeSocket, broadcast } from './broadcast.js';
 import { recordPolo } from './marcopolo.js';
 import { handleAuth } from './operations/auth.js';
@@ -25,24 +26,43 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
       };
 
       /**
-       * Verifies that the stored session token is still valid and belongs to this room.
-       * Sends a `session_expired` message and closes the socket with 4401 on failure.
-       * Returns true if the session is valid, false otherwise.
+       * Verifies that the stored session token is still valid and belongs to
+       * this room, returning its payload (or null after sending
+       * `session_expired` and closing the socket with 4401).
        */
-      const verifySession = (): boolean => {
+      const verifySessionPayload = (): RoomTokenPayload | null => {
         try {
-          const payload = app.jwt.verify(sessionToken!) as { roomId: string };
+          const payload = app.jwt.verify(sessionToken!) as RoomTokenPayload;
           if (payload.roomId !== roomId) {
             send({ type: 'session_expired', reason: 'Session expired, please log in again' });
             socket.close(4401, 'Session expired');
-            return false;
+            return null;
           }
-          return true;
+          return payload;
         } catch {
           send({ type: 'session_expired', reason: 'Session expired, please log in again' });
           socket.close(4401, 'Session expired');
+          return null;
+        }
+      };
+
+      const verifySession = (): boolean => verifySessionPayload() !== null;
+
+      /**
+       * Write gate for every mutating WS operation: the session must be valid
+       * AND, when the room is locked, the token must carry the admin role.
+       * Read-only viewers keep their socket open (they still receive
+       * broadcasts) and just get an error message back.
+       */
+      const verifyWriteAccess = async (): Promise<boolean> => {
+        const payload = verifySessionPayload();
+        if (!payload) return false;
+        const guard = await fetchRoomGuardState(app.db, roomId);
+        if (guard?.locked && payload.role !== 'admin') {
+          send({ type: 'error', message: 'Room is locked' });
           return false;
         }
+        return true;
       };
 
       const authTimeout = setTimeout(() => {
@@ -69,6 +89,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
           sessionToken,
           setSessionToken: (val: string | null) => { sessionToken = val; },
           verifySession,
+          verifyWriteAccess,
           send,
           authTimeout,
         } as const;

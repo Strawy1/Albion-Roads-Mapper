@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { wrapDbWithGuardDispatch } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
 
 // A known valid zone ID from the shared catalogue
@@ -16,7 +17,7 @@ beforeEach(async () => {
       release: vi.fn(),
     }),
   };
-  app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+  app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
   await app.ready();
 });
 

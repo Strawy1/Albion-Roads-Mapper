@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { wrapDbWithGuardDispatch } from './testApp.js';
 import type { FastifyInstance } from 'fastify';
 import { setupTestApp } from './testApp.js';
 
@@ -46,7 +47,7 @@ describe('Analytics — room creation', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 
@@ -76,7 +77,7 @@ describe('Analytics — password rotation', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 
@@ -88,8 +89,8 @@ describe('Analytics — password rotation', () => {
     const roomId = 'test-room';
     const token = app.jwt.sign({ roomId, passwordVersion: 1 });
 
-    // authenticate preHandler: SELECT password_version FROM rooms
-    mockDb.query.mockResolvedValueOnce({ rows: [{ password_version: 1 }] });
+    // (authenticate preHandler's room-guard query is dispatched by
+    // wrapDbWithGuardDispatch and never consumes this mock stack)
     // SELECT admin_password_hash
     mockDb.query.mockResolvedValueOnce({ rows: [{ admin_password_hash: adminHash }] });
     // UPDATE rooms SET password_hash
@@ -119,7 +120,7 @@ describe('Analytics — room reset (DELETE /connections)', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 
@@ -161,7 +162,7 @@ describe('Analytics — room deletion', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 
@@ -230,7 +231,7 @@ describe('Analytics — memory wipes', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 
@@ -287,7 +288,7 @@ describe('Analytics — node position updates via POST /connections', () => {
         release: vi.fn(),
       }),
     };
-    app = await buildApp({ db: mockDb, disableRateLimit: true, jwtSecret: 'test-secret' });
+    app = await buildApp({ db: wrapDbWithGuardDispatch(mockDb) as any, disableRateLimit: true, jwtSecret: 'test-secret' });
     await app.ready();
   });
 

@@ -7,6 +7,7 @@ import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
 import ChangePasswordModal from './ChangePasswordModal.vue';
+import LockRoomModal from './LockRoomModal.vue';
 import ResetConfirmModal from './ResetConfirmModal.vue';
 declare const __APP_VERSION__: string;
 declare const __APP_COMMIT_SHA__: string;
@@ -28,6 +29,7 @@ const popupEl = ref<HTMLDivElement | null>(null);
 
 // Change password state
 const showChangePasswordModal = ref(false);
+const showLockRoomModal = ref(false);
 const showResetConfirmModal = ref(false);
 
 // Reset state
@@ -41,6 +43,7 @@ function toggleOpen() {
 
 function resetSubForms() {
   showChangePasswordModal.value = false;
+  showLockRoomModal.value = false;
   showResetConfirmModal.value = false;
   resetError.value = '';
 }
@@ -234,6 +237,20 @@ function exitRoom() {
           </button>
         </div>
 
+        <!-- Lock / Unlock room. Shows a closed padlock while unlocked (the
+             action is to lock) and an open padlock while locked. -->
+        <div class="border-b border-gray-700 p-2">
+          <button
+            type="button"
+            class="w-full text-left px-3 py-2 text-sm rounded text-gray-200 hover:bg-gray-700 flex items-center justify-between"
+            data-testid="settings-lock-room-toggle"
+            @click="showLockRoomModal = true"
+          >
+            <span>{{ store.locked ? '🔓  Unlock room' : '🔒  Lock room' }}</span>
+            <span v-if="store.locked" class="text-yellow-400 text-xs font-medium" data-testid="settings-locked-indicator">Locked</span>
+          </button>
+        </div>
+
         <!-- Reset Room -->
         <div class="border-b border-gray-700 p-2">
           <button
@@ -264,6 +281,7 @@ function exitRoom() {
       </div>
     </div>
     <ChangePasswordModal v-model="showChangePasswordModal" />
+    <LockRoomModal v-model="showLockRoomModal" />
     <ResetConfirmModal v-model="showResetConfirmModal" @confirmed-clear-room="clearRoom" @confirmed-with-history="resetWithHistory" @confirmed-delete-room="deleteRoom" />
   </div>
 </template>

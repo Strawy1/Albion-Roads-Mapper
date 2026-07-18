@@ -8,7 +8,7 @@ export const handleUpdatePlotRoute: OperationHandler<Extract<ClientMessage, { ty
   msg
 ) => {
   if (!ctx.authenticated) return;
-  if (!ctx.verifySession()) return;
+  if (!(await ctx.verifyWriteAccess())) return;
   const plottedRoute = Array.isArray(msg.plottedRoute) ? msg.plottedRoute : [];
   const fromZoneId = msg.fromZoneId ?? null;
   const toZoneId = msg.toZoneId ?? null;

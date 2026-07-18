@@ -84,6 +84,11 @@ export const useRoomStore = defineStore('room', () => {
     return null;
   }
   const roomTitle = ref<string>('');
+  // Room lock state: when locked, the server rejects every mutation from
+  // tokens without the admin role — the client mirrors that as read-only UI.
+  const locked = ref(false);
+  const isAdmin = ref(false);
+  const canEdit = computed(() => !locked.value || isAdmin.value);
   const wsStatus = ref<WsStatus>('disconnected');
   const lastUpdate = ref<Date | null>(null);
   const lastPing = ref<{zoneName: string, nodeId?: string} | null>(null);
@@ -153,12 +158,38 @@ export const useRoomStore = defineStore('room', () => {
   function setCredentials(id: string, jwt: string) {
     roomId.value = id;
     localStorage.setItem(`token:${id}`, jwt);
+    refreshAdminState();
   }
+
+  /**
+   * Display-only admin detection: decodes the (unverified) JWT payload to see
+   * whether it carries the server-signed admin role. Purely cosmetic — the
+   * server independently verifies the signature on every mutation.
+   */
+  function tokenHasAdminRole(jwt: string): boolean {
+    try {
+      const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return payload?.role === 'admin';
+    } catch {
+      return false;
+    }
+  }
+
+  function refreshAdminState() {
+    isAdmin.value = tokenHasAdminRole(getToken());
+  }
+
+  /** WS message types that mutate room state — dropped client-side in a locked room for non-admins. */
+  const MUTATING_WS_TYPES = new Set(['update_node_positions', 'rotate_zone', 'create_connection', 'update_plot_route']);
 
   function send(msg: any) {
     if (!getToken()) {
       console.warn('[RoomStore] send() BLOCKED — token missing from localStorage, triggering session_expired flow');
       applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
+      return;
+    }
+    if (MUTATING_WS_TYPES.has(msg.type) && !canEdit.value) {
+      console.warn('[RoomStore] send() BLOCKED — room is locked and this session is not admin', msg.type);
       return;
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -266,6 +297,8 @@ export const useRoomStore = defineStore('room', () => {
         homeZoneId.value = msg.homeZoneId;
         chains.value = msg.chains ?? [];
         roomTitle.value = msg.title || '';
+        locked.value = msg.locked ?? false;
+        refreshAdminState();
         nodePositions.value = msg.nodePositions;
         validateNodeRotations(msg.nodePositions, true);
         lastUpdate.value = new Date(msg.lastUpdatedAt);
@@ -368,6 +401,10 @@ export const useRoomStore = defineStore('room', () => {
       case 'room_title_updated':
         roomTitle.value = msg.title;
         addToRecentRooms(roomId.value, roomId.value, msg.title);
+        break;
+
+      case 'room_lock_changed':
+        locked.value = msg.locked;
         break;
       
       case 'room_reset':
@@ -538,19 +575,26 @@ export const useRoomStore = defineStore('room', () => {
     wsStatus.value = 'connecting';
     const url = new URL(`${API_BASE_URL}/ws/rooms/${roomId.value}`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(url.toString());
+    const socket = new WebSocket(url.toString());
+    ws = socket;
 
-    ws.addEventListener('open', () => {
+    // Every handler ignores events once the store has moved on to a newer
+    // socket (see reconnect()) so a stale close/error can't clobber state or
+    // schedule a duplicate reconnect.
+    socket.addEventListener('open', () => {
+      if (ws !== socket) return;
       const currentToken = getToken();
       if (!currentToken) {
-        ws?.close();
+        socket.close();
         applyMessage({ type: 'session_expired', reason: 'Session expired, please log in again' });
         return;
       }
-      ws!.send(JSON.stringify({ type: 'auth', token: currentToken }));
+      refreshAdminState();
+      socket.send(JSON.stringify({ type: 'auth', token: currentToken }));
     });
 
-    ws.addEventListener('message', (event) => {
+    socket.addEventListener('message', (event) => {
+      if (ws !== socket) return;
       try {
         const msg = JSON.parse(event.data as string) as ServerMessage;
         if (msg.type === 'auth_ok') {
@@ -565,7 +609,8 @@ export const useRoomStore = defineStore('room', () => {
       }
     });
 
-    ws.addEventListener('close', (event) => {
+    socket.addEventListener('close', (event) => {
+      if (ws !== socket) return;
       if (event.code === 4401) {
         wsStatus.value = 'auth_failed';
         return;
@@ -574,9 +619,23 @@ export const useRoomStore = defineStore('room', () => {
       scheduleReconnect();
     });
 
-    ws.addEventListener('error', () => {
-      ws?.close();
+    socket.addEventListener('error', () => {
+      if (ws !== socket) return;
+      socket.close();
     });
+  }
+
+  /**
+   * Drops the current socket and immediately opens a fresh one with the token
+   * currently in localStorage. Used after swapping in an admin token so the WS
+   * session carries the admin role for subsequent mutations.
+   */
+  function reconnect() {
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    const old = ws;
+    ws = null;
+    old?.close();
+    connect();
   }
 
   function scheduleReconnect() {
@@ -600,6 +659,8 @@ export const useRoomStore = defineStore('room', () => {
     roomId.value = '';
     watchingCount.value = null;
     totalConnected.value = null;
+    locked.value = false;
+    isAdmin.value = false;
     useRoomMemoryStore().clear();
   }
 
@@ -608,8 +669,48 @@ export const useRoomStore = defineStore('room', () => {
     track('exit_room');
   }
 
+  /**
+   * Exchanges the room's ADMIN password for an admin-role token, replacing the
+   * regular token for this room (one token per room — the old one is
+   * discarded). Callers MUST `reconnect()` afterwards so the live WS session
+   * gains admin rights — but only AFTER any lock toggle they intend to make:
+   * the fresh socket's `sync` carries the DB's lock state, so reconnecting
+   * before the PATCH lands would overwrite `locked` with the pre-lock value.
+   */
+  async function adminAuthenticate(adminPassword: string): Promise<{ ok: boolean; error?: string }> {
+    const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/auth/admin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminPassword }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      return { ok: false, error: body.error ?? 'Admin authentication failed' };
+    }
+    const { token: adminToken } = await res.json() as { token: string };
+    setCredentials(roomId.value, adminToken);
+    return { ok: true };
+  }
+
+  /** Locks or unlocks the room. Requires the current token to carry the admin role. */
+  async function setRoomLock(lockedTarget: boolean): Promise<{ ok: boolean; error?: string }> {
+    const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/lock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ locked: lockedTarget }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      return { ok: false, error: body.error ?? 'Failed to update room lock' };
+    }
+    locked.value = lockedTarget;
+    track(lockedTarget ? 'lock_room' : 'unlock_room');
+    return { ok: true };
+  }
+
   function updateNodePositionsInStore(positions: NodePosition[]) {
     if (!positions) return;
+    if (!canEdit.value) return;
     // Merge incoming positions with existing ones, preserving explored/features/customHandles
     // for nodes that already exist unless the incoming data explicitly provides them.
     // IMPORTANT: the server's `update_node_positions` handler performs a full
@@ -646,6 +747,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function resetNodePositions() {
+    if (!canEdit.value) return;
     nodePositions.value = []; // Optimistic update
     lastUpdate.value = new Date();
     send({ type: 'update_node_positions', nodePositions: [], updateLastUpdated: true });
@@ -653,6 +755,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function markNodeExplored(zoneId: string) {
+    if (!canEdit.value) return;
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
     if (nodePositions.value[index].explored) return;
@@ -664,6 +767,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function updateNodeFeatures(zoneId: string, features: NodeFeatures, markExplored = true) {
+    if (!canEdit.value) return;
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
     const newNodePositions = [...nodePositions.value];
@@ -677,6 +781,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function updateNodeCustomHandles(zoneId: string, customHandles: CustomHandle[]) {
+    if (!canEdit.value) return;
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
     const newNodePositions = [...nodePositions.value];
@@ -690,6 +795,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function saveZoneHandles(zoneId: string, customHandles: CustomHandle[], rotation?: number) {
+    if (!canEdit.value) return;
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
     // The server drops rotate_zone messages whose rotation isn't a number, so
@@ -711,6 +817,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function resetZonePortals(zoneId: string) {
+    if (!canEdit.value) return;
     const index = nodePositions.value.findIndex(n => n.zoneId === zoneId);
     if (index === -1) return;
     const newNodePositions = [...nodePositions.value];
@@ -794,6 +901,9 @@ export const useRoomStore = defineStore('room', () => {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
     }
+    if (!canEdit.value) {
+      throw new Error('Room is locked — read-only');
+    }
 
     const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/import`, {
       method: 'PUT',
@@ -818,6 +928,9 @@ export const useRoomStore = defineStore('room', () => {
   async function addChain(sourceZoneId: string, position?: { x: number; y: number }) {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
+    }
+    if (!canEdit.value) {
+      throw new Error('Room is locked — read-only');
     }
 
     const body: { sourceZoneId: string; x?: number; y?: number } = { sourceZoneId };
@@ -864,6 +977,9 @@ export const useRoomStore = defineStore('room', () => {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
     }
+    if (!canEdit.value) {
+      throw new Error('Room is locked — read-only');
+    }
     const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains/${chainId}`, {
       method: 'PATCH',
       headers: {
@@ -891,6 +1007,9 @@ export const useRoomStore = defineStore('room', () => {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
     }
+    if (!canEdit.value) {
+      throw new Error('Room is locked — read-only');
+    }
     const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains/${chainId}/relocate`, {
       method: 'POST',
       headers: {
@@ -910,6 +1029,9 @@ export const useRoomStore = defineStore('room', () => {
   async function removeChain(chainId: string) {
     if (!roomId.value || !getToken()) {
       throw new Error('Not authenticated');
+    }
+    if (!canEdit.value) {
+      throw new Error('Room is locked — read-only');
     }
 
     const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/chains/${chainId}`, {
@@ -931,6 +1053,12 @@ export const useRoomStore = defineStore('room', () => {
     connections,
     homeZoneId,
     roomTitle,
+    locked,
+    isAdmin,
+    canEdit,
+    adminAuthenticate,
+    setRoomLock,
+    reconnect,
     nodePositions,
     wsStatus,
     lastUpdate,

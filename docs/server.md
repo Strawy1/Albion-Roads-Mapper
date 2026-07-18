@@ -12,9 +12,11 @@ Fastify 5 (ESM, TypeScript) with a `pg` Pool, `@fastify/jwt`, `@fastify/websocke
 ## Auth model
 
 - `POST /api/rooms/:id/auth` verifies the room password (bcrypt, cost 12) and signs a JWT `{ roomId, passwordVersion }` with **7-day** expiry.
-- The `authenticate` preHandler (`app.ts`) verifies the JWT, then checks `passwordVersion` against `rooms.password_version` — password rotation bumps the version and invalidates all outstanding tokens.
-- Every mutating room/connection route also requires `jwtPayload.roomId === :id` (else 403). A token grants access to exactly one room.
+- `POST /api/rooms/:id/auth/admin` verifies the room's **admin password** (against `admin_password_hash` only — the room password can never mint an admin token) and signs `{ roomId, passwordVersion, role: 'admin' }` (7-day). The `role` claim is set exclusively on this signing path (`RoomTokenPayload` in shared). The client swaps its stored token for the admin one (one token per room).
+- The `authenticate` preHandler (`app.ts`) verifies the JWT, then runs the **room guard** (`src/utils/roomGuard.ts`, single `ROOM_GUARD_SQL` query): it checks `passwordVersion` against `rooms.password_version` (password rotation bumps the version and invalidates all outstanding tokens) and enforces the **room lock** — when `rooms.locked` is true, every non-GET request from a token without `role: 'admin'` gets 403 `Room is locked`. This is a chokepoint: new mutating routes are covered automatically.
+- Every mutating room/connection route also requires `jwtPayload.roomId === :id` (else 403). A token grants access to exactly one room; admin tokens are equally room-scoped.
 - Destructive/administrative actions additionally require the room's **admin password** in the request body: password change, title change, memory wipe, room delete (optional on connections-reset).
+- `PATCH /api/rooms/:id/lock` `{ locked }` toggles the lock; it requires an admin-role token even while unlocked, and broadcasts `room_lock_changed`.
 
 ## HTTP routes
 
@@ -28,6 +30,8 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 | GET | `/api/slugs/check/:slug` | none | `{ available }`; slug must match `/^[a-z0-9-]+$/`, ≤100 chars |
 | POST | `/api/rooms` | none (rate-limited) | `{ password, adminPassword, homeZoneId, title?, vanityUrl }` → 201 `{ id, shareUrl }`. Room id **is** the vanity slug. Creates room + primary chain + home-zone position + memory in a transaction. 409 if slug taken |
 | POST | `/api/rooms/:id/auth` | none (rate-limited) | `{ password }` → `{ token }`; 401 bad password |
+| POST | `/api/rooms/:id/auth/admin` | none (rate-limited) | `{ adminPassword }` → `{ token }` with `role: 'admin'`; 401 bad admin password. Compares only `admin_password_hash`, scoped to `:id` |
+| PATCH | `/api/rooms/:id/lock` | JWT (admin role) | `{ locked: boolean }` → `{ ok, locked }`; 403 without admin role. Broadcasts `room_lock_changed` |
 | PATCH | `/api/rooms/:id/password` | JWT + admin pw | Bumps `password_version`; broadcasts `password_rotated` |
 | PATCH | `/api/rooms/:id/title` | JWT + admin pw | Title ≤50 chars; broadcasts `room_title_updated` |
 | POST | `/api/rooms/:id/chains` | JWT | `{ sourceZoneId, x?, y? }` → 201 `{ chain }`. 409 if zone already in a chain. Broadcasts `chain_added` (+ single-row `node_positions_updated`) |

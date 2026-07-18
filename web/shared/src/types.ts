@@ -225,6 +225,25 @@ export const AuthRoomBodySchema = z.object({
   password: z.string().min(1),
 });
 
+export const AdminAuthRoomBodySchema = z.object({
+  adminPassword: z.string().min(1),
+});
+
+export const SetRoomLockBodySchema = z.object({
+  locked: z.boolean(),
+});
+
+/**
+ * Payload embedded in room JWTs. `role` is only ever set to 'admin' by the
+ * server after verifying the room's admin password — it must never be
+ * derivable from any client-supplied input.
+ */
+export interface RoomTokenPayload {
+  roomId: string;
+  passwordVersion?: number;
+  role?: 'admin';
+}
+
 export const CreateConnectionBodySchema = z.object({
   fromZoneId: z.string().min(1),
   toZoneId: z.string().min(1),
@@ -404,7 +423,7 @@ export const ImportRoomBodySchema = z.object({
 
 export type ServerMessage =
   | { type: 'auth_ok' }
-  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[] }
+  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[]; locked?: boolean }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
   | { type: 'connection_removed'; connectionId?: string; removedZoneIds?: string[] }
@@ -427,6 +446,7 @@ export type ServerMessage =
   | { type: 'chain_updated'; chain: RoomChain }
   | { type: 'chain_relocated'; chain: RoomChain; removedZoneIds: string[]; removedConnectionIds: string[]; newHomeZoneId?: string; newSourceNodePosition: NodePosition }
   | { type: 'room_title_updated'; title: string }
+  | { type: 'room_lock_changed'; locked: boolean }
   | { type: 'session_expired'; reason: string }
   | { type: 'error'; message: string };
 

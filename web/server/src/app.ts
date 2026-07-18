@@ -4,6 +4,8 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyJwt from '@fastify/jwt';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { Pool } from 'pg';
+import type { RoomTokenPayload } from 'shared';
+import { fetchRoomGuardState } from './utils/roomGuard.js';
 import { roomRoutes } from './routes/rooms.js';
 import { connectionRoutes } from './routes/connections.js';
 import { wsRoutes } from './ws.js';
@@ -61,17 +63,22 @@ export async function buildApp(options: AppOptions) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      // Validate that the token's passwordVersion matches the current DB value,
-      // ensuring tokens are invalidated when a room's password is rotated.
-      const payload = request.user as { roomId?: string; passwordVersion?: number };
-      if (payload.roomId && payload.passwordVersion !== undefined) {
-        const { rows } = await db.query<{ password_version: number }>(
-          'SELECT password_version FROM rooms WHERE id = $1',
-          [payload.roomId]
-        );
-        const currentVersion = rows[0]?.password_version ?? 1;
-        if (payload.passwordVersion !== currentVersion) {
+      const payload = request.user as RoomTokenPayload;
+      if (payload.roomId) {
+        const guard = await fetchRoomGuardState(db, payload.roomId);
+
+        // Validate that the token's passwordVersion matches the current DB value,
+        // ensuring tokens are invalidated when a room's password is rotated.
+        if (guard && payload.passwordVersion !== undefined && payload.passwordVersion !== guard.passwordVersion) {
           return reply.status(401).send({ error: 'Token invalidated due to password rotation. Please re-authenticate.' });
+        }
+
+        // Locked rooms are read-only: every mutating request requires an
+        // admin-role token. The role can only be set by the server after
+        // verifying the room's admin password (POST /api/rooms/:id/auth/admin).
+        const isReadOnlyMethod = request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS';
+        if (guard?.locked && !isReadOnlyMethod && payload.role !== 'admin') {
+          return reply.status(403).send({ error: 'Room is locked' });
         }
       }
     },

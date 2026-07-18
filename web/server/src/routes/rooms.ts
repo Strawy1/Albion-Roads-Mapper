@@ -5,6 +5,9 @@ import { z } from 'zod';
 import {
   CreateRoomBodySchema,
   AuthRoomBodySchema,
+  AdminAuthRoomBodySchema,
+  SetRoomLockBodySchema,
+  type RoomTokenPayload,
   ChangePasswordBodySchema,
   AddChainBodySchema,
   UpdateChainBodySchema,
@@ -158,6 +161,73 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ token });
   });
 
+  // POST /api/rooms/:id/auth/admin — verify the ADMIN password and issue an
+  // admin-role JWT. Mirrors /auth but compares ONLY against
+  // admin_password_hash: the regular room password must never mint an admin
+  // token. The query is scoped to the URL's room id, so another room's admin
+  // password can never authenticate here. The `role: 'admin'` claim is the
+  // sole source of admin rights and is only ever set on this signing path.
+  app.post<{ Params: { id: string } }>('/api/rooms/:id/auth/admin', {
+    config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const parsed = AdminAuthRoomBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+
+    const { rows } = await app.db.query<{ id: string; admin_password_hash: string; password_version: number | null }>(
+      'SELECT id, admin_password_hash, password_version FROM rooms WHERE id = $1',
+      [id]
+    );
+    const room = rows[0];
+    if (!room) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    const valid = await bcrypt.compare(parsed.data.adminPassword, room.admin_password_hash);
+    if (!valid) {
+      return reply.status(401).send({ error: 'Invalid admin password' });
+    }
+
+    const payload: RoomTokenPayload = { roomId: room.id, passwordVersion: room.password_version ?? 1, role: 'admin' };
+    const token = app.jwt.sign(payload, { expiresIn: '7d' });
+    trackTokenIssued(app.db, room.id);
+    return reply.send({ token });
+  });
+
+  // PATCH /api/rooms/:id/lock — lock or unlock the room. Requires an
+  // admin-role token even when the room is unlocked (locking is admin-only);
+  // while locked, the authenticate preHandler already blocks every other
+  // mutating request from non-admin tokens.
+  app.patch<{ Params: { id: string } }>('/api/rooms/:id/lock', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const jwtPayload = request.user as RoomTokenPayload;
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    if (jwtPayload.role !== 'admin') {
+      return reply.status(403).send({ error: 'Admin token required' });
+    }
+    const parsed = SetRoomLockBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+
+    const result = await app.db.query(
+      'UPDATE rooms SET locked = $1 WHERE id = $2',
+      [parsed.data.locked, id]
+    );
+    if (result.rowCount === 0) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    broadcast(id, { type: 'room_lock_changed', locked: parsed.data.locked });
+
+    return reply.send({ ok: true, locked: parsed.data.locked });
+  });
 
   // PATCH /api/rooms/:id/password — change room password
   app.patch<{ Params: { id: string } }>('/api/rooms/:id/password', {
