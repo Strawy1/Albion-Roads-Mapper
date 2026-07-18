@@ -1,3 +1,12 @@
+## [1.3.0] - 2026-07-18
+
+### 🚀 Features
+- Added ability to lock rooms
+
+### 🐛 Bug Fixes
+- Map History is now properly retained and not deleted when a map or chain of maps are deleted.
+- Fixed Portal rotations / (de)activations not being properly relayed back to the client who changed them.
+
 ## [1.2.1] - 2026-07-14
 ### 🐛 Bug Fixes
 - Added new home page icon
