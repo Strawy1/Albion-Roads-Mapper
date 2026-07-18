@@ -34,7 +34,8 @@ import { formatExpiresIn } from '@/utils/formatters';
 import { addConnection, deleteConnection, updateConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
-import V1dot2SplashModal from "@/components/version-announcements/V1dot2SplashModal.vue";
+// v1.2 splash retired with v1.3 (kept for reference / future announcements)
+// import V1dot2SplashModal from "@/components/version-announcements/V1dot2SplashModal.vue";
 
 const props = defineProps<{ id: string }>();
 const store = useRoomStore();
@@ -1438,7 +1439,8 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
     <TitleSegment :room-title="roomTitle" :class="Z_INDEX.UI_OVERLAY" @logout="exitRoom" @fit-view="fitView({ padding: 0.2, duration: 300 })" />
     <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" @add-chain="showAddChainModal = true" />
     <ChainManager v-model="showAddChainModal" />
-    <V1dot2SplashModal />
+    <!-- <V1dot2SplashModal /> -->
+
 
     <ReportForm
       ref="reportForm"

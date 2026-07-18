@@ -91,7 +91,6 @@ async function submit() {
       </p>
       <div class="flex flex-col gap-4">
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Admin Password</label>
           <input
             v-model="adminPassword"
             type="password"
@@ -113,18 +112,18 @@ async function submit() {
         </div>
         <div class="flex gap-2">
           <button
+            class="flex-1 px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
+            @click="close"
+          >
+            Cancel
+          </button>
+          <button
             :disabled="saving || !adminPassword.trim()"
             class="flex-1 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             data-testid="lock-room-submit"
             @click="submit"
           >
-            {{ saving ? 'Working…' : (willLock ? 'Lock Room' : 'Unlock Room') }}
-          </button>
-          <button
-            class="flex-1 px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
-            @click="close"
-          >
-            Cancel
+            {{ saving ? 'Working…' : (willLock ? '🔒 Lock Room' : '🔓 Unlock Room') }}
           </button>
         </div>
       </div>

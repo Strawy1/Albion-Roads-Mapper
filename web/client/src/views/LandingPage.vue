@@ -3,11 +3,12 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import RecentlyViewedRooms from '../components/RecentlyViewedRooms.vue';
-import V1dot2SplashModal from '../components/version-announcements/V1dot2SplashModal.vue';
+// v1.2 splash retired with v1.3 (kept for reference / future announcements)
+// import V1dot2SplashModal from '../components/version-announcements/V1dot2SplashModal.vue';
 
 const router = useRouter();
 
-const splashModal = ref<InstanceType<typeof V1dot2SplashModal> | null>(null);
+// const splashModal = ref<InstanceType<typeof V1dot2SplashModal> | null>(null);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const currentTime = ref(0);
@@ -114,7 +115,7 @@ onMounted(() => {
     startAnimation();
   }
 });
-</script>Improved the landing page a little bit
+</script>
 
 <style scoped>
 .btn-pulsate {
@@ -136,16 +137,18 @@ onMounted(() => {
             ✨
           </span>
           <div>
-            <p class="font-bold text-indigo-100">Update v1.2 is here!</p>
-            <p class="text-xs text-indigo-200/80">Map Zone Chains, enhanced route plotting, room renaming and more!</p>
+            <p class="font-bold text-indigo-100">Update v1.3 is here!</p>
+            <p class="text-xs text-indigo-200/80">Rooms are now lockable! Admins can lock a room to make it read-only for everyone else — find it under the ⚙️ settings cog in your room.</p>
           </div>
         </div>
+        <!-- v1.3 has no splash modal — announcement lives in the in-room settings cog CTA
         <button
           @click="splashModal?.show()"
           class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-md transition-all shadow-md active:scale-95"
         >
           See What's New
         </button>
+        -->
       </div>
     </div>
 
@@ -251,6 +254,6 @@ onMounted(() => {
     <div class="w-full text-center pb-8 pointer-events-none">
       <CopyrightNotice class="pointer-events-auto" />
     </div>
-    <V1dot2SplashModal ref="splashModal" />
+    <!-- <V1dot2SplashModal ref="splashModal" /> -->
   </div>
 </template>

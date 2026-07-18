@@ -27,6 +27,14 @@ const cogRef = ref<HTMLElement | null>(null);
 const open = ref(false);
 const popupEl = ref<HTMLDivElement | null>(null);
 
+// v1.3 "New!" CTA for room locking — same seen-key pattern as the v1.2
+// chain-management CTA (TopToolbar.vue). Opening the cog dismisses it for
+// future sessions; the "New" pill next to Lock room stays for this session
+// (until the lock modal is opened) so the entry is still discoverable.
+const NEW_LOCK_CTA_KEY = 'cta:v13:roomLock:dismissed';
+const showCogCta = ref(typeof localStorage !== 'undefined' && localStorage.getItem(NEW_LOCK_CTA_KEY) !== '1');
+const showLockNewPill = ref(showCogCta.value);
+
 // Change password state
 const showChangePasswordModal = ref(false);
 const showLockRoomModal = ref(false);
@@ -38,7 +46,16 @@ const resetError = ref('');
 
 function toggleOpen() {
   open.value = !open.value;
+  if (open.value && showCogCta.value) {
+    showCogCta.value = false;
+    try { localStorage.setItem(NEW_LOCK_CTA_KEY, '1'); } catch { /* ignore */ }
+  }
   if (!open.value) resetSubForms();
+}
+
+function openLockRoomModal() {
+  showLockNewPill.value = false;
+  showLockRoomModal.value = true;
 }
 
 function resetSubForms() {
@@ -156,8 +173,8 @@ function exitRoom() {
         ref="cogRef"
         type="button"
         :class="[
-          'w-12 h-12 flex items-center justify-center rounded-full border text-xl shadow-lg transition-colors',
-          open ? 'bg-indigo-600 border-indigo-400 hover:bg-indigo-500' : 'frosted-button border-gray-600 hover:bg-gray-700'
+          'relative w-12 h-12 flex items-center justify-center rounded-full border text-xl shadow-lg transition-colors',
+          open ? 'bg-indigo-600 border-indigo-400 hover:bg-indigo-500' : (showCogCta ? 'new-cta-pulse text-blue-300 border-blue-500' : 'frosted-button border-gray-600 hover:bg-gray-700')
         ]"
         title="Room settings"
         data-testid="settings-cog"
@@ -167,6 +184,15 @@ function exitRoom() {
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
           <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clip-rule="evenodd" />
         </svg>
+        <!-- v1.3 "New!" call-to-action prompt pointing upward at the cog -->
+        <span
+          v-if="showCogCta && !open"
+          class="new-cta absolute left-1/2 -translate-x-1/2 top-full mt-3 px-2 py-1 rounded bg-blue-600 text-white text-sm font-semibold shadow-lg whitespace-nowrap pointer-events-none"
+          data-testid="settings-cog-new-cta"
+        >
+          New!
+          <span class="new-cta-arrow"></span>
+        </span>
       </button>
 
       <!-- Popup -->
@@ -244,9 +270,20 @@ function exitRoom() {
             type="button"
             class="w-full text-left px-3 py-2 text-sm rounded text-gray-200 hover:bg-gray-700 flex items-center justify-between"
             data-testid="settings-lock-room-toggle"
-            @click="showLockRoomModal = true"
+            @click="openLockRoomModal"
           >
-            <span>{{ store.locked ? '🔓  Unlock room' : '🔒  Lock room' }}</span>
+            <span>
+              {{ store.locked ? '🔓  Unlock room' : '🔒  Lock room' }}
+              <!-- "New!" call-to-action badge, same style as the chain-management one -->
+              <span
+                v-if="showLockNewPill"
+                class="new-cta new-cta-inline relative ml-3 inline-block align-middle px-2 py-1 rounded bg-blue-600 text-white text-sm font-semibold shadow-lg whitespace-nowrap pointer-events-none"
+                data-testid="settings-lock-room-new-pill"
+              >
+                New!
+                <span class="new-cta-inline-arrow"></span>
+              </span>
+            </span>
             <span v-if="store.locked" class="text-yellow-400 text-xs font-medium" data-testid="settings-locked-indicator">Locked</span>
           </button>
         </div>
@@ -285,3 +322,55 @@ function exitRoom() {
     <ResetConfirmModal v-model="showResetConfirmModal" @confirmed-clear-room="clearRoom" @confirmed-with-history="resetWithHistory" @confirmed-delete-room="deleteRoom" />
   </div>
 </template>
+
+<style scoped>
+/* v1.3 "New!" CTA on the cog — mirrors the chain-management CTA in TopToolbar.vue */
+@keyframes new-cta-pulse {
+  0%, 100% { background-color: rgba(30, 58, 138, 0.7); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+  50% { background-color: rgba(37, 99, 235, 0.85); box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+}
+.new-cta-pulse {
+  animation: new-cta-pulse 2s infinite ease-in-out;
+}
+
+.new-cta {
+  background-color: #2563eb; /* blue-600 */
+  animation: new-cta-bounce 1.6s ease-in-out infinite;
+}
+.new-cta-arrow {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid #2563eb; /* points upward toward the button */
+}
+@keyframes new-cta-bounce {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, -3px); }
+}
+
+/* Inline variant next to the Lock room entry: same badge, but flows with the
+   text and its arrow points left at the entry instead of up at a button. */
+.new-cta-inline {
+  animation: new-cta-inline-bounce 1.6s ease-in-out infinite;
+}
+.new-cta-inline-arrow {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 6px solid #2563eb; /* points left toward the lock entry */
+}
+@keyframes new-cta-inline-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+</style>
