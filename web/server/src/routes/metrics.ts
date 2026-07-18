@@ -238,6 +238,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
        GROUP BY rnp.zone_id`,
     );
 
+    // --- Chain counts (rooms with only the default primary chain are omitted) ---
+    const { rows: perRoomChainRows } = await app.db.query<{ room_id: string; chain_count: string }>(
+      `SELECT room_id, COUNT(*) AS chain_count
+       FROM room_chains
+       GROUP BY room_id
+       HAVING COUNT(*) > 1`,
+    );
+
     // --- Active rooms (DB-level room state) ---
     lines.push(metric('albionmapper_rooms_total', 'Total number of rooms in the database', 'gauge', totalRooms));
     lines.push(metric('albionmapper_rooms_live', 'Number of rooms with at least one active WebSocket connection (live now)', 'gauge', liveRooms));
@@ -264,6 +272,16 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       .filter(s => s.value > 0);
     if (zoneInRoomsSeries.length > 0) {
       lines.push(metricLabeled('albionmapper_zone_in_rooms_total', 'Number of distinct rooms each zone currently appears in (excluding home zones)', 'gauge', zoneInRoomsSeries));
+    }
+
+    // --- Chain counts ---
+    const perRoomChainSeries = perRoomChainRows
+      .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.chain_count ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    const totalChains = perRoomChainSeries.reduce((sum, s) => sum + s.value, 0);
+    lines.push(metric('albionmapper_chains_total', 'Total number of chains across rooms that use chains (rooms with only the default primary chain are excluded)', 'gauge', totalChains));
+    if (perRoomChainSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_chains_total', 'Number of chains per room; rooms with only the default primary chain are omitted', 'gauge', perRoomChainSeries));
     }
 
     // --- Hourly connection stats ---

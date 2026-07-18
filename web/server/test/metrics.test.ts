@@ -63,6 +63,36 @@ describe('GET /metrics', () => {
     expect(res.body).not.toContain('albionmapper_room_locked{');
   });
 
+  it('exposes the total chains gauge, defaulting to 0', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_chains_total Total number of chains across rooms that use chains');
+    expect(res.body).toContain('# TYPE albionmapper_chains_total gauge');
+    expect(res.body).toMatch(/albionmapper_chains_total 0\b/);
+  });
+
+  it('reports per-room chain counts, skipping rooms with only the default primary chain', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('FROM room_chains')) {
+        // Rooms with a single (default primary) chain must be filtered out in SQL.
+        expect(sql).toContain('HAVING COUNT(*) > 1');
+        return { rows: [{ room_id: 'room-a', chain_count: '3' }, { room_id: 'room-b', chain_count: '2' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_room_chains_total Number of chains per room; rooms with only the default primary chain are omitted');
+    expect(res.body).toContain('# TYPE albionmapper_room_chains_total gauge');
+    expect(res.body).toContain('albionmapper_room_chains_total{room_id="room-a"} 3');
+    expect(res.body).toContain('albionmapper_room_chains_total{room_id="room-b"} 2');
+    expect(res.body).toMatch(/albionmapper_chains_total 5\b/);
+  });
+
+  it('omits the per-room chains series when no rooms have more than one chain', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).not.toContain('albionmapper_room_chains_total{');
+  });
+
   it('exposes hourly connection max and min gauges', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;
