@@ -61,6 +61,11 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const activeRooms = parseInt(roomRows[0]?.active ?? '0', 10);
     const lockedRooms = parseInt(roomRows[0]?.locked ?? '0', 10);
 
+    // --- Locked rooms by ID ---
+    const { rows: lockedRoomRows } = await app.db.query<{ room_id: string }>(
+      'SELECT id AS room_id FROM rooms WHERE locked ORDER BY id',
+    );
+
     // --- Latest hourly connection stats from DB ---
     // avg_connections is the mean of all per-minute scrape samples recorded in that hour bucket
     const { rows: hourlyRows } = await app.db.query<{
@@ -241,6 +246,10 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     lines.push(metric('albionmapper_rooms_empty', 'Number of rooms with no connections added', 'gauge', emptyRooms));
     lines.push(metric('albionmapper_rooms_expired', 'Number of rooms where all connections have expired', 'gauge', expiredRooms));
     lines.push(metric('albionmapper_rooms_locked', 'Number of rooms currently locked (read-only for non-admins)', 'gauge', lockedRooms));
+    const lockedRoomSeries = lockedRoomRows.map(r => ({ labels: { room_id: r.room_id }, value: 1 }));
+    if (lockedRoomSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_room_locked', 'Rooms currently locked (read-only for non-admins), one series per locked room ID', 'gauge', lockedRoomSeries));
+    }
 
     // --- Zone counts ---
     lines.push(metric('albionmapper_zones_total', 'Total number of zones entered into the system (excluding home zones)', 'gauge', totalZones));

@@ -43,6 +43,26 @@ describe('GET /metrics', () => {
     expect(call[0]).toContain('FILTER (WHERE locked)');
   });
 
+  it('lists locked rooms by room ID', async () => {
+    // Query order: rooms aggregate first, then the locked-rooms-by-ID query.
+    ctx.mockDb.query
+      .mockResolvedValueOnce({
+        rows: [{ total: '5', inactive: '1', empty: '0', expired: '0', active: '4', locked: '2' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ room_id: 'room-a' }, { room_id: 'room-b' }] });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_room_locked Rooms currently locked (read-only for non-admins), one series per locked room ID');
+    expect(res.body).toContain('# TYPE albionmapper_room_locked gauge');
+    expect(res.body).toContain('albionmapper_room_locked{room_id="room-a"} 1');
+    expect(res.body).toContain('albionmapper_room_locked{room_id="room-b"} 1');
+  });
+
+  it('omits the per-room locked series when no rooms are locked', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).not.toContain('albionmapper_room_locked{');
+  });
+
   it('exposes hourly connection max and min gauges', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;
