@@ -14,22 +14,17 @@ export const handleUpdatePlotRoute: OperationHandler<Extract<ClientMessage, { ty
   const toZoneId = msg.toZoneId ?? null;
   const chainId = msg.chainId ?? null;
   const hasRoute = plottedRoute.length > 0;
-  // plotted_route_expires_at snapshots when the route stops being fully
-  // traversable: per leg take the latest-expiring matching connection (either
-  // direction), then take the earliest leg across the route. A leg with no
-  // connection resolves to NOW() (route immediately inactive).
+  // plottedRoute holds CONNECTION ids (the edges the client's BFS traversed),
+  // so the route stops being traversable when its soonest connection expires.
+  // plotted_route_expires_at snapshots that: MIN(expires_at) over the route's
+  // connections; an id with no matching connection resolves to NOW() (route
+  // immediately inactive).
   await ctx.app.db.query(
     `UPDATE rooms SET plotted_route = $1::text[], plotted_route_from_zone_id = $2, plotted_route_to_zone_id = $3, plotted_route_chain_id = $4,
        plotted_route_expires_at = CASE WHEN $1::text[] IS NULL THEN NULL ELSE (
-         SELECT MIN(COALESCE(legs.leg_expiry, NOW()))
-         FROM (
-           SELECT MAX(c.expires_at) AS leg_expiry
-           FROM generate_series(1, COALESCE(array_length($1::text[], 1), 0) - 1) AS leg
-           LEFT JOIN connections c ON c.room_id = $5
-             AND ((c.from_zone_id = ($1::text[])[leg] AND c.to_zone_id = ($1::text[])[leg + 1])
-               OR (c.from_zone_id = ($1::text[])[leg + 1] AND c.to_zone_id = ($1::text[])[leg]))
-           GROUP BY leg
-         ) legs
+         SELECT MIN(COALESCE(c.expires_at, NOW()))
+         FROM unnest($1::text[]) AS conn_id
+         LEFT JOIN connections c ON c.id = conn_id AND c.room_id = $5
        ) END
      WHERE id = $5`,
     [

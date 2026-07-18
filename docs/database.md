@@ -14,9 +14,9 @@ PostgreSQL, managed by `node-pg-migrate`. Migrations live in `web/server/migrati
 | `home_zone_id` | text NOT NULL | Primary chain's source zone |
 | `title` | text | ≤50 chars |
 | `password_version` | int NOT NULL default 1 | Bumped on rotation; embedded in JWTs to invalidate them |
-| `plotted_route` | text[] | Currently plotted route (zone ids) |
+| `plotted_route` | text[] | Currently plotted route (**connection** ids — the edges the client's BFS traversed, not zone ids) |
 | `plotted_route_from_zone_id` / `plotted_route_to_zone_id` / `plotted_route_chain_id` | text | Route endpoints |
-| `plotted_route_expires_at` | timestamptz | Snapshotted at plot time: MIN over route legs of each leg's connection expiry (route "active" check for `/metrics`); NULL when no route |
+| `plotted_route_expires_at` | timestamptz | Snapshotted at plot time: MIN(`expires_at`) of the route's connections (route "active" check for `/metrics`); NULL when no route |
 | `chain_migrated` | boolean NOT NULL default false | Lazy migration flag (backfilled on WS auth) |
 | `created_at` | timestamptz NOT NULL default now | |
 | `updated_at` | timestamptz | Drives abandoned-room cleanup |
