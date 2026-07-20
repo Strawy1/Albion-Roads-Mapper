@@ -14,8 +14,9 @@ PostgreSQL, managed by `node-pg-migrate`. Migrations live in `web/server/migrati
 | `home_zone_id` | text NOT NULL | Primary chain's source zone |
 | `title` | text | ≤50 chars |
 | `password_version` | int NOT NULL default 1 | Bumped on rotation; embedded in JWTs to invalidate them |
-| `plotted_route` | text[] | Currently plotted route (zone ids) |
+| `plotted_route` | text[] | Currently plotted route (**connection** ids — the edges the client's BFS traversed, not zone ids) |
 | `plotted_route_from_zone_id` / `plotted_route_to_zone_id` / `plotted_route_chain_id` | text | Route endpoints |
+| `plotted_route_expires_at` | timestamptz | Snapshotted at plot time: MIN(`expires_at`) of the route's connections (route "active" check for `/metrics`); NULL when no route |
 | `chain_migrated` | boolean NOT NULL default false | Lazy migration flag (backfilled on WS auth) |
 | `created_at` | timestamptz NOT NULL default now | |
 | `updated_at` | timestamptz | Drives abandoned-room cleanup |
@@ -73,8 +74,8 @@ Written by `src/analytics.ts` / `src/analyticsCron.ts`; read by `/metrics`. No F
 - **`analytics_global_daily`** — `date` PK; counters: `rooms_created/modified/reset/deleted/aborted/abandoned`, `memory_wiped_full/single`, `passwords_rotated`, `active/inactive/total_rooms`, `peak_concurrent`, `unique_tokens_active`, `zones_added`, `non_roads_zones_added`, `room_data_updates`, `routes_plotted`, `tokens_issued`.
 - **`analytics_hourly_connections`** — `hour` PK; `max/min_connections`, `avg_connections` numeric, `sample_count`.
 - **`analytics_room_daily`** — (`room_id`, `date`) PK; `data_updates`, `zones_added_roads/nonroads`, `peak_concurrent`, `unique_tokens`, `routes_plotted`, `tokens_issued`.
-- **`analytics_room_alltime`** — `room_id` PK; same counters, all-time.
-- **`analytics_global_alltime`** — singleton row (`id` = 1); `rooms_aborted`, `rooms_abandoned`.
+- **`analytics_room_alltime`** — `room_id` PK; same counters, all-time; plus `routes_last_plotted_at` timestamptz (exact time of last route plot; NULL for pre-column history — `/metrics` falls back to the daily buckets).
+- **`analytics_global_alltime`** — singleton row (`id` = 1); `rooms_aborted`, `rooms_abandoned`, `routes_last_plotted_at` timestamptz.
 
 ## Operational notes
 

@@ -43,6 +43,124 @@ describe('GET /metrics', () => {
     expect(call[0]).toContain('FILTER (WHERE locked)');
   });
 
+  it('lists locked rooms by room ID', async () => {
+    // Query order: rooms aggregate first, then the locked-rooms-by-ID query.
+    ctx.mockDb.query
+      .mockResolvedValueOnce({
+        rows: [{ total: '5', inactive: '1', empty: '0', expired: '0', active: '4', locked: '2' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ room_id: 'room-a' }, { room_id: 'room-b' }] });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_room_locked Rooms currently locked (read-only for non-admins), one series per locked room ID');
+    expect(res.body).toContain('# TYPE albionmapper_room_locked gauge');
+    expect(res.body).toContain('albionmapper_room_locked{room_id="room-a"} 1');
+    expect(res.body).toContain('albionmapper_room_locked{room_id="room-b"} 1');
+  });
+
+  it('omits the per-room locked series when no rooms are locked', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).not.toContain('albionmapper_room_locked{');
+  });
+
+  it('exposes the total chains gauge, defaulting to 0', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_chains_total Total number of chains across rooms that use chains');
+    expect(res.body).toContain('# TYPE albionmapper_chains_total gauge');
+    expect(res.body).toMatch(/albionmapper_chains_total 0\b/);
+  });
+
+  it('reports per-room chain counts, skipping rooms with only the default primary chain', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('FROM room_chains')) {
+        // Rooms with a single (default primary) chain must be filtered out in SQL.
+        expect(sql).toContain('HAVING COUNT(*) > 1');
+        return { rows: [{ room_id: 'room-a', chain_count: '3' }, { room_id: 'room-b', chain_count: '2' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_room_chains_total Number of chains per room; rooms with only the default primary chain are omitted');
+    expect(res.body).toContain('# TYPE albionmapper_room_chains_total gauge');
+    expect(res.body).toContain('albionmapper_room_chains_total{room_id="room-a"} 3');
+    expect(res.body).toContain('albionmapper_room_chains_total{room_id="room-b"} 2');
+    expect(res.body).toMatch(/albionmapper_chains_total 5\b/);
+  });
+
+  it('omits the per-room chains series when no rooms have more than one chain', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).not.toContain('albionmapper_room_chains_total{');
+  });
+
+  it('reports a live count and per-room series for currently plotted routes', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('plotted_route')) {
+        // Live state comes from the rooms table, not the analytics day buckets,
+        // must ignore cleared (NULL/empty) routes, and must only count routes
+        // whose snapshotted expiry is still in the future.
+        expect(sql).toContain('FROM rooms');
+        expect(sql).toContain("COALESCE(array_length(plotted_route, 1), 0) > 0");
+        expect(sql).toContain('plotted_route_expires_at > NOW()');
+        return { rows: [{ room_id: 'room-a' }, { room_id: 'room-b' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_rooms_route_plotted Number of rooms with a currently plotted route');
+    expect(res.body).toMatch(/albionmapper_rooms_route_plotted 2\b/);
+    expect(res.body).toContain('albionmapper_room_route_plotted{room_id="room-a"} 1');
+    expect(res.body).toContain('albionmapper_room_route_plotted{room_id="room-b"} 1');
+  });
+
+  it('reports zero rooms with plotted routes and omits the per-room series when none exist', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toMatch(/albionmapper_rooms_route_plotted 0\b/);
+    expect(res.body).not.toContain('albionmapper_room_route_plotted{');
+  });
+
+  it('exposes all-time and last-plotted route gauges, defaulting to 0', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# HELP albionmapper_routes_plotted_total Total number of routes plotted across all rooms since tracking began');
+    expect(res.body).toContain('# TYPE albionmapper_routes_plotted_total counter');
+    expect(res.body).toMatch(/albionmapper_routes_plotted_total 0\b/);
+    expect(res.body).toContain('# HELP albionmapper_routes_last_plotted Unix epoch seconds of the last time any route was plotted');
+    expect(res.body).toMatch(/albionmapper_routes_last_plotted 0\b/);
+  });
+
+  it('reports per-room all-time routes plotted and last-plotted time', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql !== 'string') return { rows: [] };
+      if (sql.includes('routes_last_plotted_at') && sql.includes('analytics_global_alltime')) {
+        // Global last-plotted: exact timestamp preferred, daily-bucket fallback via GREATEST.
+        expect(sql).toContain('GREATEST');
+        return { rows: [{ last_epoch: '1784644325' }] };
+      }
+      if (sql.includes('routes_last_plotted_at')) {
+        // Per-room last-plotted: same exact-with-fallback shape.
+        expect(sql).toContain('GREATEST');
+        return { rows: [{ room_id: 'room-a', last_plotted: '2026-07-17T14:32:05', last_epoch: '1784644325' }] };
+      }
+      if (sql.includes('FROM analytics_room_alltime')) {
+        return { rows: [{ room_id: 'room-a', tokens_issued: '0', data_updates: '0', routes_plotted: '7' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# TYPE albionmapper_room_routes_plotted_alltime counter');
+    expect(res.body).toContain('albionmapper_room_routes_plotted_alltime{room_id="room-a"} 7');
+    expect(res.body).toContain('albionmapper_room_routes_last_plotted{room_id="room-a",last_plotted="2026-07-17T14:32:05"} 1784644325');
+    expect(res.body).toMatch(/albionmapper_routes_last_plotted 1784644325\b/);
+  });
+
+  it('omits per-room route series when no routes were ever plotted', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).not.toContain('albionmapper_room_routes_plotted_alltime{');
+    expect(res.body).not.toContain('albionmapper_room_routes_last_plotted{');
+  });
+
   it('exposes hourly connection max and min gauges', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;
