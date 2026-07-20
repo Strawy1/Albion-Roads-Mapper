@@ -5,4 +5,4 @@
 - [Gotchas & invariants](albion-mapper-gotchas.md) — server-owned positions, full-array WS broadcasts, sender-exclusion trap on split edits, delete+reinsert paths, handles-win rotation healing, room-lock chokepoint + guard-SQL test dispatch, known schema drift
 - [Metrics conventions](albion-mapper-metrics-conventions.md) — /metrics output grouped by topic sections; live-state gauges over day buckets; counters for monotonic totals; global/per-room naming pairs
 
-Note: this memory lives in the repo at `.claude/memory/` (the per-user auto-memory dir symlinks here) so it's shared via git across machines and collaborators.
+Note: this memory lives in the repo at `.claude/memory/` (wired via `autoMemoryDirectory` in `.claude/settings.json`) so it's shared via git across machines and collaborators.
