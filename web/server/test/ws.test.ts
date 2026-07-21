@@ -86,6 +86,34 @@ describe('WebSocket authentication', () => {
     socket.close();
   });
 
+  it('replies with polo to a client-initiated marco (liveness probe)', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // connections
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // node positions
+
+    await app.listen({ port: 0 });
+
+    const { socket } = await connectWs(roomId);
+
+    // Drain auth_ok + sync + memory_sync, then send marco and await the polo.
+    const poloPromise = new Promise<unknown>((resolve) => {
+      socket.on('message', (data) => {
+        const parsed = JSON.parse(data.toString());
+        if (parsed.type === 'polo') resolve(parsed);
+      });
+    });
+
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await new Promise((r) => setTimeout(r, 200)); // wait for auth_ok + sync
+    socket.send(JSON.stringify({ type: 'marco' }));
+
+    const polo = await poloPromise;
+    expect((polo as { type: string }).type).toBe('polo');
+
+    socket.close();
+  });
+
   it('sends sync message after auth_ok', async () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: roomId, home_zone_id: VALID_ZONE_A, created_at: new Date().toISOString(), chain_migrated: true }] }); // room
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: 'test-chain-id', source_zone_id: VALID_ZONE_A }] }); // chains

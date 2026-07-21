@@ -114,8 +114,25 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   let ws: WebSocket | null = null;
-  let reconnectDelay = 1000;
+  // Reconnect backoff schedule (attempt-count based): first 5 attempts at 1s,
+  // next 5 at 10s, then 60s thereafter. Reset to 0 once a socket authenticates.
+  let reconnectAttempts = 0;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Client-initiated liveness probe. The server-driven marco/polo can't detect a
+  // half-open socket (server restart / dropped TCP with no RST) because the
+  // client simply stops receiving marcos without any close event. So the client
+  // sends its own marco; if no traffic comes back within POLO_TIMEOUT_MS the
+  // socket is assumed dead and we tear down + reconnect.
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  let poloTimeout: ReturnType<typeof setTimeout> | null = null;
+  const HEARTBEAT_INTERVAL_MS = 15_000;
+  const POLO_TIMEOUT_MS = 5_000;
+  // A backgrounded tab has its timers throttled, so both the heartbeat probe and
+  // the reconnect backoff can stall for a minute+. When the tab regains focus or
+  // the network returns we heal immediately instead of waiting for the next tick.
+  let wakeListenersAttached = false;
+  const onVisibilityChange = () => { if (document.visibilityState === 'visible') wakeCheck(); };
+  const onOnline = () => wakeCheck();
 
   function isNodeIsolated(nodeId: string, currentTime: number) {
     if (nodeId === homeZoneId.value || chainSourceZoneIds.value.has(nodeId)) return false;
@@ -572,6 +589,7 @@ export const useRoomStore = defineStore('room', () => {
     }
     if (ws && ws.readyState === WebSocket.OPEN) return;
 
+    attachWakeListeners();
     wsStatus.value = 'connecting';
     const url = new URL(`${API_BASE_URL}/ws/rooms/${roomId.value}`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -597,10 +615,13 @@ export const useRoomStore = defineStore('room', () => {
       if (ws !== socket) return;
       try {
         const msg = JSON.parse(event.data as string) as ServerMessage;
+        // Any inbound frame proves the socket is alive — clear a pending probe.
+        noteServerActivity();
         if (msg.type === 'auth_ok') {
           wsStatus.value = 'connected';
           lastUpdate.value = new Date();
-          reconnectDelay = 1000;
+          reconnectAttempts = 0;
+          startHeartbeat();
         } else {
           applyMessage(msg);
         }
@@ -611,6 +632,7 @@ export const useRoomStore = defineStore('room', () => {
 
     socket.addEventListener('close', (event) => {
       if (ws !== socket) return;
+      stopHeartbeat();
       if (event.code === 4401) {
         wsStatus.value = 'auth_failed';
         return;
@@ -632,6 +654,7 @@ export const useRoomStore = defineStore('room', () => {
    */
   function reconnect() {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    stopHeartbeat();
     const old = ws;
     ws = null;
     old?.close();
@@ -640,14 +663,97 @@ export const useRoomStore = defineStore('room', () => {
 
   function scheduleReconnect() {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    // Stepped backoff: 1s for the first 5 attempts, 10s for the next 5, 60s after.
+    const delay = reconnectAttempts < 5 ? 1_000 : reconnectAttempts < 10 ? 10_000 : 60_000;
     reconnectTimeout = setTimeout(() => {
-      reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
+      reconnectTimeout = null;
+      reconnectAttempts += 1;
       connect();
-    }, reconnectDelay);
+    }, delay);
+  }
+
+  /**
+   * Send one client-initiated marco and arm the response window. Only one probe
+   * is outstanding at a time; the window is cleared by noteServerActivity() on
+   * the next inbound frame, or fires handleConnectionLost() if nothing arrives.
+   */
+  function sendProbe() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (poloTimeout) return;
+    ws.send(JSON.stringify({ type: 'marco' }));
+    poloTimeout = setTimeout(() => {
+      poloTimeout = null;
+      handleConnectionLost();
+    }, POLO_TIMEOUT_MS);
+  }
+
+  /** Begin sending client-initiated marco probes on the current socket. */
+  function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatInterval = setInterval(sendProbe, HEARTBEAT_INTERVAL_MS);
+  }
+
+  /**
+   * Called when a throttled tab wakes (visibilitychange → visible) or the network
+   * returns (online). Probe an open socket right away; if the socket is already
+   * gone, skip the backoff and reconnect now (unless auth failed or a connect is
+   * already in flight).
+   */
+  function wakeCheck() {
+    if (wsStatus.value === 'auth_failed') return;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      sendProbe();
+      return;
+    }
+    if (ws && ws.readyState === WebSocket.CONNECTING) return;
+    if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+    reconnectAttempts = 0;
+    connect();
+  }
+
+  function attachWakeListeners() {
+    if (wakeListenersAttached || typeof document === 'undefined') return;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('online', onOnline);
+    wakeListenersAttached = true;
+  }
+
+  function detachWakeListeners() {
+    if (!wakeListenersAttached) return;
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('online', onOnline);
+    wakeListenersAttached = false;
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+    if (poloTimeout) { clearTimeout(poloTimeout); poloTimeout = null; }
+  }
+
+  /** Any inbound frame clears the outstanding probe window — the socket is live. */
+  function noteServerActivity() {
+    if (poloTimeout) { clearTimeout(poloTimeout); poloTimeout = null; }
+  }
+
+  /**
+   * The server failed to answer our probe within POLO_TIMEOUT_MS — the socket is
+   * (probably half-)dead. Tear it down and reconnect on the backoff schedule.
+   * We null `ws` before closing so the stale socket's own close handler no-ops
+   * (its `ws !== socket` guard) and doesn't double-schedule a reconnect.
+   */
+  function handleConnectionLost() {
+    stopHeartbeat();
+    const dead = ws;
+    ws = null;
+    wsStatus.value = 'disconnected';
+    dead?.close();
+    scheduleReconnect();
   }
 
   function disconnect() {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    stopHeartbeat();
+    detachWakeListeners();
     ws?.close();
     ws = null;
     wsStatus.value = 'disconnected';

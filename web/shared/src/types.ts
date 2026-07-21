@@ -443,6 +443,7 @@ export type ServerMessage =
   | { type: 'node_positions_updated'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
   | { type: 'ping'; zoneName: string; nodeId?: string }
   | { type: 'marco' }
+  | { type: 'polo' }
   | { type: 'watching'; roomId: string; count: number; totalConnected: number }
   | { type: 'memory_sync'; memory: RoomMemoryEntry[] }
   | { type: 'memory_updated'; entry: RoomMemoryEntry }
@@ -464,6 +465,7 @@ export type ClientMessage =
   | { type: 'auth'; token: string }
   | { type: 'ping'; zoneName: string; nodeId?: string }
   | { type: 'polo' }
+  | { type: 'marco' }
   | { type: 'update_node_positions'; nodePositions: NodePosition[]; updateLastUpdated?: boolean }
   | { type: 'rotate_zone'; zoneId: string; rotation: number; customHandles?: CustomHandle[] }
   | { type: 'update_plot_route'; plottedRoute: string[]; fromZoneId?: string; toZoneId?: string; chainId?: string }

@@ -101,6 +101,15 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
           case 'polo':
             if (authenticated) recordPolo(socket);
             return;
+          case 'marco':
+            // Client-initiated liveness probe: reply immediately so the client
+            // can detect a silently half-open socket (server-initiated marco is
+            // in marcopolo.ts). Reply even if unauthenticated is harmless, but
+            // clients only send this post-auth.
+            if (socket.readyState === socket.OPEN) {
+              socket.send(JSON.stringify({ type: 'polo' } satisfies ServerMessage));
+            }
+            return;
           case 'auth':
             await handleAuth(ctx, msg as any);
             return;
