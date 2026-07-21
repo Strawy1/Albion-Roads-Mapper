@@ -234,6 +234,16 @@ export const SetRoomLockBodySchema = z.object({
 });
 
 /**
+ * Generic analytics event. `type` is an open slug (not an enum) so new client
+ * events need no server changes — the server buckets them per event type per
+ * Europe/London day. The regex + length cap are the only guard against junk
+ * types on an unauthenticated endpoint, so keep them strict.
+ */
+export const EventBodySchema = z.object({
+  type: z.string().min(1).max(64).regex(/^[a-z0-9_]+$/),
+});
+
+/**
  * Payload embedded in room JWTs. `role` is only ever set to 'admin' by the
  * server after verifying the room's admin password — it must never be
  * derivable from any client-supplied input.

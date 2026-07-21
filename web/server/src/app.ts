@@ -12,6 +12,7 @@ import { wsRoutes } from './ws.js';
 import { healthRoutes } from './routes/health.js';
 import { mediaRoutes } from './routes/media.js';
 import { metricsRoutes } from './routes/metrics.js';
+import { eventRoutes } from './routes/events.js';
 
 export interface AppOptions {
   db: Pool;
@@ -99,6 +100,7 @@ export async function buildApp(options: AppOptions) {
   await app.register(healthRoutes, { prefix: '' });
   await app.register(mediaRoutes, { prefix: '' });
   await app.register(metricsRoutes, { prefix: '' });
+  await app.register(eventRoutes, { prefix: '' });
 
   return app;
 }

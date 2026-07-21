@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Z_INDEX } from '@/constants/Layers';
 import TipButton from '../TipButton.vue';
+
+const emit = defineEmits<{ tipped: [] }>();
 </script>
 
 <template>
@@ -19,7 +21,7 @@ import TipButton from '../TipButton.vue';
     </a>
 
     <!-- Ko-fi / Donations button -->
-    <TipButton />
+    <TipButton @clicked="emit('tipped')" />
   </div>
 </template>
 

@@ -286,6 +286,23 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
        HAVING COUNT(*) > 1`,
     );
 
+    // --- Generic client events (POST /api/events), bucketed per Europe/London day.
+    // All-time totals are SUM(count) across days; new event types appear
+    // automatically as new label values — no metrics changes needed. ---
+    const { rows: eventAlltimeRows } = await app.db.query<{ event_type: string; total: string }>(
+      `SELECT event_type, SUM(count) AS total
+       FROM analytics_events
+       GROUP BY event_type
+       ORDER BY event_type`,
+    );
+    const { rows: eventTodayRows } = await app.db.query<{ event_type: string; count: string }>(
+      `SELECT event_type, count
+       FROM analytics_events
+       WHERE date = $1
+       ORDER BY event_type`,
+      [today],
+    );
+
     // -----------------------------------------------------------------------
     // Output. Metrics are grouped by topic (rooms, connections, zones, chains,
     // routes, tokens, data updates, admin actions, map history) — keep
@@ -458,6 +475,20 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       .filter(s => s.value > 0);
     if (roomHistorySeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history (excluding home zone)', 'gauge', roomHistorySeries));
+    }
+
+    // === Events ===
+    const eventAlltimeSeries = eventAlltimeRows
+      .map(r => ({ labels: { event: r.event_type }, value: parseInt(r.total ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (eventAlltimeSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_events_total', 'Total occurrences of each client analytics event since tracking began', 'counter', eventAlltimeSeries));
+    }
+    const eventTodaySeries = eventTodayRows
+      .map(r => ({ labels: { event: r.event_type }, value: parseInt(r.count ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (eventTodaySeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_events_today', 'Occurrences of each client analytics event today (Europe/London)', 'gauge', eventTodaySeries));
     }
 
     return reply

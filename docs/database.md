@@ -76,6 +76,7 @@ Written by `src/analytics.ts` / `src/analyticsCron.ts`; read by `/metrics`. No F
 - **`analytics_room_daily`** — (`room_id`, `date`) PK; `data_updates`, `zones_added_roads/nonroads`, `peak_concurrent`, `unique_tokens`, `routes_plotted`, `tokens_issued`.
 - **`analytics_room_alltime`** — `room_id` PK; same counters, all-time; plus `routes_last_plotted_at` timestamptz (exact time of last route plot; NULL for pre-column history — `/metrics` falls back to the daily buckets).
 - **`analytics_global_alltime`** — singleton row (`id` = 1); `rooms_aborted`, `rooms_abandoned`, `routes_last_plotted_at` timestamptz.
+- **`analytics_events`** — (`event_type`, `date`) PK; `count`. Generic per-day counters for client events (`POST /api/events`); event types are open slugs, all-time totals are `SUM(count)` — new events need no schema change.
 
 ## Operational notes
 

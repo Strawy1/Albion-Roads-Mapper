@@ -2,6 +2,15 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 // @ts-ignore
 import VueKofi from 'vue-kofi';
+import { sendEvent } from '@/utils/events';
+
+// Where this button is rendered — determines the click analytics event and
+// whether the attention-grabbing jiggle runs (planner toolbar only).
+const props = withDefaults(defineProps<{ source?: 'planner' | 'modal' }>(), {
+  source: 'planner',
+});
+
+const emit = defineEmits<{ clicked: [] }>();
 
 const isJiggling = ref(false);
 const kofiColor = ref('#4338ca');
@@ -17,6 +26,7 @@ function triggerJiggle() {
 }
 
 onMounted(() => {
+  if (props.source !== 'planner') return;
   triggerJiggle();
   jiggleInterval = setInterval(triggerJiggle, 60000);
 });
@@ -28,6 +38,8 @@ onUnmounted(() => {
 function handleKoFiClick() {
   localStorage.setItem('tippedNavigator', 'true');
   isJiggling.value = false;
+  sendEvent(props.source === 'modal' ? 'donation_modal_clicked' : 'donation_planner_clicked');
+  emit('clicked');
 }
 </script>
 

@@ -59,12 +59,13 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 ### Other routes
 
 - `GET /api/health` — `{ status: 'ok', roomCount }` (`routes/health.ts`).
+- `POST /api/events` — generic client analytics ingestion (`routes/events.ts`). Body `{ type }` where `type` is an open slug (`/^[a-z0-9_]+$/`, ≤64 chars, `EventBodySchema` in shared) — **not** an enum, so new client events need no server changes. Upserts `analytics_events (event_type, date, count)` per Europe/London day (`incrementEvent` in `analytics.ts`, fire-and-forget). Deliberately **unauthenticated** (a JWT'd version would be 403'd by the room-lock guard in locked rooms); slug validation + rate limiting are the abuse guards. Current events: `donation_modal_shown`, `donation_modal_clicked`, `donation_planner_clicked`.
 - `GET /api/media/demov1-1.mp4` — Range-capable video streaming from `MEDIA_PATH` (`routes/media.ts`).
-- `GET /metrics` — Prometheus text format, **IP-allowlisted** (localhost + `10.0.1.0/24` only), no JWT (`routes/metrics.ts`). ~40 `albionmapper_*` metric families; timezone math is Europe/London.
+- `GET /metrics` — Prometheus text format, **IP-allowlisted** (localhost + `10.0.1.0/24` only), no JWT (`routes/metrics.ts`). ~40 `albionmapper_*` metric families; timezone math is Europe/London. Generic client events surface automatically as labeled series in the Events section: `albionmapper_events_total{event=…}` (counter, SUM over day buckets) and `albionmapper_events_today{event=…}` (gauge).
 
 ### Rate limits
 
-`POST /api/rooms` → 10/hour/IP; `POST /api/rooms/:id/auth` → 20/hour/IP. Disabled in tests via `disableRateLimit`.
+`POST /api/rooms` → 10/hour/IP; `POST /api/rooms/:id/auth` → 20/hour/IP; `POST /api/events` → 120/hour/IP. Disabled in tests via `disableRateLimit`.
 
 ## Business-rule validation
 

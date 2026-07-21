@@ -201,6 +201,32 @@ describe('GET /metrics', () => {
     // However, the base gauge should exist
   });
 
+  it('exposes labeled all-time and today series for generic client events', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql !== 'string' || !sql.includes('FROM analytics_events')) return { rows: [] };
+      if (sql.includes('SUM(count)')) {
+        // All-time totals are summed across day buckets.
+        return { rows: [{ event_type: 'donation_modal_shown', total: '12' }, { event_type: 'donation_modal_clicked', total: '4' }] };
+      }
+      // Today's bucket is filtered by the Europe/London date param.
+      expect(sql).toContain('WHERE date = $1');
+      return { rows: [{ event_type: 'donation_modal_shown', count: '2' }] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toContain('# TYPE albionmapper_events_total counter');
+    expect(res.body).toContain('albionmapper_events_total{event="donation_modal_shown"} 12');
+    expect(res.body).toContain('albionmapper_events_total{event="donation_modal_clicked"} 4');
+    expect(res.body).toContain('# TYPE albionmapper_events_today gauge');
+    expect(res.body).toContain('albionmapper_events_today{event="donation_modal_shown"} 2');
+  });
+
+  it('omits event series when no events have been recorded', async () => {
+    // Default mock returns { rows: [] } for every query.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).not.toContain('albionmapper_events_total{');
+    expect(res.body).not.toContain('albionmapper_events_today{');
+  });
+
   it('outputs valid Prometheus exposition format (HELP, TYPE, value for each metric)', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const lines = res.body.split('\n').filter((l) => l.trim() !== '');

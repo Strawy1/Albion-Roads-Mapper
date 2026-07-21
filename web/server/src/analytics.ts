@@ -103,6 +103,23 @@ export function incrementGlobal(db: Pool, counters: GlobalDailyCounters): void {
 }
 
 /**
+ * Increments a generic event counter for today's Europe/London day bucket.
+ * Event types are open slugs (validated at the route layer) so new events
+ * need no schema or server changes. All-time totals are SUM(count) over days.
+ * Fire-and-forget — never throws.
+ */
+export function incrementEvent(db: Pool, eventType: string): void {
+  const today = londonDateString();
+  void db
+    .query(
+      `INSERT INTO analytics_events (event_type, date, count) VALUES ($1, $2, 1)
+       ON CONFLICT (event_type, date) DO UPDATE SET count = analytics_events.count + 1`,
+      [eventType, today],
+    )
+    .catch((err) => console.error('[analytics] incrementEvent error:', err));
+}
+
+/**
  * Increments per-room daily counters.
  * Creates the row only when there is real activity (no zero rows ever written).
  * Also recalculates active_rooms / inactive_rooms / total_rooms on the global row for today.
