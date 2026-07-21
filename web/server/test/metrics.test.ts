@@ -193,6 +193,32 @@ describe('GET /metrics', () => {
     }
   });
 
+  it('exposes all-time room lifecycle totals summed across day buckets', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql !== 'string') return { rows: [] };
+      if (sql.includes('SUM(rooms_reset)') && sql.includes('FROM analytics_global_daily')) {
+        return { rows: [{
+          tokens_issued: '0', room_data_updates: '0', routes_plotted: '0',
+          rooms_created: '42', rooms_modified: '30', rooms_reset: '7', rooms_deleted: '9',
+        }] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    expect(body).toContain('# TYPE albionmapper_rooms_reset_total counter');
+    expect(body).toMatch(/albionmapper_rooms_created_total 42\b/);
+    expect(body).toMatch(/albionmapper_rooms_modified_total 30\b/);
+    expect(body).toMatch(/albionmapper_rooms_reset_total 7\b/);
+    expect(body).toMatch(/albionmapper_rooms_deleted_total 9\b/);
+  });
+
+  it('defaults all-time room lifecycle totals to 0 when no data exists', async () => {
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toMatch(/albionmapper_rooms_reset_total 0\b/);
+    expect(res.body).toMatch(/albionmapper_rooms_created_total 0\b/);
+  });
+
   it('exposes Map History stats', async () => {
     const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
     const body = res.body;

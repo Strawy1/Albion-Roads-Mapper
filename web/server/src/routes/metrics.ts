@@ -159,12 +159,32 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     const alltimePeak = parseInt(alltimeRows[0]?.alltime_peak ?? '0', 10);
     const alltimeAvg = parseFloat(alltimeRows[0]?.alltime_avg ?? '0');
 
-    const { rows: alltimeGlobalRows } = await app.db.query<{ tokens_issued: string; room_data_updates: string; routes_plotted: string }>(
-      'SELECT SUM(tokens_issued) AS tokens_issued, SUM(room_data_updates) AS room_data_updates, SUM(routes_plotted) AS routes_plotted FROM analytics_global_daily',
+    const { rows: alltimeGlobalRows } = await app.db.query<{
+      tokens_issued: string;
+      room_data_updates: string;
+      routes_plotted: string;
+      rooms_created: string;
+      rooms_modified: string;
+      rooms_reset: string;
+      rooms_deleted: string;
+    }>(
+      `SELECT
+         SUM(tokens_issued) AS tokens_issued,
+         SUM(room_data_updates) AS room_data_updates,
+         SUM(routes_plotted) AS routes_plotted,
+         SUM(rooms_created) AS rooms_created,
+         SUM(rooms_modified) AS rooms_modified,
+         SUM(rooms_reset) AS rooms_reset,
+         SUM(rooms_deleted) AS rooms_deleted
+       FROM analytics_global_daily`,
     );
     const totalTokensIssued = parseInt(alltimeGlobalRows[0]?.tokens_issued ?? '0', 10);
     const totalRoomDataUpdates = parseInt(alltimeGlobalRows[0]?.room_data_updates ?? '0', 10);
     const totalRoutesPlotted = parseInt(alltimeGlobalRows[0]?.routes_plotted ?? '0', 10);
+    const totalRoomsCreated = parseInt(alltimeGlobalRows[0]?.rooms_created ?? '0', 10);
+    const totalRoomsModified = parseInt(alltimeGlobalRows[0]?.rooms_modified ?? '0', 10);
+    const totalRoomsReset = parseInt(alltimeGlobalRows[0]?.rooms_reset ?? '0', 10);
+    const totalRoomsDeleted = parseInt(alltimeGlobalRows[0]?.rooms_deleted ?? '0', 10);
 
     // --- All-time room cleanup stats ---
     const { rows: cleanupAlltimeRows } = await app.db.query<{
@@ -323,9 +343,13 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       lines.push(metricLabeled('albionmapper_room_locked', 'Rooms currently locked (read-only for non-admins), one series per locked room ID', 'gauge', lockedRoomSeries));
     }
     lines.push(metric('albionmapper_daily_rooms_created_total', 'Rooms created today (Europe/London)', 'gauge', parseInt(daily?.rooms_created ?? '0', 10)));
+    lines.push(metric('albionmapper_rooms_created_total', 'All-time total rooms created since tracking began', 'counter', totalRoomsCreated));
     lines.push(metric('albionmapper_daily_rooms_modified_total', 'Rooms with at least one data modification today (Europe/London)', 'gauge', parseInt(daily?.rooms_modified ?? '0', 10)));
+    lines.push(metric('albionmapper_rooms_modified_total', 'All-time total rooms with at least one data modification since tracking began', 'counter', totalRoomsModified));
     lines.push(metric('albionmapper_daily_rooms_reset_total', 'Rooms reset today (Europe/London)', 'gauge', parseInt(daily?.rooms_reset ?? '0', 10)));
+    lines.push(metric('albionmapper_rooms_reset_total', 'All-time total rooms reset since tracking began', 'counter', totalRoomsReset));
     lines.push(metric('albionmapper_daily_rooms_deleted_total', 'Rooms deleted today (Europe/London)', 'gauge', parseInt(daily?.rooms_deleted ?? '0', 10)));
+    lines.push(metric('albionmapper_rooms_deleted_total', 'All-time total rooms deleted since tracking began', 'counter', totalRoomsDeleted));
     lines.push(metric('albionmapper_daily_rooms_aborted_total', 'Rooms auto-deleted today for being created but never used (Europe/London)', 'gauge', parseInt(daily?.rooms_aborted ?? '0', 10)));
     lines.push(metric('albionmapper_daily_rooms_abandoned_total', 'Rooms auto-deleted today for being abandoned after modification (Europe/London)', 'gauge', parseInt(daily?.rooms_abandoned ?? '0', 10)));
     lines.push(metric('albionmapper_rooms_aborted_total', 'All-time total rooms auto-deleted for being created but never used', 'gauge', totalRoomsAborted));
