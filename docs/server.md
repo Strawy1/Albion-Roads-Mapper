@@ -59,6 +59,7 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 ### Other routes
 
 - `GET /api/health` — `{ status: 'ok', roomCount }` (`routes/health.ts`).
+- `GET /api/version` — `{ version }` (`routes/health.ts`). Unauthenticated, `Cache-Control: no-store`. Returns the `app_settings.client_version` token (falls back to `'1'` if the row is missing). It's an **opaque reload-generation token**, not a git SHA — the client (`useVersionWatch`) snapshots it on load and polls every 3 min (+ on tab focus); when it changes, every open tab reloads. Trigger a forced reload wave by bumping the DB value by hand — `UPDATE app_settings SET value = value::int + 1 WHERE key = 'client_version'` — no redeploy of client or server needed. This reaches users **not** in a room (they hold no WS), unlike the WS `force_reload` message.
 - `POST /api/events` — generic client analytics ingestion (`routes/events.ts`). Body `{ type }` where `type` is an open slug (`/^[a-z0-9_]+$/`, ≤64 chars, `EventBodySchema` in shared) — **not** an enum, so new client events need no server changes. Upserts `analytics_events (event_type, date, count)` per Europe/London day (`incrementEvent` in `analytics.ts`, fire-and-forget). Deliberately **unauthenticated** (a JWT'd version would be 403'd by the room-lock guard in locked rooms); slug validation + rate limiting are the abuse guards. Current events: `donation_modal_shown`, `donation_modal_clicked`, `donation_planner_clicked`.
 - `GET /api/media/demov1-1.mp4` — Range-capable video streaming from `MEDIA_PATH` (`routes/media.ts`).
 - `GET /metrics` — Prometheus text format, **IP-allowlisted** (localhost + `10.0.1.0/24` only), no JWT (`routes/metrics.ts`). ~40 `albionmapper_*` metric families; timezone math is Europe/London. Generic client events surface automatically as labeled series in the Events section: `albionmapper_events_total{event=…}` (counter, SUM over day buckets) and `albionmapper_events_today{event=…}` (gauge).
@@ -89,6 +90,6 @@ Started in `index.ts`, cleared on shutdown:
 |---|---|---|---|
 | Expiry cleanup | `src/expiry.ts` | 60 s | Broadcasts `connection_expired` for freshly expired connections; hard-deletes connections older than the 6 h grace (`EXPIRE_GRACE_MS`), broadcasting `connection_removed` |
 | Analytics cron | `src/analyticsCron.ts` | 60 s | Flushes in-memory concurrency/unique-token stats to the analytics tables; hourly connection buckets; daily rollover at Europe/London midnight |
-| Room cleanup | `src/roomCleanup.ts` | 1 h (runs immediately) | Deletes **aborted** rooms (empty, >48 h old) and **abandoned** rooms (stale >5 days), tracking counts in analytics |
+| Room cleanup | `src/roomCleanup.ts` | 1 h (runs immediately) | Deletes **aborted** rooms (empty, >5 days old) and **abandoned** rooms (stale >30 days), tracking counts in analytics |
 
 In-memory analytics state lives in `src/broadcast_analytics.ts` (per-room peak concurrency + JWT-signature-fingerprint unique tokens), flushed each minute by the cron.

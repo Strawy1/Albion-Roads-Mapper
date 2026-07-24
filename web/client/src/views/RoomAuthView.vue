@@ -94,7 +94,7 @@ async function authenticate() {
         <strong>Room was deleted!</strong> The room owner permanently deleted this room.
       </div>
       <p v-else class="text-gray-400 text-sm mb-4">
-        Rooms that have not been modified for more than 5 days are automatically deleted.
+        Rooms that have not been modified for more than 30 days are automatically deleted.
         It may be the case this has happened to your room.
         When rooms are deleted, the link is freed up, so you can recreate it under the same link.
       </p>

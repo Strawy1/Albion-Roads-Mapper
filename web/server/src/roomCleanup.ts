@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import { incrementGlobal, incrementGlobalAlltime } from './analytics.js';
 
-const ABORTED_GRACE_MS  = 48 * 60 * 60 * 1000; // 48 hours
-const ABANDONED_GRACE_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+const ABORTED_GRACE_MS  = 5 * 24 * 60 * 60 * 1000; // 5 days
+const ABANDONED_GRACE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 interface RoomRow {
   id: string;
@@ -14,10 +14,10 @@ interface RoomRow {
  *
  * Aborted  — room has no zones beyond the home zone AND no map history AND no
  *             connections ever recorded, and the reference timestamp
- *             (updated_at if present, otherwise created_at) is older than 48 h.
+ *             (updated_at if present, otherwise created_at) is older than 5 days.
  *
  * Abandoned — room has at least one non-home zone or some map history (i.e. the
- *             user did meaningful work), but has not been updated for 5 days
+ *             user did meaningful work), but has not been updated for 30 days
  *             (measured by updated_at, falling back to created_at).
  *
  * Safe to call frequently — uses a single cron tick minute interval.
@@ -28,7 +28,7 @@ export async function runRoomCleanup(db: Pool): Promise<void> {
   console.log('[roomCleanup] Starting cleanup at', now);
 
   // --- Aborted rooms ---
-  // No zones beyond the home zone, no map history, reference time > 48 h ago.
+  // No zones beyond the home zone, no map history, reference time > 5 days ago.
   const abortedCutoff = new Date(now.getTime() - ABORTED_GRACE_MS).toISOString();
   const { rows: abortedRooms } = await db.query<RoomRow>(
     `SELECT r.id
@@ -49,7 +49,7 @@ export async function runRoomCleanup(db: Pool): Promise<void> {
          SELECT 1 FROM connections c
          WHERE c.room_id = r.id
        )
-       -- Reference timestamp older than 48 h (prefer updated_at, fall back to created_at)
+       -- Reference timestamp older than 5 days (prefer updated_at, fall back to created_at)
        AND COALESCE(r.updated_at, r.created_at) < $1`,
     [abortedCutoff],
   );
@@ -65,7 +65,7 @@ export async function runRoomCleanup(db: Pool): Promise<void> {
   }
 
   // --- Abandoned rooms ---
-  // Has meaningful content (non-home zone or history), but last touched > 5 days ago.
+  // Has meaningful content (non-home zone or history), but last touched > 30 days ago.
   const abandonedCutoff = new Date(now.getTime() - ABANDONED_GRACE_MS).toISOString();
   const { rows: abandonedRooms } = await db.query<RoomRow>(
     `SELECT r.id
@@ -82,7 +82,7 @@ export async function runRoomCleanup(db: Pool): Promise<void> {
            WHERE rnm.room_id = r.id AND rnm.zone_id != r.home_zone_id
          )
        )
-       -- Must have been explicitly updated, and that update must be older than 5 days
+       -- Must have been explicitly updated, and that update must be older than 30 days
        -- (no fallback to created_at — a room never updated is aborted, not abandoned)
        AND r.updated_at IS NOT NULL
        AND r.updated_at < $1`,

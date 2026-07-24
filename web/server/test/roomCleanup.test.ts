@@ -49,7 +49,7 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('runRoomCleanup — aborted rooms', () => {
-  it('deletes rooms that were created but never used and are older than 48 h', async () => {
+  it('deletes rooms that were created but never used and are older than 5 days', async () => {
     const roomId = 'aborted-room-1';
 
     // First query returns the aborted rooms; second (abandoned) returns none.
@@ -136,7 +136,7 @@ describe('runRoomCleanup — aborted rooms', () => {
 // ---------------------------------------------------------------------------
 
 describe('runRoomCleanup — abandoned rooms', () => {
-  it('deletes rooms that had meaningful content but were not updated for 5 days', async () => {
+  it('deletes rooms that had meaningful content but were not updated for 30 days', async () => {
     const roomId = 'abandoned-room-1';
 
     mockDb.query
