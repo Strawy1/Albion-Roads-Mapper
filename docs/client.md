@@ -65,4 +65,5 @@ VueFlow `@connect-start` / `@connect` / `@connect-end` → `handleConnect()` in 
 - Scripts: `dev` (vite, port 5173), `build` (`vue-tsc --noEmit && vite build`), `preview`, `test` (`vitest run`), `lint`.
 - **Dev proxy** (`vite.config.ts`): `/api` → `http://localhost:3001`, `/ws` → `ws://localhost:3001` (upgrade). In non-dev, `src/utils/api.ts` picks the base URL: Vercel `preview` env → `https://api-testing.albionroads.live`, else `VITE_API_URL` or `http://localhost:3001`.
 - Injected globals: `__APP_VERSION__` (root package.json), `__APP_COMMIT_SHA__`, `__VERCEL_ENV__`.
+- **Emoji font:** `public/fonts/noto-color-emoji-subset.woff2` is a self-hosted COLRv1 (vector) subset of Noto Color Emoji, declared in `src/style.css` under the same family name so it shadows the OS bitmap font on Linux/Android (Chromium fails to re-raster bitmap emoji under the map's zoom transform, leaving icons at a stale size). When adding a new emoji to the client, re-subset the font and extend the `unicode-range` — see the comment above the `@font-face`.
 - Deployed on Vercel (client) against the Dockerised API.

@@ -1,6 +1,27 @@
 @import '@vue-flow/core/dist/style.css';
 @import '@vue-flow/core/dist/theme-default.css';
 
+/* Self-hosted vector (COLRv1) subset of Noto Color Emoji covering every emoji the app
+   renders. It deliberately reuses the system font's family name — the last entry of
+   Tailwind's default sans stack — so document fonts shadow the OS font wherever the
+   fallback chain reaches "Noto Color Emoji" (Linux, Android). Windows/macOS resolve
+   Segoe/Apple emoji earlier in the stack and are unaffected.
+   Why: the OS Noto Color Emoji is a bitmap (CBDT) font, and Chromium doesn't reliably
+   re-raster bitmap emoji glyphs under the map's CSS zoom transform — icons (ping bell,
+   map-history hourglass, chain link, …) get stuck at a stale size while their buttons
+   scale. Vector glyphs follow transforms like regular text.
+   When adding a NEW emoji to the app, re-subset the font (and extend unicode-range):
+   curl -A "Mozilla/5.0 ... Chrome/150" "https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&text=<url-encoded emoji>"
+   then download the woff2 URL it returns to public/fonts/noto-color-emoji-subset.woff2. */
+@font-face {
+  font-family: 'Noto Color Emoji';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/noto-color-emoji-subset.woff2') format('woff2');
+  unicode-range: U+23f1, U+23f3, U+2694, U+2699, U+26a0, U+26d3, U+2705, U+2728, U+274c, U+2764, U+fe0f, U+1f41b, U+1f463, U+1f4a1, U+1f504, U+1f507, U+1f50a, U+1f50d, U+1f512-1f514, U+1f517, U+1f527, U+1f5d1, U+1f5fa, U+1f6aa;
+}
+
 @tailwind base;
 @tailwind components;
 
