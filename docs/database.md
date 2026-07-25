@@ -67,6 +67,18 @@ PostgreSQL, managed by `node-pg-migrate`. Migrations live in `web/server/migrati
 | `chain_color` | text | Hex; defaults via `defaultChainColor()` from the shared palette |
 | `created_at` | timestamptz NOT NULL default now | |
 
+## Global settings
+
+### `app_settings` — site-wide key/value store (no room scope)
+
+| Column | Type | Notes |
+|---|---|---|
+| `key` | text PK | |
+| `value` | text NOT NULL | |
+| `updated_at` | timestamptz NOT NULL default now | |
+
+Seeded with one row: `('client_version', '1')` — the reload-generation token served by `GET /api/version` and watched by the client (`useVersionWatch`). Bump `value` by hand to force all open tabs to reload (see [server.md](server.md) `GET /api/version`). Generic table — future global flags can be added as new keys without a migration.
+
 ## Analytics tables
 
 Written by `src/analytics.ts` / `src/analyticsCron.ts`; read by `/metrics`. No FKs to `rooms` (they survive room deletion). All daily bucketing uses Europe/London.

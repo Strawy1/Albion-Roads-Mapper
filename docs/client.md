@@ -4,7 +4,7 @@ Vue 3 + TypeScript SPA (Vite, `<script setup>`), TailwindCSS + some SCSS, Pinia,
 
 ## Structure
 
-- **Entry:** `src/main.ts` → `src/App.vue` (RouterView + Vercel Analytics in prod).
+- **Entry:** `src/main.ts` → `src/App.vue` (RouterView + Vercel Analytics in prod). `App.vue` also starts `useVersionWatch()` (`src/composables/useVersionWatch.ts`) app-wide: it snapshots `GET /api/version` on load and polls every 3 min (+ on tab focus). If the token changes it flips `updateAvailable` and **stops polling** — it never reloads on its own. `App.vue` renders `UpdateAvailableToast.vue` off that state: a persistent prompt ("A new version has been released, please reload") with a Reload button, so nobody is interrupted mid-edit. It sits at the mega toast's vertical position (`top-20 md:top-24`, `Z_INDEX.TOAST`) and is click-through except for the pill itself. **To preview it without touching the DB:** `localStorage.setItem('show_reload', 'true')` and reload — the prompt appears and polling is skipped entirely; clear with `localStorage.removeItem('show_reload')`. This is the only update path that reaches users **not** in a room; in-room users can additionally be reloaded *unconditionally* via the WS `force_reload` message (`useRoomStore`), which is the hard-reload escape hatch.
 - **Routes** (`src/router/index.ts`):
   - `/` → `src/views/LandingPage.vue` — marketing/tutorial page with chaptered demo video
   - `/create` → `src/views/CreateRoomView.vue` — room creation
