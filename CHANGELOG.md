@@ -1,3 +1,23 @@
+## [1.4.0] - 2026-07-25
+
+### 🚀 Features
+- **Rooms are now tied to an Albion server** (Europe / Americas / Asia), to build a reliable database of Map Features across servers.
+  - This will power "we think there's these features here, please confirm" abilities, with the potential (with enough data) to pre-fill map features based on a number of confirmed reports.
+  - New rooms pick one when they're created, existing rooms get a prompt to set theirs, and the server pill in the room title lets you change it afterwards.
+- **New version prompt**: when a substantial release of the mapper goes out, a toast asks you to reload the page to get the new version.
+- The "Link Zone portals" hint can now be dismissed for good — a "Don't show this again" link on the prompt itself, plus a sub-toggle under Hints in room settings to bring it back.
+- **Rooms live much longer before cleanup**: 
+  - Aborted rooms (rooms where people created the room but did nothing with it) 48 hours → 5 days
+  - Abandoned rooms (where no-one has modified it) 5 days → 30 days.
+- Added a donation prompt with a Ko-fi link, shown after a few separate visits. Dismissing it or tipping hides it permanently.
+
+### 🐛 Bug Fixes
+- Map icon emoji (pings, map history, chains) now scale with the map zoom on Linux and Android instead of getting stuck at the wrong size.
+- Tabs whose connection silently died (typically after a server update) now notice and reconnect, instead of sitting there looking connected forever. Reconnects also heal immediately when you come back to the tab or regain network.
+- Modals now render above the settings tray on mobile — the cog no longer pokes through Change password / Lock room.
+- Locked rooms are now shown as a list of rooms.
+- The "Which server is this room on?" prompt no longer flashes up on every room load — it now waits until the room's details have actually arrived, and only appears if the room really is unassigned.
+
 ## [1.3.0] - 2026-07-18
 
 ### 🚀 Features

@@ -79,6 +79,20 @@ describe('useRoomStore — room server', () => {
     expect(store.roomServer).toBe('asia');
   });
 
+  it('needsServerAssignment stays false between auth_ok and the sync landing', () => {
+    const store = useRoomStore();
+    store.setCredentials(ROOM_ID, REGULAR_TOKEN);
+
+    // auth_ok flips wsStatus before any sync arrives: roomServer is still null
+    // here, and prompting on that flashes the modal on every load of an
+    // already-assigned room.
+    store.wsStatus = 'connected';
+    expect(store.needsServerAssignment).toBe(false);
+
+    store.applyMessage(minimalSync({ server: 'eu' }));
+    expect(store.needsServerAssignment).toBe(false);
+  });
+
   it('needsServerAssignment only fires for a connected, editable, unassigned room', () => {
     const store = useRoomStore();
     store.setCredentials(ROOM_ID, REGULAR_TOKEN);

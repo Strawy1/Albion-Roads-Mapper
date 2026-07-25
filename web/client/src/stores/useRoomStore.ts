@@ -94,14 +94,19 @@ export const useRoomStore = defineStore('room', () => {
   const isAdmin = ref(false);
   const canEdit = computed(() => !locked.value || isAdmin.value);
   const wsStatus = ref<WsStatus>('disconnected');
+  // True only between a `sync` landing and the socket going away again. The
+  // room's real state (server, lock, chains…) is unknown before that, so
+  // anything that reacts to "this room has no X" must wait for it.
+  const hasSynced = ref(false);
   /**
    * Drives the blocking "pick a server" prompt. Only once the sync has landed
-   * (otherwise every room looks unassigned for a beat) and only for sessions
-   * that could actually save it — a locked room's read-only visitors would be
-   * trapped behind a modal the server would 403 anyway.
+   * (auth_ok flips wsStatus to connected a beat earlier, when roomServer is
+   * still null — gating on that alone flashes the modal on every load) and
+   * only for sessions that could actually save it — a locked room's read-only
+   * visitors would be trapped behind a modal the server would 403 anyway.
    */
   const needsServerAssignment = computed(
-    () => wsStatus.value === 'connected' && roomServer.value === null && canEdit.value
+    () => hasSynced.value && wsStatus.value === 'connected' && roomServer.value === null && canEdit.value
   );
   const lastUpdate = ref<Date | null>(null);
   const lastPing = ref<{zoneName: string, nodeId?: string} | null>(null);
@@ -331,6 +336,7 @@ export const useRoomStore = defineStore('room', () => {
         chains.value = msg.chains ?? [];
         roomTitle.value = msg.title || '';
         roomServer.value = msg.server ?? null;
+        hasSynced.value = true;
         locked.value = msg.locked ?? false;
         refreshAdminState();
         nodePositions.value = msg.nodePositions;
@@ -612,6 +618,8 @@ export const useRoomStore = defineStore('room', () => {
 
     attachWakeListeners();
     wsStatus.value = 'connecting';
+    // Whatever the old socket told us is now unverified — re-armed by `sync`.
+    hasSynced.value = false;
     const url = new URL(`${API_BASE_URL}/ws/rooms/${roomId.value}`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url.toString());
@@ -778,6 +786,7 @@ export const useRoomStore = defineStore('room', () => {
     ws?.close();
     ws = null;
     wsStatus.value = 'disconnected';
+    hasSynced.value = false;
     connections.value = [];
     homeZoneId.value = '';
     chains.value = [];
@@ -1212,6 +1221,7 @@ export const useRoomStore = defineStore('room', () => {
     homeZoneId,
     roomTitle,
     roomServer,
+    hasSynced,
     needsServerAssignment,
     setRoomServer,
     locked,
