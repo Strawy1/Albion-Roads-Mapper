@@ -249,6 +249,16 @@ function exitRoom() {
             </span>
             <span :class="store.bluePromptsEnabled ? 'text-green-400' : 'text-gray-500'">{{ store.bluePromptsEnabled ? 'On' : 'Off' }}</span>
           </button>
+          <!-- Per-hint opt-out, silenced from the hint itself via "Don't show this again" -->
+          <button
+            type="button"
+            class="w-full text-left pl-8 pr-3 py-1 mt-1 text-xs rounded text-gray-400 hover:bg-gray-700 flex items-center justify-between disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            :disabled="!store.bluePromptsEnabled"
+            @click="store.setLinkPortalsHintEnabled(!store.linkPortalsHintEnabled)"
+          >
+            <span>↳ "Link Zone portals!" hint</span>
+            <span :class="store.linkPortalsHintEnabled ? 'text-green-400' : 'text-gray-500'">{{ store.linkPortalsHintEnabled ? 'On' : 'Off' }}</span>
+          </button>
         </div>
 
         <!-- Change password -->

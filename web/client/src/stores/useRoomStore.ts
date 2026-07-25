@@ -5,6 +5,7 @@ import { inferRotationFromHandles, getShapeHandlePositions, ZONE_BY_ID, PRIMARY_
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
 import { treeQuery } from '@/utils/treeQuery';
+import { pruneDismissedLinkPortalsHints } from '@/utils/linkPortalsHint';
 import { useRoomMemoryStore } from './useRoomMemoryStore';
 import { usePlotRouteStore } from './usePlotRouteStore';
 
@@ -323,6 +324,9 @@ export const useRoomStore = defineStore('room', () => {
     switch (msg.type) {
       case 'sync':
         connections.value = msg.connections;
+        // Sync is the one point we see the full connection list, so it's where
+        // stale "Link Zone portals!" hint dismissals get garbage-collected.
+        pruneDismissedLinkPortalsHints(msg.connections.map(c => c.id));
         homeZoneId.value = msg.homeZoneId;
         chains.value = msg.chains ?? [];
         roomTitle.value = msg.title || '';
@@ -1005,6 +1009,15 @@ export const useRoomStore = defineStore('room', () => {
     localStorage.setItem('bluePromptsEnabled', String(enabled));
   }
 
+  // Opt-out for the "Link Zone portals!" edge hint specifically, so users can
+  // silence the one prompt they see most without turning off all blue prompts.
+  const linkPortalsHintEnabled = ref<boolean>(localStorage.getItem('linkPortalsHintEnabled') !== 'false');
+
+  function setLinkPortalsHintEnabled(enabled: boolean) {
+    linkPortalsHintEnabled.value = enabled;
+    localStorage.setItem('linkPortalsHintEnabled', String(enabled));
+  }
+
   const recentlyViewedRooms = ref<RecentRoom[]>(JSON.parse(localStorage.getItem('recentRooms') || '[]').map((r: any) => ({
     id: r.id,
     vanityUrl: r.vanityUrl || r.id,
@@ -1256,6 +1269,8 @@ export const useRoomStore = defineStore('room', () => {
     setAnimationsEnabled,
     bluePromptsEnabled,
     setBluePromptsEnabled,
+    linkPortalsHintEnabled,
+    setLinkPortalsHintEnabled,
     addToRecentRooms,
     removeFromRecentRooms,
     importData,

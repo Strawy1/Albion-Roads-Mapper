@@ -3,7 +3,7 @@ import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPo
 import BluePrompt from '@/components/ui/BluePrompt.vue';
 import {Z_INDEX} from "@/constants/Layers";
 
-const emit = defineEmits<{ dismiss: [] }>();
+const emit = defineEmits<{ dismiss: []; disable: [] }>();
 </script>
 
 <template>
@@ -38,6 +38,14 @@ const emit = defineEmits<{ dismiss: [] }>();
         @click.stop="emit('dismiss')"
         @mousedown.stop
       >✕</button>
+    </template>
+    <template #footer>
+      <button
+        class="dismiss-all-btn text-[11px] leading-none text-blue-200 hover:text-white underline whitespace-nowrap"
+        title="Stop showing this hint on every connection"
+        @click.stop="emit('disable')"
+        @mousedown.stop
+      >Don't show this again</button>
     </template>
   </BluePrompt>
 </template>

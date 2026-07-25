@@ -11,6 +11,7 @@ import { useRoomStore } from '@/stores/useRoomStore';
 import { ZONE_BY_ID, type Connection } from 'shared';
 import { getTrueHandleCenter, getHandleFacingFromId, isCenter } from '@/utils/handleCenter';
 import { Z_INDEX } from '@/constants/Layers';
+import { isLinkPortalsHintDismissed, dismissLinkPortalsHint } from '@/utils/linkPortalsHint';
 
 type EdgeData = {
   connection?: Connection;
@@ -275,8 +276,15 @@ const isTargetUnexplored = computed(() => {
   return !d.explored;
 });
 
-const tooltipDismissed = ref(false);
-watch(isTargetUnexplored, () => { tooltipDismissed.value = false; });
+const tooltipDismissed = ref(isLinkPortalsHintDismissed(props.id));
+// Re-check persisted state rather than blindly re-showing: a target flipping back
+// to unexplored shouldn't resurrect a hint the user already dismissed here.
+watch(isTargetUnexplored, () => { tooltipDismissed.value = isLinkPortalsHintDismissed(props.id); });
+
+function dismissTooltip() {
+  tooltipDismissed.value = true;
+  dismissLinkPortalsHint(props.id);
+}
 
 defineExpose({
   showPopover,
@@ -362,11 +370,14 @@ defineExpose({
     >
       <!-- Unexplored target tooltip — right of the pill -->
       <div
-        v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting"
+        v-if="isTargetUnexplored && !tooltipDismissed && !roomStore.isConnecting && roomStore.linkPortalsHintEnabled"
         class="absolute left-full top-1/2 -translate-y-1/2"
         :class="Z_INDEX.TOAST"
       >
-        <UnexploredHandleTooltip @dismiss="tooltipDismissed = true" />
+        <UnexploredHandleTooltip
+          @dismiss="dismissTooltip"
+          @disable="roomStore.setLinkPortalsHintEnabled(false)"
+        />
       </div>
       <!-- Countdown label -->
       <div

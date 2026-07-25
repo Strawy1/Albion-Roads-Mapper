@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, useSlots } from 'vue';
 import { useRafFn } from '@vueuse/core';
 import { useVueFlow } from '@vue-flow/core';
 import { Z_INDEX } from '@/constants/Layers';
@@ -17,6 +17,25 @@ const props = defineProps<{
   target?: HTMLElement;
   screenPos?: { x: number; y: number };
 }>();
+
+const slots = useSlots();
+
+// Secondary actions (e.g. "Don't show again") live in the #footer slot and stay
+// collapsed until the bubble is hovered, so prompts keep their one-line
+// footprint on a crowded map. Click also reveals, as touch devices never hover.
+const footerRevealed = ref(false);
+const hasFooter = computed(() => !!slots.footer);
+
+function revealFooter(e?: Event) {
+  if (!hasFooter.value) return;
+  e?.stopPropagation();
+  footerRevealed.value = true;
+}
+
+function hideFooter() {
+  if (!hasFooter.value) return;
+  footerRevealed.value = false;
+}
 
 const rect = ref<DOMRect | null>(null);
 const { viewport } = useVueFlow();
@@ -95,10 +114,30 @@ const tooltipStyle = computed(() => {
       <div
         class="relative bg-blue-600 border-2 border-blue-400 text-white text-center px-3 py-1.5 rounded shadow-lg text-lg"
         :class="[{ 'animate-bounce-prompt': bounce && roomStore.animationsEnabled }]"
+        @mouseenter="revealFooter()"
+        @mouseleave="hideFooter()"
+        @focusin="revealFooter()"
+        @focusout="hideFooter()"
+        @click="revealFooter($event)"
       >
         <div class="flex items-center gap-1 whitespace-nowrap">
           <slot />
           <slot name="actions" />
+        </div>
+        <!-- Expands *below* the bubble rather than resizing it, so the arrow stays
+             pinned to whatever the prompt is pointing at. -->
+        <div
+          v-if="hasFooter"
+          class="absolute top-full left-0 right-0 flex justify-center overflow-hidden transition-all duration-150 ease-out"
+          :class="footerRevealed ? 'max-h-10 opacity-100' : 'max-h-0 opacity-0'"
+        >
+          <!-- flex + leading-none: an inline child would inherit the bubble's
+               text-lg strut and pad the row out top-heavy. -->
+          <!-- Shrink-to-fit and centred: butting it up against the bubble's own
+               sides never quite lined up, so it reads as a narrower tab instead. -->
+          <div class="flex items-center bg-blue-600 border-x-4 border-b-2 border-t-0 border-blue-400 rounded-b-lg px-2 py-1.5 text-xs leading-none shadow-lg">
+            <slot name="footer" />
+          </div>
         </div>
         <!-- Arrows (with blue-400 outline via layered larger arrow behind) -->
         <template v-if="pointing === 'down'">
