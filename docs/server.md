@@ -28,12 +28,13 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 |---|---|---|---|
 | GET | `/api/rooms/resolve/:slug` | none | `{ id }` or 404 |
 | GET | `/api/slugs/check/:slug` | none | `{ available }`; slug must match `/^[a-z0-9-]+$/`, ≤100 chars |
-| POST | `/api/rooms` | none (rate-limited) | `{ password, adminPassword, homeZoneId, title?, vanityUrl }` → 201 `{ id, shareUrl }`. Room id **is** the vanity slug. Creates room + primary chain + home-zone position + memory in a transaction. 409 if slug taken |
+| POST | `/api/rooms` | none (rate-limited) | `{ password, adminPassword, homeZoneId, title?, server?, vanityUrl }` → 201 `{ id, shareUrl }`. `server` (`eu`/`us`/`asia`) is optional on the wire but required by the create form — a room without one is prompted in-app. Room id **is** the vanity slug. Creates room + primary chain + home-zone position + memory in a transaction. 409 if slug taken |
 | POST | `/api/rooms/:id/auth` | none (rate-limited) | `{ password }` → `{ token }`; 401 bad password |
 | POST | `/api/rooms/:id/auth/admin` | none (rate-limited) | `{ adminPassword }` → `{ token }` with `role: 'admin'`; 401 bad admin password. Compares only `admin_password_hash`, scoped to `:id` |
 | PATCH | `/api/rooms/:id/lock` | JWT (admin role) | `{ locked: boolean }` → `{ ok, locked }`; 403 without admin role. Broadcasts `room_lock_changed` |
 | PATCH | `/api/rooms/:id/password` | JWT + admin pw | Bumps `password_version`; broadcasts `password_rotated` |
 | PATCH | `/api/rooms/:id/title` | JWT + admin pw | Title ≤50 chars; broadcasts `room_title_updated` |
+| PATCH | `/api/rooms/:id/server` | JWT (+ admin pw to *change*) | `{ server: 'eu'\|'us'\|'asia', adminPassword? }` → `{ ok, server }`. **Asymmetric auth:** the first assignment (`rooms.server IS NULL`) and re-sending the current value need only a room token, so the in-room prompt can backfill legacy rooms; changing a recorded value requires the admin password (400 without it, 401 if wrong). Broadcasts `room_server_updated` |
 | POST | `/api/rooms/:id/chains` | JWT | `{ sourceZoneId, x?, y? }` → 201 `{ chain }`. 409 if zone already in a chain. Broadcasts `chain_added` (+ single-row `node_positions_updated`) |
 | PATCH | `/api/rooms/:id/chains/:chainId` | JWT | `{ chainColor }` (hex `#RRGGBB`); broadcasts `chain_updated` |
 | POST | `/api/rooms/:id/chains/:chainId/relocate` | JWT | `{ sourceZoneId }` — wipes the chain's connections/positions/memory, re-roots at the old coords; updates `home_zone_id` if primary chain. Broadcasts `chain_relocated` |

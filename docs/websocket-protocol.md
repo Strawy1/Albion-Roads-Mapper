@@ -8,7 +8,7 @@ Route: `GET /ws/rooms/:id` — handler in `web/server/src/ws.ts`; broadcast regi
 2. Client sends `{ type: 'auth', token }` (`src/operations/auth.ts`). Bad token → close `4401 "Invalid token"`; token for another room → close `4401 "Token room mismatch"`.
 3. On success the socket is registered in the room's broadcast set and receives, in order:
    - `{ type: 'auth_ok' }`
-   - `{ type: 'sync', connections, homeZoneId, title?, nodePositions, lastUpdatedAt, watching, totalConnected, plottedRoute?, plottedRouteFromZoneId?, plottedRouteToZoneId?, plottedRouteChainId?, chains?, locked? }` — full room state. Connections are filtered to permanent-or-within-6h-grace.
+   - `{ type: 'sync', connections, homeZoneId, title?, server?, nodePositions, lastUpdatedAt, watching, totalConnected, plottedRoute?, plottedRouteFromZoneId?, plottedRouteToZoneId?, plottedRouteChainId?, chains?, locked? }` — full room state. Connections are filtered to permanent-or-within-6h-grace.
    - `{ type: 'memory_sync', memory: RoomMemoryEntry[] }` — roads/roadsHideout zones only.
 4. Any other message while unauthenticated → close `4401 "Not authenticated"`. Invalid JSON → `{ type: 'error', message: 'Invalid JSON' }`.
 5. Each mutating operation re-verifies the stored token via `verifyWriteAccess()` (`ws.ts`); on token failure the server sends `session_expired` and closes `4401`. Close code `4401` tells the client **not** to auto-reconnect (it redirects to the auth page instead); any other close triggers stepped-backoff reconnect (see Reconnect backoff below). `verifyWriteAccess()` also runs the room-lock guard (`utils/roomGuard.ts`): when the room is **locked** and the session token lacks `role: 'admin'`, the mutation is rejected with `{ type: 'error', message: 'Room is locked' }` — the socket stays open, so read-only viewers keep receiving broadcasts.
@@ -42,6 +42,7 @@ Operation plumbing: `src/operations/types.ts` (`OperationContext` / `OperationHa
 | `room_updated` | `{ homeZoneId }` | Home zone change |
 | `room_reset` | — | Connections reset or import (client re-syncs) |
 | `room_title_updated` | `{ title }` | Title change |
+| `room_server_updated` | `{ server }` | Room's Albion server (`eu`/`us`/`asia`) assigned or changed via PATCH `/api/rooms/:id/server` |
 | `chain_added` / `chain_updated` | `{ chain }` | Chain CRUD |
 | `chain_removed` | `{ chainId, removedZoneIds, removedConnectionIds }` | Chain delete |
 | `chain_relocated` | `{ chain, removedZoneIds, removedConnectionIds, newHomeZoneId?, newSourceNodePosition }` | Chain relocate |

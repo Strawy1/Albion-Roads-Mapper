@@ -2,6 +2,8 @@
 import { ref, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import ZoneCombobox from '../components/ZoneCombobox.vue';
+import ServerPicker from '../components/common/ServerPicker.vue';
+import type { RoomServer } from 'shared';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
@@ -14,6 +16,7 @@ const store = useRoomStore();
 const createPassword = ref('');
 const createAdminPassword = ref('');
 const createHomeZoneId = ref('');
+const createServer = ref<RoomServer | null>(null);
 const createTitle = ref('');
 const createVanityUrl = ref('');
 const vanityUrlStatus = ref<'checking' | 'available' | 'taken' | 'idle'>('idle');
@@ -74,7 +77,7 @@ onMounted(() => {
 });
 
 async function createRoom() {
-  if (!createPassword.value || !createAdminPassword.value || !createHomeZoneId.value) return;
+  if (!createPassword.value || !createAdminPassword.value || !createHomeZoneId.value || !createServer.value) return;
   creating.value = true;
   createError.value = '';
   try {
@@ -86,6 +89,7 @@ async function createRoom() {
         adminPassword: createAdminPassword.value,
         homeZoneId: createHomeZoneId.value,
         title: createTitle.value,
+        server: createServer.value,
         vanityUrl: createVanityUrl.value,
       }),
     });
@@ -183,6 +187,11 @@ async function createRoom() {
           <p class="text-xs text-yellow-600 mt-1">Keep this safe, otherwise you cannot change the room's password!</p>
         </div>
         <div>
+          <label class="block text-sm text-white mb-1">Server</label>
+          <ServerPicker v-model="createServer" />
+          <p class="text-xs text-gray-400 mt-1">Which Albion server this room's map data comes from.</p>
+        </div>
+        <div>
           <label class="block text-sm text-white mb-1">Home Zone</label>
 
           <ZoneCombobox :key="createFormKey" v-model="createHomeZoneId" placeholder="Search home zone…" />
@@ -192,7 +201,7 @@ async function createRoom() {
         </div>
         <p v-if="createError" class="text-red-400 text-sm">{{ createError }}</p>
         <button
-          :disabled="!createPassword || !createAdminPassword || !createHomeZoneId || creating"
+          :disabled="!createPassword || !createAdminPassword || !createHomeZoneId || !createServer || creating"
           class="px-4 py-2 text-white rounded bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           @click="createRoom"
         >

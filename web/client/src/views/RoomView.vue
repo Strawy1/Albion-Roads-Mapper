@@ -37,6 +37,7 @@ import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type
 // v1.2 splash retired with v1.3 (kept for reference / future announcements)
 // import V1dot2SplashModal from "@/components/version-announcements/V1dot2SplashModal.vue";
 import DonationPromptModal from '@/components/DonationPromptModal.vue';
+import RoomServerModal from '@/components/RoomServerModal.vue';
 
 const donationModal = ref<InstanceType<typeof DonationPromptModal> | null>(null);
 
@@ -1444,6 +1445,9 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
     <ChainManager v-model="showAddChainModal" />
     <!-- <V1dot2SplashModal /> -->
     <DonationPromptModal ref="donationModal" />
+    <!-- Rooms created before servers existed must be labelled before use: this
+         one is non-dismissible (see store.needsServerAssignment). -->
+    <RoomServerModal v-if="store.needsServerAssignment" :model-value="true" blocking />
 
 
     <ReportForm

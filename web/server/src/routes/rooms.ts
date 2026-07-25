@@ -7,6 +7,7 @@ import {
   AuthRoomBodySchema,
   AdminAuthRoomBodySchema,
   SetRoomLockBodySchema,
+  SetRoomServerBodySchema,
   type RoomTokenPayload,
   ChangePasswordBodySchema,
   AddChainBodySchema,
@@ -73,7 +74,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: formatZodError(parsed.error) });
     }
 
-    const { password, adminPassword, homeZoneId, title, vanityUrl } = parsed.data;
+    const { password, adminPassword, homeZoneId, title, server, vanityUrl } = parsed.data;
 
     const zone = ZONE_BY_ID.get(homeZoneId);
     if (!zone) {
@@ -98,9 +99,9 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       }
 
       await client.query(`
-        INSERT INTO rooms (id, password_hash, admin_password_hash, home_zone_id, title, created_at, chain_migrated)
-        VALUES ($1, $2, $3, $4, $5, $6, true)
-      `, [id, passwordHash, adminPasswordHash, homeZoneId, title || null, createdAt]);
+        INSERT INTO rooms (id, password_hash, admin_password_hash, home_zone_id, title, server, created_at, chain_migrated)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+      `, [id, passwordHash, adminPasswordHash, homeZoneId, title || null, server ?? null, createdAt]);
 
       // Seed the primary chain for the new room
       const primaryChainId = nanoid();
@@ -314,6 +315,60 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     trackRoomModified(app.db, id);
 
     return reply.send({ ok: true, title: title || '' });
+  });
+
+  // PATCH /api/rooms/:id/server — set which Albion server the room maps.
+  //
+  // Asymmetric auth by design: the FIRST assignment needs only a room token, so
+  // the in-room prompt can backfill the rooms that predate this column without
+  // an admin-password wall. Once a room carries a server, CHANGING it requires
+  // the admin password — the value is analytics data and a silent flip would
+  // poison it. Re-sending the current value is a no-op and stays open.
+  app.patch<{ Params: { id: string } }>('/api/rooms/:id/server', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const jwtPayload = request.user as RoomTokenPayload;
+    if (jwtPayload.roomId !== id) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+    const parsed = SetRoomServerBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: formatZodError(parsed.error) });
+    }
+    const { server, adminPassword } = parsed.data;
+
+    const { rows } = await app.db.query<{ server: string | null; admin_password_hash: string }>(
+      'SELECT server, admin_password_hash FROM rooms WHERE id = $1',
+      [id]
+    );
+    const room = rows[0];
+    if (!room) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    if (room.server && room.server !== server) {
+      if (!adminPassword) {
+        return reply.status(400).send({ error: 'Admin password is required to change the room server' });
+      }
+      const validAdmin = await bcrypt.compare(adminPassword, room.admin_password_hash);
+      if (!validAdmin) {
+        return reply.status(401).send({ error: 'Invalid admin password' });
+      }
+    }
+
+    const result = await app.db.query(
+      'UPDATE rooms SET server = $1 WHERE id = $2',
+      [server, id]
+    );
+    if (result.rowCount === 0) {
+      return reply.status(404).send({ error: 'Room not found' });
+    }
+
+    broadcast(id, { type: 'room_server_updated', server });
+    trackRoomModified(app.db, id);
+
+    return reply.send({ ok: true, server });
   });
 
   // POST /api/rooms/:id/chains — add a new chain rooted at sourceZoneId

@@ -143,9 +143,25 @@ export interface RoomMemoryEntry {
 
 // ── Room ─────────────────────────────────────────────────────────────────────
 
+/**
+ * The Albion game server a room's map data was gathered on. Rooms created
+ * before this existed have no server (`null` in the DB / `undefined` on the
+ * wire) and are prompted to pick one in-room; everything downstream must treat
+ * "unassigned" as a real state.
+ */
+export const ROOM_SERVERS = ['eu', 'us', 'asia'] as const;
+export type RoomServer = typeof ROOM_SERVERS[number];
+
+export const ROOM_SERVER_LABELS: Record<RoomServer, string> = {
+  eu: 'Europe',
+  us: 'Americas',
+  asia: 'Asia',
+};
+
 export interface Room {
   id: string;
   title?: string;
+  server?: RoomServer;
   passwordHash: string;
   adminPasswordHash: string;
   homeZoneId: string;
@@ -201,9 +217,12 @@ export const ConnectionSchema = z.object({
   }).optional(),
 });
 
+export const RoomServerSchema = z.enum(ROOM_SERVERS);
+
 export const RoomSchema = z.object({
   id: z.string(),
   title: z.string().max(50).optional(),
+  server: RoomServerSchema.optional(),
   passwordHash: z.string(),
   adminPasswordHash: z.string(),
   homeZoneId: z.string(),
@@ -213,12 +232,31 @@ export const RoomSchema = z.object({
 
 // ── API request schemas ───────────────────────────────────────────────────────
 
+/**
+ * `server` is deliberately OPTIONAL here even though the create form requires
+ * it: an older deployed client (or an API consumer) posting without it must
+ * still be able to create a room — it lands unassigned and gets prompted
+ * in-room. Tightening this to required would break creation during a rollout
+ * where the client lags the server.
+ */
 export const CreateRoomBodySchema = z.object({
   password: z.string().min(1),
   adminPassword: z.string().min(1),
   homeZoneId: z.string().min(1),
   title: z.string().max(50).optional(),
+  server: RoomServerSchema.optional(),
   vanityUrl: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+});
+
+/**
+ * `adminPassword` is only required when the room ALREADY has a server and the
+ * request changes it — the first assignment is open to any room member so the
+ * in-room prompt can backfill existing rooms without an admin-password wall.
+ * The route enforces that rule; the schema can't express it.
+ */
+export const SetRoomServerBodySchema = z.object({
+  server: RoomServerSchema,
+  adminPassword: z.string().min(1).optional(),
 });
 
 export const AuthRoomBodySchema = z.object({
@@ -433,7 +471,7 @@ export const ImportRoomBodySchema = z.object({
 
 export type ServerMessage =
   | { type: 'auth_ok' }
-  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[]; locked?: boolean }
+  | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; server?: RoomServer; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[]; locked?: boolean }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
   | { type: 'connection_removed'; connectionId?: string; removedZoneIds?: string[] }
@@ -457,6 +495,7 @@ export type ServerMessage =
   | { type: 'chain_updated'; chain: RoomChain }
   | { type: 'chain_relocated'; chain: RoomChain; removedZoneIds: string[]; removedConnectionIds: string[]; newHomeZoneId?: string; newSourceNodePosition: NodePosition }
   | { type: 'room_title_updated'; title: string }
+  | { type: 'room_server_updated'; server: RoomServer }
   | { type: 'room_lock_changed'; locked: boolean }
   | { type: 'session_expired'; reason: string }
   | { type: 'error'; message: string };

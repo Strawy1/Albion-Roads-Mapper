@@ -13,6 +13,7 @@ PostgreSQL, managed by `node-pg-migrate`. Migrations live in `web/server/migrati
 | `admin_password_hash` | text NOT NULL | Gates destructive/administrative actions |
 | `home_zone_id` | text NOT NULL | Primary chain's source zone |
 | `title` | text | ≤50 chars |
+| `server` | text | Albion game server the room maps: `eu` \| `us` \| `asia`. **Nullable** — rooms predating the column are unassigned until the in-room prompt labels them, so analytics queries must handle NULL |
 | `password_version` | int NOT NULL default 1 | Bumped on rotation; embedded in JWTs to invalidate them |
 | `plotted_route` | text[] | Currently plotted route (**connection** ids — the edges the client's BFS traversed, not zone ids) |
 | `plotted_route_from_zone_id` / `plotted_route_to_zone_id` / `plotted_route_chain_id` | text | Route endpoints |
@@ -78,6 +79,19 @@ PostgreSQL, managed by `node-pg-migrate`. Migrations live in `web/server/migrati
 | `updated_at` | timestamptz NOT NULL default now | |
 
 Seeded with one row: `('client_version', '1')` — the reload-generation token served by `GET /api/version` and watched by the client (`useVersionWatch`). Bump `value` by hand to force all open tabs to reload (see [server.md](server.md) `GET /api/version`). Generic table — future global flags can be added as new keys without a migration.
+
+### Correlating map history with servers
+
+`rooms.server` is the join key for per-region analysis — room memory and node features carry no server of their own:
+
+```sql
+SELECT r.server, m.zone_id, count(*) AS sightings
+FROM room_node_memory m JOIN rooms r ON r.id = m.room_id
+WHERE r.server IS NOT NULL
+GROUP BY r.server, m.zone_id;
+```
+
+Because it lives on `rooms`, this data disappears when a room is deleted or cleaned up (unlike the `analytics_*` tables, which have no FK to `rooms`) — snapshot it if long-horizon comparisons matter.
 
 ## Analytics tables
 

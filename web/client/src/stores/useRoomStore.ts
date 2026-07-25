@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, nextTick } from 'vue';
-import type { Connection, ServerMessage, NodePosition, NodeFeatures, CustomHandle, RoomMemoryEntry, RoomChain } from 'shared';
+import type { Connection, ServerMessage, NodePosition, NodeFeatures, CustomHandle, RoomMemoryEntry, RoomChain, RoomServer } from 'shared';
 import { inferRotationFromHandles, getShapeHandlePositions, ZONE_BY_ID, PRIMARY_CHAIN_COLOR } from 'shared';
 import { API_BASE_URL } from '@/utils/api';
 import { track } from '@vercel/analytics';
@@ -84,12 +84,24 @@ export const useRoomStore = defineStore('room', () => {
     return null;
   }
   const roomTitle = ref<string>('');
+  // Which Albion server this room maps. null = never assigned (rooms created
+  // before the column existed, or by a client that didn't send one).
+  const roomServer = ref<RoomServer | null>(null);
   // Room lock state: when locked, the server rejects every mutation from
   // tokens without the admin role — the client mirrors that as read-only UI.
   const locked = ref(false);
   const isAdmin = ref(false);
   const canEdit = computed(() => !locked.value || isAdmin.value);
   const wsStatus = ref<WsStatus>('disconnected');
+  /**
+   * Drives the blocking "pick a server" prompt. Only once the sync has landed
+   * (otherwise every room looks unassigned for a beat) and only for sessions
+   * that could actually save it — a locked room's read-only visitors would be
+   * trapped behind a modal the server would 403 anyway.
+   */
+  const needsServerAssignment = computed(
+    () => wsStatus.value === 'connected' && roomServer.value === null && canEdit.value
+  );
   const lastUpdate = ref<Date | null>(null);
   const lastPing = ref<{zoneName: string, nodeId?: string} | null>(null);
   const watchingCount = ref<number | null>(null);
@@ -314,6 +326,7 @@ export const useRoomStore = defineStore('room', () => {
         homeZoneId.value = msg.homeZoneId;
         chains.value = msg.chains ?? [];
         roomTitle.value = msg.title || '';
+        roomServer.value = msg.server ?? null;
         locked.value = msg.locked ?? false;
         refreshAdminState();
         nodePositions.value = msg.nodePositions;
@@ -418,6 +431,10 @@ export const useRoomStore = defineStore('room', () => {
       case 'room_title_updated':
         roomTitle.value = msg.title;
         addToRecentRooms(roomId.value, roomId.value, msg.title);
+        break;
+
+      case 'room_server_updated':
+        roomServer.value = msg.server;
         break;
 
       case 'room_lock_changed':
@@ -761,6 +778,7 @@ export const useRoomStore = defineStore('room', () => {
     homeZoneId.value = '';
     chains.value = [];
     roomTitle.value = '';
+    roomServer.value = null;
     nodePositions.value = [];
     roomId.value = '';
     watchingCount.value = null;
@@ -811,6 +829,27 @@ export const useRoomStore = defineStore('room', () => {
     }
     locked.value = lockedTarget;
     track(lockedTarget ? 'lock_room' : 'unlock_room');
+    return { ok: true };
+  }
+
+  /**
+   * Assigns (or reassigns) the room's Albion server. `adminPassword` is only
+   * needed when changing an already-set value — the server enforces that rule;
+   * the first assignment goes through with just the room token.
+   */
+  async function setRoomServer(server: RoomServer, adminPassword?: string): Promise<{ ok: boolean; error?: string }> {
+    if (!canEdit.value) return { ok: false, error: 'Room is locked — read-only' };
+    const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId.value}/server`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(adminPassword ? { server, adminPassword } : { server }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      return { ok: false, error: body.error ?? 'Failed to set the room server' };
+    }
+    roomServer.value = server;
+    track('set_room_server');
     return { ok: true };
   }
 
@@ -1159,6 +1198,9 @@ export const useRoomStore = defineStore('room', () => {
     connections,
     homeZoneId,
     roomTitle,
+    roomServer,
+    needsServerAssignment,
+    setRoomServer,
     locked,
     isAdmin,
     canEdit,

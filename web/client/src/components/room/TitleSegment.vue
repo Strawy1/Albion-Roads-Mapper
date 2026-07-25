@@ -3,7 +3,9 @@ import { ref } from 'vue';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
 import RoomSettings from '../RoomSettings.vue';
 import RenameRoomModal from '../RenameRoomModal.vue';
+import RoomServerModal from '../RoomServerModal.vue';
 import { useRoomStore } from '@/stores/useRoomStore';
+import { ROOM_SERVER_LABELS } from 'shared';
 import { Z_INDEX } from '@/constants/Layers';
 
 const store = useRoomStore();
@@ -18,6 +20,7 @@ const emit = defineEmits<{
 }>();
 
 const renameModalOpen = ref(false);
+const serverModalOpen = ref(false);
 const copied = ref(false);
 
 function copyLink() {
@@ -39,6 +42,17 @@ function copyLink() {
       data-testid="locked-title-indicator"
       title="This room is locked (read-only)"
     >🔒</span>
+    <!-- Which Albion server this room maps. Read-only sessions see the label
+         without the click target (the server would reject the change anyway). -->
+    <component
+      :is="store.canEdit ? 'button' : 'span'"
+      v-if="store.roomServer"
+      class="shrink-0 rounded-full frosted-pill px-3 py-2 text-sm font-semibold text-gray-200"
+      :class="store.canEdit ? 'cursor-pointer hover:brightness-125 transition-[filter]' : ''"
+      data-testid="room-server-pill"
+      :title="store.canEdit ? 'Click to change the room\'s server' : 'Room server'"
+      @click="store.canEdit && (serverModalOpen = true)"
+    >{{ ROOM_SERVER_LABELS[store.roomServer] }}</component>
     <div v-if="roomTitle" class="flex items-center gap-1">
       <TooltipProvider :delay-duration="0">
         <TooltipRoot>
@@ -77,6 +91,7 @@ function copyLink() {
   </div>
 
   <RenameRoomModal v-model="renameModalOpen" />
+  <RoomServerModal v-model="serverModalOpen" />
 </template>
 
 <style scoped>

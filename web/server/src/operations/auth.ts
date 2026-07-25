@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { PRIMARY_CHAIN_COLOR, ZONE_BY_ID, type Connection, type NodePosition, type RoomMemoryEntry } from 'shared';
+import { PRIMARY_CHAIN_COLOR, ROOM_SERVERS, ZONE_BY_ID, type Connection, type NodePosition, type RoomMemoryEntry, type RoomServer } from 'shared';
 import { addSocket, broadcast, getTotalSocketCount } from '../broadcast.js';
 import { getWatchingCount } from '../marcopolo.js';
 import type { OperationHandler } from './types.js';
@@ -8,6 +8,7 @@ import type { ClientMessage } from 'shared';
 interface DbRoom {
   id: string;
   title: string | null;
+  server: string | null;
   password_hash: string;
   home_zone_id: string;
   created_at: string;
@@ -172,7 +173,11 @@ export const handleAuth: OperationHandler<Extract<ClientMessage, { type: 'auth' 
         lastUpdated: row.last_updated,
       }));
 
-    ctx.send({ type: 'sync', connections, homeZoneId: room.home_zone_id, title: room.title || undefined, nodePositions, lastUpdatedAt, watching: getWatchingCount(ctx.roomId), totalConnected: getTotalSocketCount(), plottedRoute: room.plotted_route ?? undefined, plottedRouteFromZoneId: room.plotted_route_from_zone_id ?? undefined, plottedRouteToZoneId: room.plotted_route_to_zone_id ?? undefined, plottedRouteChainId: room.plotted_route_chain_id ?? undefined, chains, locked: room.locked ?? false });
+    // The column is plain text, so guard against hand-edited/legacy values
+    // rather than trusting the DB to hold a valid RoomServer.
+    const server = ROOM_SERVERS.includes(room.server as RoomServer) ? (room.server as RoomServer) : undefined;
+
+    ctx.send({ type: 'sync', connections, homeZoneId: room.home_zone_id, title: room.title || undefined, server, nodePositions, lastUpdatedAt, watching: getWatchingCount(ctx.roomId), totalConnected: getTotalSocketCount(), plottedRoute: room.plotted_route ?? undefined, plottedRouteFromZoneId: room.plotted_route_from_zone_id ?? undefined, plottedRouteToZoneId: room.plotted_route_to_zone_id ?? undefined, plottedRouteChainId: room.plotted_route_chain_id ?? undefined, chains, locked: room.locked ?? false });
     ctx.send({ type: 'memory_sync', memory });
   } catch {
     ctx.socket.close(4401, 'Invalid token');
