@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { ROOM_SERVERS } from 'shared';
 import { londonDateString } from '../analytics.js';
 import { getTotalSocketCount, getAllRoomSockets } from '../broadcast.js';
 
@@ -323,6 +324,60 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
       [today],
     );
 
+    // --- Server-assignment backfill progress. `rooms.server` is nullable:
+    // every room predating the column is unassigned until someone answers the
+    // in-room prompt, so this tracks how far that rollout has got. Appended at
+    // the end of the query block deliberately — the earlier queries are
+    // position-sensitive in the tests. ---
+    const { rows: roomServerRows } = await app.db.query<{ server: string | null; count: string }>(
+      `SELECT server, COUNT(*) AS count
+       FROM rooms
+       GROUP BY server
+       ORDER BY server NULLS FIRST`,
+    );
+    const roomsByServer = new Map<string, number>(ROOM_SERVERS.map(s => [s, 0]));
+    let roomsServerAssigned = 0;
+    let roomsServerUnassigned = 0;
+    for (const row of roomServerRows) {
+      const count = parseInt(row.count ?? '0', 10);
+      if (row.server === null) {
+        roomsServerUnassigned += count;
+      } else {
+        roomsServerAssigned += count;
+        // Unknown values (hand-edited rows) still get a series rather than
+        // being silently folded into a known server.
+        roomsByServer.set(row.server, (roomsByServer.get(row.server) ?? 0) + count);
+      }
+    }
+    const roomsWithServerKnown = roomsServerAssigned + roomsServerUnassigned;
+    const roomsServerAssignedPercent = roomsWithServerKnown === 0
+      ? 0
+      : Math.round((roomsServerAssigned / roomsWithServerKnown) * 10000) / 100;
+
+    // --- Map history split by server. Room memory carries no server of its
+    // own, so `rooms.server` is the join key; unlabelled rooms land in the
+    // 'unassigned' series rather than being dropped. ---
+    const { rows: historyByServerRows } = await app.db.query<{ server: string; total: string; rooms: string }>(
+      `SELECT COALESCE(r.server, 'unassigned') AS server,
+              COUNT(*) AS total,
+              COUNT(DISTINCT rnm.room_id) AS rooms
+       FROM room_node_memory rnm
+       JOIN rooms r ON r.id = rnm.room_id
+       WHERE rnm.zone_id != r.home_zone_id
+       GROUP BY 1
+       ORDER BY 1`
+    );
+    const roomsWithHistory = historyByServerRows.reduce((sum, r) => sum + parseInt(r.rooms ?? '0', 10), 0);
+
+    const { rows: mapHistoryByServerRows } = await app.db.query<{ zone_id: string; server: string; total_mentions: string }>(
+      `SELECT rnm.zone_id, COALESCE(r.server, 'unassigned') AS server, COUNT(DISTINCT rnm.room_id) AS total_mentions
+       FROM room_node_memory rnm
+       JOIN rooms r ON r.id = rnm.room_id
+       WHERE rnm.zone_id != r.home_zone_id
+       GROUP BY rnm.zone_id, 2
+       ORDER BY rnm.zone_id, 2`
+    );
+
     // -----------------------------------------------------------------------
     // Output. Metrics are grouped by topic (rooms, connections, zones, chains,
     // routes, tokens, data updates, admin actions, map history) — keep
@@ -342,6 +397,14 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     if (lockedRoomSeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_locked', 'Rooms currently locked (read-only for non-admins), one series per locked room ID', 'gauge', lockedRoomSeries));
     }
+    lines.push(metric('albionmapper_rooms_server_assigned', 'Number of rooms with an Albion server assigned', 'gauge', roomsServerAssigned));
+    lines.push(metric('albionmapper_rooms_server_unassigned', 'Number of rooms with no Albion server assigned yet (rooms.server IS NULL)', 'gauge', roomsServerUnassigned));
+    lines.push(metric('albionmapper_rooms_server_assigned_percent', 'Percentage of rooms with an Albion server assigned (server-assignment backfill progress, 0-100)', 'gauge', roomsServerAssignedPercent));
+    const roomsByServerSeries = [
+      ...Array.from(roomsByServer.entries()).map(([server, value]) => ({ labels: { server }, value })),
+      { labels: { server: 'unassigned' }, value: roomsServerUnassigned },
+    ];
+    lines.push(metricLabeled('albionmapper_rooms_by_server', 'Number of rooms per Albion server; rooms with no server assigned appear as server="unassigned"', 'gauge', roomsByServerSeries));
     lines.push(metric('albionmapper_daily_rooms_created_total', 'Rooms created today (Europe/London)', 'gauge', parseInt(daily?.rooms_created ?? '0', 10)));
     lines.push(metric('albionmapper_rooms_created_total', 'All-time total rooms created since tracking began', 'counter', totalRoomsCreated));
     lines.push(metric('albionmapper_daily_rooms_modified_total', 'Rooms with at least one data modification today (Europe/London)', 'gauge', parseInt(daily?.rooms_modified ?? '0', 10)));
@@ -494,11 +557,34 @@ export async function metricsRoutes(app: FastifyInstance): Promise<void> {
     if (mapHistorySeries.length > 0) {
       lines.push(metricLabeled('albionmapper_map_history_mentions_total', 'Total number of unique rooms each map has appeared in (excluding home zones)', 'gauge', mapHistorySeries));
     }
+    // Per-zone mentions split by server. The DB-wide series above is kept as-is
+    // so existing dashboards keep working; this is the regional breakdown.
+    const mapHistoryByServerSeries = mapHistoryByServerRows
+      .map(r => ({ labels: { zone_id: r.zone_id, server: r.server }, value: parseInt(r.total_mentions ?? '0', 10) }))
+      .filter(s => s.value > 0);
+    if (mapHistoryByServerSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_map_history_mentions_by_server', 'Number of unique rooms each map has appeared in, split by Albion server (excluding home zones); rooms with no server assigned appear as server="unassigned"', 'gauge', mapHistoryByServerSeries));
+    }
     const roomHistorySeries = roomHistoryRows
       .map(r => ({ labels: { room_id: r.room_id }, value: parseInt(r.total_entries ?? '0', 10) }))
       .filter(s => s.value > 0);
     if (roomHistorySeries.length > 0) {
       lines.push(metricLabeled('albionmapper_room_history_size_total', 'Total number of unique maps in each room history (excluding home zone)', 'gauge', roomHistorySeries));
+    }
+    const historyEntriesByServerSeries = historyByServerRows.map(r => ({
+      labels: { server: r.server },
+      value: parseInt(r.total ?? '0', 10),
+    }));
+    if (historyEntriesByServerSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_history_entries_by_server', 'Room-map history entries per Albion server (excluding home zones); rooms with no server assigned appear as server="unassigned"', 'gauge', historyEntriesByServerSeries));
+    }
+    lines.push(metric('albionmapper_rooms_with_history', 'Number of rooms with at least one map history entry (excluding home zones)', 'gauge', roomsWithHistory));
+    const roomsWithHistoryByServerSeries = historyByServerRows.map(r => ({
+      labels: { server: r.server },
+      value: parseInt(r.rooms ?? '0', 10),
+    }));
+    if (roomsWithHistoryByServerSeries.length > 0) {
+      lines.push(metricLabeled('albionmapper_rooms_with_history_by_server', 'Number of rooms with at least one map history entry, per Albion server; rooms with no server assigned appear as server="unassigned"', 'gauge', roomsWithHistoryByServerSeries));
     }
 
     // === Events ===

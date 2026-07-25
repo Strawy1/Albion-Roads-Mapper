@@ -65,6 +65,23 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 - `GET /api/media/demov1-1.mp4` — Range-capable video streaming from `MEDIA_PATH` (`routes/media.ts`).
 - `GET /metrics` — Prometheus text format, **IP-allowlisted** (localhost + `10.0.1.0/24` only), no JWT (`routes/metrics.ts`). ~40 `albionmapper_*` metric families; timezone math is Europe/London. Generic client events surface automatically as labeled series in the Events section: `albionmapper_events_total{event=…}` (counter, SUM over day buckets) and `albionmapper_events_today{event=…}` (gauge).
 
+#### Server-breakdown metrics
+
+Rooms carry an Albion server (`rooms.server`, nullable). These series track the backfill and split map history by region; every DB-wide series they sit next to is unchanged, and rooms with no server assigned appear under `server="unassigned"` rather than being dropped.
+
+| Metric | Type | Labels | Section | What it is |
+|---|---|---|---|---|
+| `albionmapper_rooms_server_assigned` | gauge | — | Rooms | Rooms with a server recorded |
+| `albionmapper_rooms_server_unassigned` | gauge | — | Rooms | Rooms still `NULL` |
+| `albionmapper_rooms_server_assigned_percent` | gauge | — | Rooms | Backfill progress, 0–100 (0 when the DB has no rooms — never `NaN`) |
+| `albionmapper_rooms_by_server` | gauge | `server` | Rooms | Rooms per server; always emits all three servers (zeros included) plus `unassigned`, so the label set is stable |
+| `albionmapper_history_entries_by_server` | gauge | `server` | Map History | Room-map history entries per server (excl. home zones) — the DB-wide total stays `albionmapper_history_entries_total` |
+| `albionmapper_rooms_with_history` | gauge | — | Map History | Rooms holding at least one history entry |
+| `albionmapper_rooms_with_history_by_server` | gauge | `server` | Map History | …split by server |
+| `albionmapper_map_history_mentions_by_server` | gauge | `zone_id`, `server` | Map History | Rooms each zone appears in, per server — the regional split of `albionmapper_map_history_mentions_total` (which is kept as-is) |
+
+On the Grafana dashboard these live in the rows matching their `/metrics` section: rooms-by-server, the rollout percentage and rooms-per-server-over-time in **Room State**; entries-by-server, rooms-with-history-by-server and `topk(20, sort_desc(albionmapper_map_history_mentions_by_server > 1))` in **Map History**, alongside (not replacing) the database-wide totals.
+
 ### Rate limits
 
 `POST /api/rooms` → 10/hour/IP; `POST /api/rooms/:id/auth` → 20/hour/IP; `POST /api/events` → 120/hour/IP. Disabled in tests via `disableRateLimit`.

@@ -287,4 +287,78 @@ describe('GET /metrics', () => {
     const body = res.body;
     expect(body).toContain('# HELP albionmapper_history_entries_total Total number of unique room-map history entries (excluding home zones)');
   });
+
+  it('reports rooms per server and the assignment backfill percentage', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('GROUP BY server')) {
+        return { rows: [
+          { server: null, count: '3' },
+          { server: 'eu', count: '5' },
+          { server: 'us', count: '2' },
+        ] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    expect(body).toMatch(/albionmapper_rooms_server_assigned 7\b/);
+    expect(body).toMatch(/albionmapper_rooms_server_unassigned 3\b/);
+    expect(body).toMatch(/albionmapper_rooms_server_assigned_percent 70\b/);
+    expect(body).toContain('albionmapper_rooms_by_server{server="eu"} 5');
+    expect(body).toContain('albionmapper_rooms_by_server{server="us"} 2');
+    // Servers with no rooms still get a zero series, so the set is stable.
+    expect(body).toContain('albionmapper_rooms_by_server{server="asia"} 0');
+    expect(body).toContain('albionmapper_rooms_by_server{server="unassigned"} 3');
+  });
+
+  it('reports 0% assigned when the database has no rooms', async () => {
+    // Default mock returns { rows: [] } for every query — must not divide by zero.
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    expect(res.body).toMatch(/albionmapper_rooms_server_assigned_percent 0\b/);
+    expect(res.body).not.toContain('NaN');
+  });
+
+  it('splits map history entries and rooms-with-history by server, unassigned included', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('COUNT(DISTINCT rnm.room_id) AS rooms')) {
+        expect(sql).toContain("COALESCE(r.server, 'unassigned')");
+        return { rows: [
+          { server: 'eu', total: '120', rooms: '9' },
+          { server: 'unassigned', total: '40', rooms: '4' },
+        ] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    expect(body).toContain('albionmapper_history_entries_by_server{server="eu"} 120');
+    expect(body).toContain('albionmapper_history_entries_by_server{server="unassigned"} 40');
+    expect(body).toContain('albionmapper_rooms_with_history_by_server{server="eu"} 9');
+    expect(body).toContain('albionmapper_rooms_with_history_by_server{server="unassigned"} 4');
+    expect(body).toMatch(/albionmapper_rooms_with_history 13\b/);
+  });
+
+  it('splits per-zone mentions by server while keeping the database-wide series', async () => {
+    ctx.mockDb.query.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('GROUP BY rnm.zone_id, 2')) {
+        return { rows: [
+          { zone_id: 'zone-a', server: 'eu', total_mentions: '7' },
+          { zone_id: 'zone-a', server: 'asia', total_mentions: '2' },
+          { zone_id: 'zone-b', server: 'unassigned', total_mentions: '1' },
+        ] };
+      }
+      if (typeof sql === 'string' && sql.includes('COUNT(DISTINCT rnm.room_id) AS total_mentions')) {
+        return { rows: [{ zone_id: 'zone-a', total_mentions: '9' }, { zone_id: 'zone-b', total_mentions: '1' }] };
+      }
+      return { rows: [] };
+    });
+    const res = await ctx.app!.inject({ method: 'GET', url: '/metrics' });
+    const body = res.body;
+    // Database-wide totals stay untouched…
+    expect(body).toContain('albionmapper_map_history_mentions_total{zone_id="zone-a"} 9');
+    // …alongside the per-server split.
+    expect(body).toContain('albionmapper_map_history_mentions_by_server{zone_id="zone-a",server="eu"} 7');
+    expect(body).toContain('albionmapper_map_history_mentions_by_server{zone_id="zone-a",server="asia"} 2');
+    expect(body).toContain('albionmapper_map_history_mentions_by_server{zone_id="zone-b",server="unassigned"} 1');
+  });
 });

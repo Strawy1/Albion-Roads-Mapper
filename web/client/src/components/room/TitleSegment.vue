@@ -42,17 +42,6 @@ function copyLink() {
       data-testid="locked-title-indicator"
       title="This room is locked (read-only)"
     >🔒</span>
-    <!-- Which Albion server this room maps. Read-only sessions see the label
-         without the click target (the server would reject the change anyway). -->
-    <component
-      :is="store.canEdit ? 'button' : 'span'"
-      v-if="store.roomServer"
-      class="shrink-0 rounded-full frosted-pill px-3 py-2 text-sm font-semibold text-gray-200"
-      :class="store.canEdit ? 'cursor-pointer hover:brightness-125 transition-[filter]' : ''"
-      data-testid="room-server-pill"
-      :title="store.canEdit ? 'Click to change the room\'s server' : 'Room server'"
-      @click="store.canEdit && (serverModalOpen = true)"
-    >{{ ROOM_SERVER_LABELS[store.roomServer] }}</component>
     <div v-if="roomTitle" class="flex items-center gap-1">
       <TooltipProvider :delay-duration="0">
         <TooltipRoot>
@@ -63,6 +52,18 @@ function copyLink() {
               @click="renameModalOpen = true"
             >
               <h1 class="text-xl font-bold text-gray-200 truncate" data-testid="room-title">{{ roomTitle }}</h1>
+              <!-- Server pill nested inside the title pill. `.stop` keeps the
+                   click off the surrounding rename target; read-only sessions
+                   get a plain span, since the server would reject the change. -->
+              <component
+                :is="store.canEdit ? 'button' : 'span'"
+                v-if="store.roomServer"
+                class="shrink-0 rounded-full bg-gray-700/70 px-2 py-0.5 text-xs font-semibold text-gray-200 ml-1"
+                :class="store.canEdit ? 'cursor-pointer hover:bg-gray-600 transition-colors' : ''"
+                data-testid="room-server-pill"
+                :title="store.canEdit ? 'Click to change the room\'s server' : 'Room server'"
+                @click.stop="store.canEdit && (serverModalOpen = true)"
+              >{{ ROOM_SERVER_LABELS[store.roomServer] }}</component>
               <button
                 class="text-base leading-none opacity-60 hover:opacity-100 transition-opacity shrink-0 ml-1"
                 :title="copied ? 'Copied!' : 'Copy room link'"

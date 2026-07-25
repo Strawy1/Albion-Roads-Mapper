@@ -4,6 +4,7 @@ import { setActivePinia, createPinia } from 'pinia';
 import { nextTick } from 'vue';
 import { useRoomStore } from '@/stores/useRoomStore';
 import RoomServerModal from '../src/components/RoomServerModal.vue';
+import TitleSegment from '../src/components/room/TitleSegment.vue';
 
 (global as any).WebSocket = class {
   static OPEN = 1;
@@ -131,6 +132,64 @@ describe('useRoomStore — room server', () => {
 
     expect(res.ok).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('TitleSegment — server pill', () => {
+  function mountTitle(roomTitle: string) {
+    mounted = mount(TitleSegment, {
+      props: { roomTitle },
+      global: { stubs: { RoomSettings: true } },
+      attachTo: document.body,
+    });
+    return mounted;
+  }
+
+  it('nests the server pill inside the title pill and opens the change modal without renaming', async () => {
+    const store = useRoomStore();
+    store.setCredentials(ROOM_ID, REGULAR_TOKEN);
+    store.applyMessage(minimalSync({ title: 'Dragon Den', server: 'us' }));
+
+    const wrapper = mountTitle('Dragon Den');
+    await nextTick();
+
+    const titlePill = wrapper.get('[data-testid="rename-room-button"]');
+    const pill = titlePill.get('[data-testid="room-server-pill"]');
+    expect(pill.text()).toBe('Americas');
+
+    await pill.trigger('click');
+    await nextTick();
+
+    expect(document.querySelector('[data-testid="room-server-modal"]')).not.toBeNull();
+    // The click must not bubble to the surrounding rename target.
+    expect(document.body.textContent).not.toContain('Rename Room');
+  });
+
+  it('renders a non-interactive pill for read-only sessions', async () => {
+    const store = useRoomStore();
+    store.setCredentials(ROOM_ID, REGULAR_TOKEN);
+    store.applyMessage(minimalSync({ title: 'Dragon Den', server: 'eu', locked: true }));
+
+    const wrapper = mountTitle('Dragon Den');
+    await nextTick();
+
+    const pill = wrapper.get('[data-testid="room-server-pill"]');
+    expect(pill.element.tagName).toBe('SPAN');
+
+    await pill.trigger('click');
+    await nextTick();
+    expect(document.querySelector('[data-testid="room-server-modal"]')).toBeNull();
+  });
+
+  it('shows no pill while the room is unassigned', async () => {
+    const store = useRoomStore();
+    store.setCredentials(ROOM_ID, REGULAR_TOKEN);
+    store.applyMessage(minimalSync({ title: 'Dragon Den' }));
+
+    const wrapper = mountTitle('Dragon Den');
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="room-server-pill"]').exists()).toBe(false);
   });
 });
 
