@@ -731,39 +731,86 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: 'Cannot delete the primary chain' });
     }
 
-    let removedZoneIds: string[] = [];
-    let removedConnectionIds: string[] = [];
+    // The whole chain goes in ONE statement: its connections (including any
+    // whose `chain_id` was never set but which touch the chain's zones — the
+    // same sweep `relocate` does, otherwise those rows survive as ghosts on
+    // the map), then its node positions, the chain row and the room's
+    // updated_at. Deleting by zone membership as well as by `chain_id` is why
+    // the guards below matter: a position is only ever removed if it belongs
+    // to *this* chain or to none, and never if it is the home zone or another
+    // chain's source — see the `protected` CTE for why guarding the DELETE
+    // alone is not sufficient. Map history (room_node_memory) is untouched —
+    // it is only ever deleted via the explicit memory endpoints.
+    const { rows: resultRows } = await app.db.query<{ removed_connection_ids: string[]; removed_zone_ids: string[] }>(
+      `WITH protected AS (
+         -- Rows that must outlive the chain even if they wrongly carry its id.
+         -- Guarding them in the DELETE below is not enough: the chain row's FK
+         -- is ON DELETE CASCADE, so anything still pointing at it when the row
+         -- goes is removed silently and never makes the broadcast. Severing the
+         -- link first is what actually protects them.
+         UPDATE room_node_positions p
+            SET chain_id = NULL
+          WHERE p.room_id = $1
+            AND p.chain_id = $2
+            AND (p.zone_id = (SELECT home_zone_id FROM rooms WHERE id = $1)
+                 OR EXISTS (
+                   SELECT 1 FROM room_chains rc
+                    WHERE rc.room_id = $1 AND rc.id <> $2 AND rc.source_zone_id = p.zone_id
+                 ))
+         RETURNING p.zone_id
+       ),
+       chain_zones AS (
+         -- Protected zones are excluded here too: every CTE reads the same
+         -- pre-UPDATE snapshot, so without this a protected zone would still
+         -- count as chain membership and the sweep below would delete the
+         -- *other* chain's connections that touch it.
+         SELECT zone_id FROM room_node_positions
+          WHERE room_id = $1 AND chain_id = $2
+            AND zone_id NOT IN (SELECT zone_id FROM protected)
+       ),
+       deleted_conns AS (
+         DELETE FROM connections c
+          WHERE c.room_id = $1
+            AND (c.chain_id = $2
+                 OR c.from_zone_id IN (SELECT zone_id FROM chain_zones)
+                 OR c.to_zone_id   IN (SELECT zone_id FROM chain_zones))
+         RETURNING c.id, c.from_zone_id, c.to_zone_id
+       ),
+       doomed_zones AS (
+         SELECT zone_id FROM chain_zones
+         UNION SELECT $3::text
+         UNION SELECT z.zone_id
+                 FROM deleted_conns d
+                 CROSS JOIN LATERAL (VALUES (d.from_zone_id), (d.to_zone_id)) AS z(zone_id)
+       ),
+       removed_positions AS (
+         DELETE FROM room_node_positions p
+          USING doomed_zones z
+          WHERE p.room_id = $1
+            AND p.zone_id = z.zone_id
+            AND (p.chain_id = $2 OR p.chain_id IS NULL)
+            AND p.zone_id NOT IN (SELECT zone_id FROM protected)
+            AND p.zone_id <> (SELECT home_zone_id FROM rooms WHERE id = $1)
+            AND NOT EXISTS (
+              SELECT 1 FROM room_chains rc
+               WHERE rc.room_id = $1 AND rc.id <> $2 AND rc.source_zone_id = p.zone_id
+            )
+         RETURNING p.zone_id
+       ),
+       deleted_chain AS (
+         DELETE FROM room_chains WHERE id = $2 AND room_id = $1 RETURNING id
+       ),
+       updated_room AS (
+         UPDATE rooms SET updated_at = $4 WHERE id = $1 RETURNING id
+       )
+       SELECT
+         COALESCE((SELECT array_agg(id) FROM deleted_conns), '{}'::text[]) AS removed_connection_ids,
+         COALESCE((SELECT array_agg(zone_id) FROM removed_positions), '{}'::text[]) AS removed_zone_ids`,
+      [id, chainId, chain.source_zone_id, new Date().toISOString()]
+    );
 
-    const client = await app.db.connect();
-    try {
-      await client.query('BEGIN');
-
-      const { rows: connRows } = await client.query<{ id: string }>(
-        'SELECT id FROM connections WHERE room_id = $1 AND chain_id = $2',
-        [id, chainId]
-      );
-      removedConnectionIds = connRows.map((r) => r.id);
-
-      const { rows: posRows } = await client.query<{ zone_id: string }>(
-        'SELECT zone_id FROM room_node_positions WHERE room_id = $1 AND chain_id = $2',
-        [id, chainId]
-      );
-      removedZoneIds = posRows.map((r) => r.zone_id);
-
-      // Map history (room_node_memory) is preserved for the removed zones —
-      // it is only ever deleted via the explicit memory endpoints.
-      await client.query('DELETE FROM connections WHERE room_id = $1 AND chain_id = $2', [id, chainId]);
-      await client.query('DELETE FROM room_node_positions WHERE room_id = $1 AND chain_id = $2', [id, chainId]);
-      await client.query('DELETE FROM room_chains WHERE id = $1 AND room_id = $2', [chainId, id]);
-      await client.query('UPDATE rooms SET updated_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
-
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      client.release();
-      throw e;
-    }
-    client.release();
+    const removedConnectionIds = resultRows[0]?.removed_connection_ids ?? [];
+    const removedZoneIds = resultRows[0]?.removed_zone_ids ?? [];
 
     broadcast(id, { type: 'chain_removed', chainId, removedZoneIds, removedConnectionIds });
     trackRoomModified(app.db, id);

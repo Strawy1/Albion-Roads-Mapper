@@ -38,7 +38,7 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 | POST | `/api/rooms/:id/chains` | JWT | `{ sourceZoneId, x?, y? }` → 201 `{ chain }`. 409 if zone already in a chain. Broadcasts `chain_added` (+ single-row `node_positions_updated`) |
 | PATCH | `/api/rooms/:id/chains/:chainId` | JWT | `{ chainColor }` (hex `#RRGGBB`); broadcasts `chain_updated` |
 | POST | `/api/rooms/:id/chains/:chainId/relocate` | JWT | `{ sourceZoneId }` — wipes the chain's connections/positions/memory, re-roots at the old coords; updates `home_zone_id` if primary chain. Broadcasts `chain_relocated` |
-| DELETE | `/api/rooms/:id/chains/:chainId` | JWT | 400 if primary chain. Cascades to connections/positions/memory. Broadcasts `chain_removed` |
+| DELETE | `/api/rooms/:id/chains/:chainId` | JWT | 400 if primary chain. **One statement** removes the chain's connections, positions, the chain row and bumps `updated_at`; like `relocate` it sweeps by zone membership as well as `chain_id`, so rows whose `chain_id` was never set don't survive as ghosts. Never removes the home zone or another chain's source/zones. Map history is preserved. Broadcasts `chain_removed` with the ids actually removed |
 | DELETE | `/api/rooms/:id/connections` | JWT (admin pw optional) | Room reset: deletes all connections + non-source positions, wipes features on chain sources. Broadcasts `room_reset` |
 | DELETE | `/api/rooms/:id/memory` | JWT + admin pw | Wipes all room memory; broadcasts empty `memory_sync` |
 | DELETE | `/api/rooms/:id/memory/:zoneId` | JWT | Broadcasts `memory_deleted` |
@@ -53,7 +53,10 @@ Validation failures return 400 with a formatted Zod error. All schemas live in `
 | POST | `/api/rooms/:id/connections` | `CreateConnectionBodySchema`. Upserts target node position, records roads memory (3 h dedup), inserts connection. Broadcasts full-array `node_positions_updated` + `connection_added` (+ `memory_updated`). Expiry = `secondsRemaining` or +100 yr if `permanent` |
 | PATCH | `/api/rooms/:id/connections/:connId` | `{ secondsRemaining?, fromHandleId?, toHandleId? }`. Broadcasts `node_positions_updated` + `connection_updated` |
 | DELETE | `/api/rooms/:id/connections/:connId` | Also removes orphaned endpoint zones (no remaining connections, not chain source/home). One `connection_removed` broadcast with `connectionId` + `removedZoneIds` |
+| POST | `/api/rooms/:id/connections/bulk-delete` | `BulkDeleteConnectionsBodySchema` (`{ connectionIds }`, 1–500, de-duplicated). Branch delete: deletes every listed connection **and** any zones it orphans in a **single CTE statement**, then one `connection_removed` broadcast with `connectionIds` + `removedZoneIds`. Returns `{ removedConnectionIds, removedZoneIds }`; no broadcast when nothing matched |
 | DELETE | `/api/rooms/:id/nodes/:zoneId` | Deletes an orphan node (400 if home zone or chain source). `connection_removed` with empty `connectionId` |
+
+The bulk statement's orphan check runs against the pre-`DELETE` snapshot (all CTEs share one snapshot), so the doomed connections are excluded explicitly via `c.id <> ALL($2)` — dropping that predicate would silently stop detecting orphans. Map history (`room_node_memory`) is preserved, as with every other implicit edit.
 
 `Connection` wire shape: `{ id, roomId, fromZoneId, toZoneId, fromHandleId?, toHandleId?, expiresAt, reportedAt, reportedBy?, chainId?, permanent? }`.
 

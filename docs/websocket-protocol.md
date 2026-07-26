@@ -36,7 +36,7 @@ Operation plumbing: `src/operations/types.ts` (`OperationContext` / `OperationHa
 | `auth_ok` | — | Handshake success |
 | `sync` | full room state (see handshake) | After auth |
 | `connection_added` / `connection_updated` | `{ connection }` | Create / PATCH |
-| `connection_removed` | `{ connectionId?, removedZoneIds? }` | Delete (includes orphaned zones removed alongside); node deletion sends empty `connectionId` |
+| `connection_removed` | `{ connectionId?, connectionIds?, removedZoneIds? }` | Delete (includes orphaned zones removed alongside); node deletion sends empty `connectionId`. A bulk branch delete sends the batch in `connectionIds` instead — clients must honour both fields |
 | `connection_expired` | `{ connectionId }` | Expiry job, within ~60 s of expiry |
 | `node_positions_updated` | `{ nodePositions, updateLastUpdated? }` | Any node mutation — see broadcast semantics below |
 | `room_updated` | `{ homeZoneId }` | Home zone change |

@@ -321,6 +321,17 @@ export const UpdateConnectionBodySchema = z.object({
   toHandleId: z.string().nullable().optional(),
 });
 
+/**
+ * Body for the bulk connection delete endpoint. The client walks the
+ * connection tree locally (e.g. "delete this & connected") and submits every
+ * doomed connection in one request, so the server can prune the whole branch —
+ * connections plus any zones that become orphaned — in a single statement
+ * instead of N round trips.
+ */
+export const BulkDeleteConnectionsBodySchema = z.object({
+  connectionIds: z.array(z.string().min(1)).min(1).max(500),
+});
+
 export const ChangePasswordBodySchema = z.object({
   newPassword: z.string().min(1),
   adminPassword: z.string().min(1),
@@ -474,7 +485,9 @@ export type ServerMessage =
   | { type: 'sync'; connections: Connection[]; homeZoneId: string; title?: string; server?: RoomServer; nodePositions: NodePosition[]; lastUpdatedAt: string; watching: number; totalConnected: number; plottedRoute?: string[]; plottedRouteFromZoneId?: string; plottedRouteToZoneId?: string; plottedRouteChainId?: string; chains?: RoomChain[]; locked?: boolean }
   | { type: 'connection_added'; connection: Connection }
   | { type: 'connection_updated'; connection: Connection }
-  | { type: 'connection_removed'; connectionId?: string; removedZoneIds?: string[] }
+  // `connectionIds` carries a batch removal (bulk delete of a whole branch);
+  // `connectionId` remains for single deletes. Clients must honour both.
+  | { type: 'connection_removed'; connectionId?: string; connectionIds?: string[]; removedZoneIds?: string[] }
   | { type: 'connection_expired'; connectionId: string }
   | { type: 'room_updated'; homeZoneId: string }
   | { type: 'room_reset' }

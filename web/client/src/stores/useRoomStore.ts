@@ -404,10 +404,16 @@ export const useRoomStore = defineStore('room', () => {
         lastUpdate.value = new Date();
         break;
 
-      case 'connection_removed':
-        if (msg.connectionId) {
-          connections.value = connections.value.filter((c) => c.id !== msg.connectionId);
-          usePlotRouteStore().onConnectionRemoved(msg.connectionId);
+      case 'connection_removed': {
+        // A single delete sends `connectionId`; a bulk branch delete sends
+        // `connectionIds`. Handle both in one pass so the list is rewritten
+        // once no matter how many connections went.
+        const removedConnIds = new Set<string>(msg.connectionIds ?? []);
+        if (msg.connectionId) removedConnIds.add(msg.connectionId);
+        if (removedConnIds.size > 0) {
+          connections.value = connections.value.filter((c) => !removedConnIds.has(c.id));
+          const plotRouteStore = usePlotRouteStore();
+          removedConnIds.forEach((connId) => plotRouteStore.onConnectionRemoved(connId));
         }
         // The server batches any zones that became orphaned (no remaining
         // connections, not a chain source / home zone) into the same message
@@ -420,6 +426,7 @@ export const useRoomStore = defineStore('room', () => {
         }
         lastUpdate.value = new Date();
         break;
+      }
 
       case 'connection_expired':
         {

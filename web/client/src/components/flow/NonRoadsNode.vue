@@ -9,7 +9,7 @@ import type { NodeFeatures } from 'shared';
 import { useRoomStore } from '@/stores/useRoomStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import type { CustomHandle } from 'shared';
-import { deleteConnection, deleteNode } from '@/utils/roomOperations';
+import { deleteConnections, deleteNode } from '@/utils/roomOperations';
 import { Z_INDEX } from '@/constants/Layers';
 import { storeToRefs } from 'pinia';
 import { TooltipProvider } from 'reka-ui';
@@ -108,11 +108,14 @@ async function handleDelete() {
       }
     }
 
-    const toDeleteArray = Array.from(toDelete).reverse();
-    for (const connId of toDeleteArray) {
-      await deleteConnection(store.roomId, store.token, connId);
+    // One request for the whole branch; the server drops any zone the removal
+    // orphans, so only a surviving position still needs an explicit delete.
+    const removed = toDelete.size > 0
+      ? await deleteConnections(store.roomId, store.token, Array.from(toDelete).reverse())
+      : null;
+    if (!(removed?.removedZoneIds ?? []).includes(props.id)) {
+      await deleteNode(store.roomId, store.token, props.id);
     }
-    await deleteNode(store.roomId, store.token, props.id);
     plotRouteStore.onNodeRemoved(props.id);
   } catch (err) {
     console.error('Failed to delete node connections:', err);

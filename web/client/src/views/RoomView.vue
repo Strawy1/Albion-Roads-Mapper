@@ -31,7 +31,7 @@ import '@vue-flow/core/dist/theme-default.css';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { formatExpiresIn } from '@/utils/formatters';
-import { addConnection, deleteConnection, updateConnection } from '@/utils/roomOperations';
+import { addConnection, deleteConnection, deleteConnections, updateConnection } from '@/utils/roomOperations';
 import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
 // v1.2 splash retired with v1.3 (kept for reference / future announcements)
@@ -492,11 +492,11 @@ watch([homeZoneId, nodePositions, connections, () => store.canEdit], (newVal, ol
                 }
               }
               
-              // Delete in reverse order to help server-side cleanup logic (leaf to root)
-              const toDeleteArray = Array.from(toDelete).reverse();
-              for (const connId of toDeleteArray) {
-                await deleteConnection(props.id, store.token!, connId);
-              }
+              // Send the whole branch in one request — the server prunes the
+              // connections and any zones they orphan in a single statement
+              // and answers with one `connection_removed` broadcast. Ordered
+              // leaf-to-root purely for readability of the payload.
+              await deleteConnections(props.id, store.token!, Array.from(toDelete).reverse());
             } catch (err: any) {
               console.error('Failed to delete connections:', err);
               if (showToast) showToast(`Delete failed: ${err.message}`, 'error');
