@@ -44,30 +44,9 @@ jobs:
       - name: Test client
         run: pnpm --filter client test
 
+      - name: Test map-parser
+        run: pnpm --filter map-parser test
+
       # Covers the client's vue-tsc typecheck, which the suites don't.
       - name: Build
         run: pnpm build
-
-  # map-parser is excluded from the job above: 9 of its tests fail on `main`
-  # (a missing /tmp fixture and 4 assertions), unrelated to the web packages.
-  # Runs on its own so the breakage stays visible without blocking PRs — drop
-  # `continue-on-error` once those are fixed.
-  map-parser:
-    name: map-parser (known failing)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.12.0
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter map-parser test

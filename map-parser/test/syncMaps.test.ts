@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = resolve(__dirname, '../scripts/syncMaps.ts');
@@ -26,27 +26,41 @@ interface RunResult {
 
 const TEST_OUTPUT_PATH = join(FIXTURE_DIR, 'maps.json');
 
+// Run the script through the tsx binary this workspace installed, rather than
+// via `npx`: npx is not guaranteed to be on PATH (a pnpm-only machine has no
+// npm at all), and when it is missing every run exits 127 — which reads as
+// "script failed" in the exit-code assertions and as a missing output file in
+// the rest. Resolving the local bin keeps the suite dependent only on
+// `pnpm install` having run.
+const TSX_BIN = resolve(__dirname, '../node_modules/.bin/tsx');
+
 function runSync(fixturePath: string, extra: string[] = []): RunResult {
-  const flags = ['--source', fixturePath, '--output', TEST_OUTPUT_PATH, ...extra].join(' ');
-  try {
-    const stdout = execSync(`npx tsx ${SCRIPT} ${flags} 2>/tmp/syncMaps-stderr.txt`, {
-      cwd: resolve(__dirname, '..'),
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
-    let stderr = '';
-    try { stderr = readFileSync('/tmp/syncMaps-stderr.txt', 'utf8'); } catch { /* empty */ }
-    return { stdout, stderr, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; status?: number };
-    let stderr = e.stderr ?? '';
-    try { stderr += readFileSync('/tmp/syncMaps-stderr.txt', 'utf8'); } catch { /* empty */ }
-    return {
-      stdout: e.stdout ?? '',
-      stderr,
-      exitCode: e.status ?? 1,
-    };
+  const args = [SCRIPT, '--source', fixturePath, '--output', TEST_OUTPUT_PATH, ...extra];
+  // spawnSync (not execFileSync) because the script warns on stderr while
+  // still exiting 0, and execFileSync only hands back stderr when the child
+  // fails. stderr is piped rather than redirected to a shared temp file, so
+  // concurrently-running test files cannot read each other's warnings.
+  const result = spawnSync(TSX_BIN, args, {
+    cwd: resolve(__dirname, '..'),
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+
+  if (result.error) {
+    const code = (result.error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(`tsx binary not found at ${TSX_BIN} — run \`pnpm install\` first`);
+    }
+    throw result.error;
   }
+
+  return {
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    // A child killed by a signal (e.g. the timeout above) reports status null;
+    // treat that as a failure rather than letting `null` read as falsy-zero.
+    exitCode: result.status ?? 1,
+  };
 }
 
 function readOutput(): unknown[] {
