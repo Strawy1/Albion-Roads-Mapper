@@ -9,7 +9,8 @@ import * as roomOperations from '@/utils/roomOperations'
 // Mock the room operations
 vi.mock('@/utils/roomOperations', () => ({
   deleteNode: vi.fn(),
-  deleteConnection: vi.fn()
+  deleteConnection: vi.fn(),
+  deleteConnections: vi.fn(async () => ({ removedConnectionIds: [], removedZoneIds: [] }))
 }))
 
 describe('Node Deletion', () => {
@@ -58,7 +59,9 @@ describe('Node Deletion', () => {
     // Simulate calling handleDelete directly
     await (wrapper.vm as any).handleDelete()
     
-    expect(roomOperations.deleteConnection).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'conn1')
+    // The whole branch goes in a single request, not one call per connection.
+    expect(roomOperations.deleteConnections).toHaveBeenCalledTimes(1)
+    expect(roomOperations.deleteConnections).toHaveBeenCalledWith(expect.any(String), expect.any(String), ['conn1'])
     expect(roomOperations.deleteNode).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'test-node')
   })
   
@@ -104,7 +107,9 @@ describe('Node Deletion', () => {
     // Simulate calling handleDelete directly
     await (wrapper.vm as any).handleDelete()
     
-    expect(roomOperations.deleteConnection).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'conn1')
+    // The whole branch goes in a single request, not one call per connection.
+    expect(roomOperations.deleteConnections).toHaveBeenCalledTimes(1)
+    expect(roomOperations.deleteConnections).toHaveBeenCalledWith(expect.any(String), expect.any(String), ['conn1'])
     expect(roomOperations.deleteNode).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'test-node')
   })
 })

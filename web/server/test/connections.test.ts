@@ -1057,6 +1057,161 @@ describe('DELETE /api/rooms/:id/connections/:connId — map history preservation
   });
 });
 
+describe('POST /api/rooms/:id/connections/bulk-delete', () => {
+  // The whole point of this endpoint: pruning a branch of N connections must
+  // cost ONE database write and ONE broadcast, not N of each. These tests
+  // guard that invariant — if someone reintroduces a per-connection loop the
+  // call counts below blow up immediately.
+
+  const dbWrites = () => mockDb.query.mock.calls.filter((call: any[]) =>
+    typeof call[0] === 'string' &&
+    (call[0].includes('DELETE FROM connections') || call[0].includes('DELETE FROM room_node_positions'))
+  );
+
+  it('prunes an entire branch with a single database statement', async () => {
+    // A 25-connection branch — the size at which the old per-connection loop
+    // cost 100 queries and 25 broadcasts.
+    const connectionIds = Array.from({ length: 25 }, (_, i) => `conn-${i}`);
+    const orphanedZones = [VALID_ZONE_B, 'cetitos-aiayrom', 'sases-aoarsum'];
+
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ deleted_ids: connectionIds, removed_zone_ids: orphanedZones }],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      removedConnectionIds: connectionIds,
+      removedZoneIds: orphanedZones,
+    });
+
+    // Exactly one statement wrote to the database, and it carried every id.
+    const writes = dbWrites();
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toContain('DELETE FROM connections');
+    expect(writes[0][0]).toContain('DELETE FROM room_node_positions');
+    expect(writes[0][1]).toEqual([roomId, connectionIds]);
+  });
+
+  it('emits one connection_removed broadcast for the whole branch', async () => {
+    const connectionIds = ['conn-a', 'conn-b', 'conn-c'];
+
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ deleted_ids: connectionIds, removed_zone_ids: [VALID_ZONE_B] }],
+    });
+
+    const broadcastMock = vi.mocked(broadcast);
+    broadcastMock.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const removalBroadcasts = broadcastMock.mock.calls.filter(
+      (call: any[]) => call[0] === roomId &&
+        (call[1]?.type === 'connection_removed' || call[1]?.type === 'node_positions_updated')
+    );
+    expect(removalBroadcasts).toHaveLength(1);
+    expect(removalBroadcasts[0][1]).toMatchObject({
+      type: 'connection_removed',
+      connectionIds,
+      removedZoneIds: [VALID_ZONE_B],
+    });
+  });
+
+  it('deduplicates ids before hitting the database', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ deleted_ids: ['conn-a'], removed_zone_ids: [] }] });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds: ['conn-a', 'conn-a', 'conn-a'] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(dbWrites()[0][1]).toEqual([roomId, ['conn-a']]);
+  });
+
+  it('preserves map history — no room_node_memory row is touched', async () => {
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ deleted_ids: ['conn-a', 'conn-b'], removed_zone_ids: [VALID_ZONE_B] }],
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds: ['conn-a', 'conn-b'] },
+    });
+
+    const memoryDeleteCalls = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
+    );
+    expect(memoryDeleteCalls).toHaveLength(0);
+  });
+
+  it('does not broadcast when nothing matched', async () => {
+    mockDb.query.mockResolvedValueOnce({ rows: [{ deleted_ids: [], removed_zone_ids: [] }] });
+
+    const broadcastMock = vi.mocked(broadcast);
+    broadcastMock.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds: ['already-gone'] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ removedConnectionIds: [], removedZoneIds: [] });
+    expect(broadcastMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty id list', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds: [] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(dbWrites()).toHaveLength(0);
+  });
+
+  it('rejects an oversized id list', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds: Array.from({ length: 501 }, (_, i) => `conn-${i}`) },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(dbWrites()).toHaveLength(0);
+  });
+
+  it('returns 403 when the token is for a different room', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/rooms/other-room-id/connections/bulk-delete`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { connectionIds: ['conn-a'] },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(dbWrites()).toHaveLength(0);
+  });
+});
+
 describe('DELETE /api/rooms/:id/connections (Reset)', () => {
   it('deletes all connections and node positions (except home) without requiring admin password', async () => {
     const zoneA = VALID_ZONE_A; // Home

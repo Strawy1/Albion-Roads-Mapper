@@ -23,7 +23,7 @@ import { useRoomStore } from '@/stores/useRoomStore';
 import { useRoomMemoryStore } from '@/stores/useRoomMemoryStore';
 import { usePlotRouteStore } from '@/stores/usePlotRouteStore';
 import { storeToRefs } from 'pinia';
-import { deleteConnection, deleteNode, updateConnection } from '@/utils/roomOperations';
+import { deleteConnection, deleteConnections, deleteNode, updateConnection } from '@/utils/roomOperations';
 import { ref, watch, computed, nextTick, inject, onMounted, type Ref } from 'vue';
 import { onClickOutside, useRafFn } from '@vueuse/core';
 import { Z_INDEX } from '@/constants/Layers';
@@ -209,11 +209,13 @@ async function handleDelete() {
         }
       }
 
-      const toDeleteArray = Array.from(toDelete).reverse();
-      for (const connId of toDeleteArray) {
-        await deleteConnection(store.roomId, store.token, connId);
+      // One request for the whole branch — the server also drops every zone
+      // the removal orphans, this node included, so `deleteNode` is only
+      // needed when the position survived (chain source / home zone).
+      const removed = await deleteConnections(store.roomId, store.token, Array.from(toDelete).reverse());
+      if (!(removed?.removedZoneIds ?? []).includes(props.id)) {
+        await deleteNode(store.roomId, store.token, props.id);
       }
-      await deleteNode(store.roomId, store.token, props.id);
       plotRouteStore.onNodeRemoved(props.id);
     }
   } catch (err) {

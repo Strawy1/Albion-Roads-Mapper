@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
-import {CreateConnectionBodySchema, getDefaultHandles, inferRotationFromHandles, UpdateConnectionBodySchema, ZONE_BY_ID} from 'shared';
+import {BulkDeleteConnectionsBodySchema, CreateConnectionBodySchema, getDefaultHandles, inferRotationFromHandles, UpdateConnectionBodySchema, ZONE_BY_ID} from 'shared';
 import type { Connection, RoomMemoryEntry } from 'shared';
 import { broadcast } from '../broadcast.js';
 import { getInitialFeatures } from '../utils/nodeFeatures.js';
@@ -422,6 +422,103 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
       });
 
       return reply.status(204).send();
+    },
+  );
+
+  // POST /api/rooms/:id/connections/bulk-delete — delete many connections at once
+  //
+  // Used by the "delete this & connected" / node-delete flows, where the client
+  // has already walked the branch and knows every connection that must go.
+  // Deleting them one-by-one cost 4 queries + 1 broadcast *per connection*;
+  // this endpoint does the whole branch in ONE statement and ONE broadcast.
+  app.post<{ Params: { id: string } }>(
+    '/api/rooms/:id/connections/bulk-delete',
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const jwtPayload = request.user as { roomId: string };
+
+      if (jwtPayload.roomId !== id) {
+        return reply.status(403).send({ error: 'Forbidden' });
+      }
+
+      const parsed = BulkDeleteConnectionsBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+      }
+
+      const connectionIds = Array.from(new Set(parsed.data.connectionIds));
+
+      // One statement does everything:
+      //   1. `deleted`  — removes the requested connections (scoped to the room)
+      //                   and reports the zones they touched.
+      //   2. `orphans`  — of those zones, the ones left with no connections and
+      //                   which are neither a chain source nor the home zone.
+      //                   NOTE: every CTE sees the pre-DELETE snapshot, so the
+      //                   doomed connections are still visible here — they are
+      //                   excluded explicitly via `c.id <> ALL($2)`.
+      //   3. `removed_positions` — drops those orphan positions. Map history
+      //                   (room_node_memory) is deliberately left intact.
+      const { rows } = await app.db.query<{ deleted_ids: string[]; removed_zone_ids: string[] }>(
+        `WITH deleted AS (
+           DELETE FROM connections
+            WHERE room_id = $1 AND id = ANY($2::text[])
+           RETURNING id, from_zone_id, to_zone_id
+         ),
+         touched AS (
+           SELECT DISTINCT z.zone_id
+             FROM deleted d
+             CROSS JOIN LATERAL (VALUES (d.from_zone_id), (d.to_zone_id)) AS z(zone_id)
+         ),
+         orphans AS (
+           SELECT t.zone_id
+             FROM touched t
+            WHERE NOT EXISTS (
+              SELECT 1 FROM connections c
+               WHERE c.room_id = $1
+                 AND c.id <> ALL($2::text[])
+                 AND (c.from_zone_id = t.zone_id OR c.to_zone_id = t.zone_id)
+            )
+              AND NOT EXISTS (
+              SELECT 1 FROM room_chains rc
+               WHERE rc.room_id = $1 AND rc.source_zone_id = t.zone_id
+            )
+              AND NOT EXISTS (
+              SELECT 1 FROM rooms r
+               WHERE r.id = $1 AND r.home_zone_id = t.zone_id
+            )
+         ),
+         removed_positions AS (
+           DELETE FROM room_node_positions p
+            USING orphans o
+            WHERE p.room_id = $1 AND p.zone_id = o.zone_id
+           RETURNING p.zone_id
+         )
+         SELECT
+           COALESCE((SELECT array_agg(id) FROM deleted), '{}'::text[]) AS deleted_ids,
+           COALESCE((SELECT array_agg(zone_id) FROM removed_positions), '{}'::text[]) AS removed_zone_ids`,
+        [id, connectionIds]
+      );
+
+      const removedConnectionIds = rows[0]?.deleted_ids ?? [];
+      const removedZoneIds = rows[0]?.removed_zone_ids ?? [];
+
+      if (removedConnectionIds.length === 0 && removedZoneIds.length === 0) {
+        // Nothing matched (already deleted, or another room's ids) — no
+        // broadcast, so clients aren't churned by a no-op.
+        return reply.send({ removedConnectionIds, removedZoneIds });
+      }
+
+      broadcast(id, {
+        type: 'connection_removed',
+        connectionIds: removedConnectionIds,
+        removedZoneIds: removedZoneIds.length > 0 ? removedZoneIds : undefined,
+      });
+      trackRoomModified(app.db, id);
+
+      return reply.send({ removedConnectionIds, removedZoneIds });
     },
   );
 

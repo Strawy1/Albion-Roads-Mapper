@@ -50,6 +50,40 @@ export async function deleteConnection(
 }
 
 /**
+ * Deletes many connections in one request.
+ *
+ * Used by the branch-delete flows ("delete this & connected", node delete):
+ * the caller walks the tree locally and submits every doomed connection at
+ * once, so the server prunes the whole branch — plus any zones orphaned by it —
+ * in a single database statement and a single broadcast.
+ *
+ * Returns what the server actually removed (ids that no longer existed are
+ * simply absent).
+ */
+export async function deleteConnections(
+  roomId: string,
+  token: string,
+  connectionIds: string[],
+): Promise<{ removedConnectionIds: string[]; removedZoneIds: string[] }> {
+  const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/connections/bulk-delete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ connectionIds }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json() as { error?: string };
+    throw new Error(body.error ?? 'Failed to delete connections');
+  }
+
+  track('delete_connections');
+  return await res.json() as { removedConnectionIds: string[]; removedZoneIds: string[] };
+}
+
+/**
  * Updates a connection's expiration time.
  */
 export async function updateConnection(

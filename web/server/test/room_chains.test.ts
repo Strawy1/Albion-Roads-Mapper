@@ -338,28 +338,16 @@ describe('DELETE /api/rooms/:id/chains/:chainId', () => {
       rowCount: 1,
     });
 
-    // transaction-internal queries: select connections, select positions, then deletes.
-    const txClient = {
-      query: vi.fn()
-        // BEGIN
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-        // SELECT connections
-        .mockResolvedValueOnce({ rows: [{ id: 'conn-1' }, { id: 'conn-2' }], rowCount: 2 })
-        // SELECT room_node_positions
-        .mockResolvedValueOnce({ rows: [{ zone_id: OTHER_ROADS_ZONE }, { zone_id: 'some-other-zone' }], rowCount: 2 })
-        // DELETE connections
-        .mockResolvedValueOnce({ rows: [], rowCount: 2 })
-        // DELETE positions
-        .mockResolvedValueOnce({ rows: [], rowCount: 2 })
-        // DELETE room_chains
-        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-        // UPDATE rooms.updated_at
-        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-        // COMMIT
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
-      release: vi.fn(),
-    };
-    mockDb.connect = vi.fn().mockReturnValue(txClient);
+    // 4. the single delete statement, reporting what it actually removed —
+    //    including 'some-other-zone', whose chain_id was never set and which
+    //    is only caught by the zone-membership sweep.
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{
+        removed_connection_ids: ['conn-1', 'conn-2'],
+        removed_zone_ids: [OTHER_ROADS_ZONE, 'some-other-zone'],
+      }],
+      rowCount: 1,
+    });
 
     const broadcastMock = vi.mocked(broadcast);
     broadcastMock.mockClear();
@@ -383,10 +371,90 @@ describe('DELETE /api/rooms/:id/chains/:chainId', () => {
 
     // Map history must survive a chain deletion — room_node_memory is only
     // ever deleted via the explicit memory endpoints.
-    const memoryDeleteCalls = txClient.query.mock.calls.filter(
+    const memoryDeleteCalls = mockDb.query.mock.calls.filter(
       (call: any[]) => typeof call[0] === 'string' && call[0].includes('DELETE FROM room_node_memory')
     );
     expect(memoryDeleteCalls).toHaveLength(0);
+  });
+
+  it('severs the FK link on protected rows so the chain-row cascade cannot take them silently', async () => {
+    // `room_chains` is referenced ON DELETE CASCADE by room_node_positions.
+    // If a row wrongly carries the doomed chain's id (e.g. the home zone
+    // tagged with a secondary chain), excluding it from the DELETE is not
+    // enough — the cascade removes it when the chain row goes, and it never
+    // reaches the broadcast, leaving clients drawing a node that no longer
+    // exists. The statement must NULL out those rows' chain_id first.
+    const token = app.jwt.sign({ roomId: ROOM_ID, passwordVersion: 1 });
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ password_version: 1 }], rowCount: 1 });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: ZONE_ID }], rowCount: 1 });
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ id: 'chain-to-delete', source_zone_id: OTHER_ROADS_ZONE }],
+      rowCount: 1,
+    });
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ removed_connection_ids: ['conn-1'], removed_zone_ids: [OTHER_ROADS_ZONE] }],
+      rowCount: 1,
+    });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${ROOM_ID}/chains/chain-to-delete`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const sql = mockDb.query.mock.calls.find((call: any[]) =>
+      typeof call[0] === 'string' && call[0].includes('DELETE FROM room_chains')
+    )[0] as string;
+
+    // The link is severed for the home zone and for other chains' sources…
+    expect(sql).toMatch(/UPDATE room_node_positions[\s\S]*SET chain_id = NULL/);
+    expect(sql).toContain('home_zone_id');
+    expect(sql).toMatch(/rc\.id <> \$2 AND rc\.source_zone_id = p\.zone_id/);
+    // …and those zones are then kept out of both the membership sweep and the
+    // position delete, so the other chain's edges survive.
+    const protectedExclusions = sql.match(/NOT IN \(SELECT zone_id FROM protected\)/g) ?? [];
+    expect(protectedExclusions).toHaveLength(2);
+  });
+
+  it('wipes the whole chain in a single database statement', async () => {
+    // Chain deletion is O(1) in the size of the chain: one statement removes
+    // the connections, the positions, the chain row and bumps updated_at —
+    // there is no per-connection or per-zone loop to regress into.
+    const token = app.jwt.sign({ roomId: ROOM_ID, passwordVersion: 1 });
+
+    mockDb.query.mockResolvedValueOnce({ rows: [{ password_version: 1 }], rowCount: 1 });
+    mockDb.query.mockResolvedValueOnce({ rows: [{ home_zone_id: ZONE_ID }], rowCount: 1 });
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ id: 'chain-to-delete', source_zone_id: OTHER_ROADS_ZONE }],
+      rowCount: 1,
+    });
+    mockDb.query.mockResolvedValueOnce({
+      rows: [{ removed_connection_ids: ['c1', 'c2', 'c3'], removed_zone_ids: ['z1', 'z2'] }],
+      rowCount: 1,
+    });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${ROOM_ID}/chains/chain-to-delete`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const writes = mockDb.query.mock.calls.filter((call: any[]) =>
+      typeof call[0] === 'string' && (
+        call[0].includes('DELETE FROM connections') ||
+        call[0].includes('DELETE FROM room_node_positions') ||
+        call[0].includes('DELETE FROM room_chains')
+      )
+    );
+    expect(writes).toHaveLength(1);
+    // …and it carries all four inputs: room, chain, source zone, timestamp.
+    expect(writes[0][1].slice(0, 3)).toEqual([ROOM_ID, 'chain-to-delete', OTHER_ROADS_ZONE]);
+
+    // No transaction is needed — a single statement is already atomic.
+    expect(mockDb.connect).not.toHaveBeenCalled();
   });
 });
 

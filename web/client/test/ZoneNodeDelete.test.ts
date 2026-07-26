@@ -7,31 +7,41 @@ import { useRoomStore } from '../src/stores/useRoomStore';
 
 vi.mock('../src/utils/roomOperations', () => ({
   deleteConnection: vi.fn(),
+  deleteConnections: vi.fn(),
   deleteNode: vi.fn(),
   updateConnection: vi.fn(),
   addConnection: vi.fn(),
 }));
 
-import { deleteConnection, deleteNode } from '../src/utils/roomOperations';
+import { deleteConnection, deleteConnections, deleteNode } from '../src/utils/roomOperations';
 
-// Helper: make deleteConnection simulate the server broadcasting connection_removed
-// by applying the message to the store after each call. After each removal, if a
-// zone has no remaining connections the server also sends node_positions_updated
-// dropping that zone — we simulate that too so the overlay disappears from the DOM.
+// Helper: make the delete operations simulate the server. A branch delete is a
+// single bulk request answered by ONE `connection_removed` broadcast carrying
+// every removed connection plus every zone the removal orphaned, so we mirror
+// that here — the node disappears from the DOM off that one message.
 function simulateServerDelete(store: ReturnType<typeof useRoomStore>) {
-  vi.mocked(deleteConnection).mockImplementation(async (_roomId, _token, connId) => {
-    // Determine which zones will have no connections after this removal
-    const remaining = store.connections.filter(c => c.id !== connId);
+  const orphansAfter = (removedIds: Set<string>) => {
+    const remaining = store.connections.filter(c => !removedIds.has(c.id));
     const connectedZones = new Set<string>();
     for (const c of remaining) {
       connectedZones.add(c.fromZoneId);
       connectedZones.add(c.toZoneId);
     }
-    const removedZoneIds = store.nodePositions
+    return store.nodePositions
       .filter(p => p.zoneId !== store.homeZoneId && !connectedZones.has(p.zoneId))
       .map(p => p.zoneId);
+  };
 
+  vi.mocked(deleteConnection).mockImplementation(async (_roomId, _token, connId) => {
+    const removedZoneIds = orphansAfter(new Set([connId]));
     store.applyMessage({ type: 'connection_removed', connectionId: connId, removedZoneIds });
+  });
+
+  vi.mocked(deleteConnections).mockImplementation(async (_roomId, _token, connIds) => {
+    const removedIds = new Set(connIds);
+    const removedZoneIds = orphansAfter(removedIds);
+    store.applyMessage({ type: 'connection_removed', connectionIds: connIds, removedZoneIds });
+    return { removedConnectionIds: connIds, removedZoneIds };
   });
 
   vi.mocked(deleteNode).mockImplementation(async (_roomId, _token, zoneId) => {
@@ -190,16 +200,89 @@ describe('ZoneNode Delete Overlay', () => {
       await deleteBtn.trigger('click');
       await nextTick();
 
-      // Both connections (incoming conn-1 and outgoing conn-2) must be deleted
-      expect(deleteConnection).toHaveBeenCalledWith('room1', 'token1', 'conn-1');
-      expect(deleteConnection).toHaveBeenCalledWith('room1', 'token1', 'conn-2');
-      expect(vi.mocked(deleteConnection).mock.calls.length).toBe(2);
+      // Both connections (incoming conn-1 and outgoing conn-2) must be deleted,
+      // in a single bulk request rather than one call each.
+      expect(deleteConnections).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteConnections).mock.calls[0][0]).toBe('room1');
+      expect(vi.mocked(deleteConnections).mock.calls[0][1]).toBe('token1');
+      expect([...vi.mocked(deleteConnections).mock.calls[0][2]].sort()).toEqual(['conn-1', 'conn-2']);
+      expect(deleteConnection).not.toHaveBeenCalled();
 
       // After the server processes the deletes, zone-b must be removed from
       // nodePositions (the server sends node_positions_updated) so it disappears
       // from the flow entirely.
       await nextTick();
       expect(store.nodePositions.find(p => p.zoneId === 'zone-b')).toBeUndefined();
+    });
+  });
+
+  // ─── Loop that closes back onto the home zone ───────────────────────────────
+
+  describe('cycle back to the home zone', () => {
+    it('deleting expired B in home→B→C→D→home removes B, C and D but never home', async () => {
+      // The topology that makes over-deletion plausible: the branch below the
+      // deleted node loops all the way back onto the home zone, so the walk
+      // *does* reach home. Home must still survive as a node — it is protected
+      // by the server's orphan rules (home zone / chain source), and the
+      // batched delete must not take it along with the branch.
+      const now = Date.now();
+      const store = useRoomStore();
+      store.setCredentials('room1', 'token1');
+      simulateServerDelete(store);
+
+      const conn = (id: string, from: string, to: string) => ({
+        id,
+        roomId: 'room1',
+        fromZoneId: from,
+        toZoneId: to,
+        fromHandleId: 'e',
+        expiresAt: new Date(now - 1000).toISOString(),
+        reportedAt: new Date().toISOString(),
+        isExpired: true,
+      });
+
+      store.applyMessage({
+        type: 'sync',
+        connections: [
+          conn('c1', 'home', 'zone-b'),
+          conn('c2', 'zone-b', 'zone-c'),
+          conn('c3', 'zone-c', 'zone-d'),
+          conn('c4', 'zone-d', 'home'), // closes the loop onto home
+        ],
+        homeZoneId: 'home',
+        nodePositions: [
+          { zoneId: 'home', x: 0, y: 0 },
+          { zoneId: 'zone-b', x: 100, y: 0 },
+          { zoneId: 'zone-c', x: 200, y: 0 },
+          { zoneId: 'zone-d', x: 300, y: 0 },
+        ],
+        lastUpdatedAt: new Date().toISOString(),
+        watching: 0, totalConnected: 0,
+      });
+
+      expect(store.isNodeExpired('zone-b', now)).toBe(true);
+
+      const wrapper = mountZoneNode('zone-b', false, now);
+
+      const overlay = wrapper.find('[class*="absolute inset-0 cursor-pointer"]');
+      await overlay.trigger('click');
+      await nextTick();
+
+      const deleteBtn = wrapper.find('button.bg-red-600');
+      expect(deleteBtn.exists()).toBe(true);
+      await deleteBtn.trigger('click');
+      await nextTick();
+
+      // The walk goes all the way round the cycle exactly once — every
+      // connection in the loop goes, in one request.
+      expect(deleteConnections).toHaveBeenCalledTimes(1);
+      expect([...vi.mocked(deleteConnections).mock.calls[0][2]].sort())
+        .toEqual(['c1', 'c2', 'c3', 'c4']);
+
+      // The zones: B, C and D are gone; home is still on the map.
+      await nextTick();
+      expect(store.nodePositions.map(p => p.zoneId)).toEqual(['home']);
+      expect(store.connections).toHaveLength(0);
     });
   });
 
@@ -415,11 +498,15 @@ describe('ZoneNode Delete Overlay', () => {
       await deleteBtn.trigger('click');
       await nextTick();
 
-      // All 3 connections must be deleted
-      expect(deleteConnection).toHaveBeenCalledWith('test4', 'token1', 'b63bc530-7b52-4602-b954-73a90bdcf3cb');
-      expect(deleteConnection).toHaveBeenCalledWith('test4', 'token1', '55b01aa9-bc4a-4c2b-b7d1-ef795765a2b8');
-      expect(deleteConnection).toHaveBeenCalledWith('test4', 'token1', '2f01830f-c1c3-4d7c-881d-1fb8602e5df8');
-      expect(vi.mocked(deleteConnection).mock.calls.length).toBe(3);
+      // All 3 connections must be deleted — in ONE request, not three
+      expect(deleteConnections).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(deleteConnections).mock.calls[0][0]).toBe('test4');
+      expect(vi.mocked(deleteConnections).mock.calls[0][2].sort()).toEqual([
+        '2f01830f-c1c3-4d7c-881d-1fb8602e5df8',
+        '55b01aa9-bc4a-4c2b-b7d1-ef795765a2b8',
+        'b63bc530-7b52-4602-b954-73a90bdcf3cb',
+      ]);
+      expect(deleteConnection).not.toHaveBeenCalled();
 
       // After deletion, cebitos-aeaylum and its children (curlew-fen, cebos-avemlum)
       // must all be removed from nodePositions — only the home zone remains.
@@ -623,10 +710,11 @@ describe('ZoneNode Delete Overlay', () => {
       await deleteBtn.trigger('click');
       await nextTick();
 
-      // Both the incoming and outgoing connections must be deleted
-      expect(deleteConnection).toHaveBeenCalledWith('room1', 'token1', 'conn-iso');
-      expect(deleteConnection).toHaveBeenCalledWith('room1', 'token1', 'conn-child');
-      expect(vi.mocked(deleteConnection).mock.calls.length).toBe(2);
+      // Both the incoming and outgoing connections must be deleted, batched
+      // into a single request
+      expect(deleteConnections).toHaveBeenCalledTimes(1);
+      expect([...vi.mocked(deleteConnections).mock.calls[0][2]].sort()).toEqual(['conn-child', 'conn-iso']);
+      expect(deleteConnection).not.toHaveBeenCalled();
 
       // After the server processes the deletes, zone-b must be removed from
       // nodePositions (the server sends node_positions_updated) so it disappears
