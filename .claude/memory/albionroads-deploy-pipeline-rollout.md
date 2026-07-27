@@ -11,7 +11,7 @@ metadata:
 Since 2026-07-27 the backend deploys itself — no local `build-docker.sh`, no manual SSH. Validated end to end that day: two `Backend Deployment` runs on `main` (PRs #7 and #9) published and deployed cleanly. Mechanics are in `docs/development.md` ("Backend CI/CD") — see [[albionroads-docs]]. Shipped as dignityofwar/albion-mapper#8 (demo video → YouTube), #7 (the pipeline), Maelstromeous/webhooks#4 (the hook).
 
 **The parts that aren't in this repo:**
-- `WEBHOOK_URL` is `https://hooks.mattcavanagh.me/hooks/albion-mapper` — a Cloudflare Zero Trust tunnel to `10.0.5.3:9000`, no `cloudflared` on the box. The hook is chosen by **URL path**; the JSON body is decorative, existing only to give the HMAC something to sign. One `WEBHOOK_SECRET` is shared by every project on that host. Full runbook: `~/code/webhooks` (private, `Maelstromeous/webhooks`).
+- `WEBHOOK_URL` is `https://hooks.mattcavanagh.me/hooks/albionroads` (renamed from `albion-mapper` on 2026-07-27; the repo secret moved with it) — a Cloudflare Zero Trust tunnel to `10.0.5.3:9000`, no `cloudflared` on the box. The hook is chosen by **URL path**; the JSON body is decorative, existing only to give the HMAC something to sign. One `WEBHOOK_SECRET` is shared by every project on that host. Full runbook: `~/code/webhooks` (private, `Maelstromeous/webhooks`).
 - The target box is `10.0.5.10`; its compose file is `/root/docker/docker-compose.yml` and the hook runs `/root/update.sh`.
 - Both Docker Hub PATs were rotated on 2026-07-27 (the old one was lost); `dignityofwar/diglet-bot` shares the same account.
 
