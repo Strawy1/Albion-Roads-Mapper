@@ -18,8 +18,11 @@ on:
         default: production
 
 jobs:
+  # Both names are driven off `push` so a run says what it actually did. A
+  # validation build that announces itself as "Build & push" reads as though it
+  # published an image, which is exactly the confusion this avoids.
   build:
-    name: Build server image
+    name: ${{ inputs.push && 'Build & push server image' || 'Build server image' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -36,7 +39,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      # buildx builds and pushes in a single invocation — layers stream straight
+      # to the registry. Splitting it into a build step and a `docker push` step
+      # would mean loading the image into the local daemon first, which is slower
+      # and buys nothing, so the split is in the naming rather than the mechanism.
+      - name: ${{ inputs.push && 'Build and push' || 'Build' }}
         uses: docker/build-push-action@v6
         with:
           context: .
