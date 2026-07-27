@@ -10,7 +10,6 @@ import { roomRoutes } from './routes/rooms.js';
 import { connectionRoutes } from './routes/connections.js';
 import { wsRoutes } from './ws.js';
 import { healthRoutes } from './routes/health.js';
-import { mediaRoutes } from './routes/media.js';
 import { metricsRoutes } from './routes/metrics.js';
 import { eventRoutes } from './routes/events.js';
 
@@ -98,7 +97,6 @@ export async function buildApp(options: AppOptions) {
   await app.register(connectionRoutes, { prefix: '' });
   await app.register(wsRoutes, { prefix: '' });
   await app.register(healthRoutes, { prefix: '' });
-  await app.register(mediaRoutes, { prefix: '' });
   await app.register(metricsRoutes, { prefix: '' });
   await app.register(eventRoutes, { prefix: '' });
 

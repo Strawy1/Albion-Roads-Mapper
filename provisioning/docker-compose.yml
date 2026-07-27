@@ -22,7 +22,6 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://user:password@db:5432/dbname}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       PORT: 3001
-      MEDIA_PATH: /app/media
     ports:
       - '3001:3001'
     depends_on:
