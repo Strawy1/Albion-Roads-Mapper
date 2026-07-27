@@ -5,9 +5,11 @@
   ],
   "description": [
     "A release has to have been public for 14 days before Renovate will propose it. With patch and minor updates automerging unattended, this is the window in which a compromised or immediately-yanked publish gets found by someone else before it can land here on its own.",
-    "Security fixes are not delayed by this: Renovate's vulnerabilityAlerts defaults are minimumReleaseAge null, an empty schedule and prCreation immediate, so a CVE fix is raised straight away regardless of the wait below."
+    "Security fixes are not delayed by this: Renovate's vulnerabilityAlerts defaults are minimumReleaseAge null, an empty schedule and prCreation immediate, so a CVE fix is raised straight away regardless of the wait below.",
+    "Renovate merges its own PRs rather than handing them to GitHub's auto-merge, which is disabled on this repo. Left at the default of true, platformAutomerge means every run attempts the platform route, fails, and falls back to merging directly — so this only makes the working behaviour explicit. It is also the stronger gate of the two: GitHub auto-merge waits for required checks alone, where Renovate waits for the whole branch to go green."
   ],
   "minimumReleaseAge": "14 days",
+  "platformAutomerge": false,
   "packageRules": [
     {
       "description": "Patch and minor updates merge themselves. The Unit tests & build check is required on main, so nothing lands without the suite passing. Majors are left alone deliberately.",
