@@ -1,0 +1,51 @@
+name: Testing Deployment
+
+# The testing twin of Backend Deployment: pushes to `testing` publish
+# maelstromeous/albion-mapper:testing-latest, which the server-testing container
+# on :3002 pulls (the API behind api-testing.albionroads.live).
+#
+# Note the branch is a deploy target, not a long-lived line of development — it is
+# expected to be reset onto main and force-pushed:
+#   git push --force origin HEAD:testing
+on:
+  push:
+    branches: [testing]
+    paths:
+      - 'web/server/**'
+      - 'web/shared/**'
+      - 'provisioning/**'
+      - '.dockerignore'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+# Independent of the production group, so a testing push never queues behind (or
+# delays) a real deploy.
+concurrency:
+  group: deploy-testing
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests
+    uses: ./.github/workflows/test.yml
+
+  publish:
+    name: Publish image
+    needs: test
+    uses: ./.github/workflows/docker-build-push.yml
+    with:
+      push: true
+      channel: testing
+    secrets: inherit
+
+  # The same hook as production: /root/update.sh pulls every image in the compose
+  # file, so it refreshes server-testing too. Production is only recreated if its
+  # own :latest digest actually changed.
+  deploy:
+    name: Deploy
+    needs: publish
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

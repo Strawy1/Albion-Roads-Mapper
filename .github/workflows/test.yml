@@ -4,10 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Backend Deployment gates the image build on this suite.
+  workflow_call:
 
-# A newer push to the same branch makes the in-flight run redundant.
+# A newer push to the same branch makes the in-flight run redundant. The workflow
+# name is part of the group because on a backend push to main this runs twice —
+# once from the push trigger, once called by Backend Deployment — on the same
+# ref; without it the two would cancel each other and fail the deploy.
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

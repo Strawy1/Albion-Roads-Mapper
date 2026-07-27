@@ -1,0 +1,26 @@
+name: Docker Build
+
+# Builds the server image without pushing, so a Dockerfile or dependency break is
+# caught on the PR rather than halfway through a deploy on main. Same paths as
+# Backend Deployment.
+on:
+  pull_request:
+    paths:
+      - 'web/server/**'
+      - 'web/shared/**'
+      - 'provisioning/**'
+      - '.dockerignore'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/**'
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/docker-build-push.yml
+    with:
+      push: false
