@@ -14,9 +14,6 @@ ENV CI=true
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# Copy media assets
-COPY media/ ./media/
-
 # Copy only workspace-related files for installation
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY web/client/package.json ./web/client/

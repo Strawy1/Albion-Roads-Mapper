@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, shallowRef, onBeforeUnmount, computed, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import RecentlyViewedRooms from '../components/RecentlyViewedRooms.vue';
@@ -10,7 +10,60 @@ const router = useRouter();
 
 // const splashModal = ref<InstanceType<typeof V1dot2SplashModal> | null>(null);
 
-const videoRef = ref<HTMLVideoElement | null>(null);
+// The demo used to be a self-hosted 240MB mp4 streamed from the API, autoplaying
+// on page load. It now lives on YouTube, and nothing third-party is fetched until
+// the poster below is clicked.
+const YOUTUBE_VIDEO_ID = 'RhNaLbwat-8';
+
+// Minimal shape of the bits of the IFrame Player API we touch.
+interface YouTubePlayer {
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
+  playVideo(): void;
+  getCurrentTime(): number;
+  destroy(): void;
+}
+
+interface YouTubeApi {
+  Player: new (el: HTMLElement, options: Record<string, unknown>) => YouTubePlayer;
+  PlayerState: { PLAYING: number };
+}
+
+declare global {
+  interface Window {
+    YT?: YouTubeApi;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+// Best-first. maxres (1280x720, native 16:9) only exists once YouTube has
+// finished the HD transcode; the smaller two are 4:3 with letterbox bars, which
+// `object-cover` crops back off exactly. hqdefault is always present.
+const THUMBNAIL_SIZES = ['maxresdefault', 'sddefault', 'hqdefault'];
+const thumbnailSizeIndex = ref(0);
+const thumbnailSrc = computed(
+  () => `https://i.ytimg.com/vi/${YOUTUBE_VIDEO_ID}/${THUMBNAIL_SIZES[thumbnailSizeIndex.value]}.jpg`,
+);
+const nextThumbnailSize = () => {
+  if (thumbnailSizeIndex.value < THUMBNAIL_SIZES.length - 1) {
+    thumbnailSizeIndex.value += 1;
+  }
+};
+
+// A missing size 404s but still returns a decodable 120x90 grey placeholder, so
+// the browser fires `load`, not `error` — the size is the only tell.
+const onThumbnailLoad = (event: Event) => {
+  const img = event.target as HTMLImageElement;
+  if (img.naturalWidth <= 120) {
+    nextThumbnailSize();
+  }
+};
+
+const playerHost = ref<HTMLDivElement | null>(null);
+const playerWrapper = ref<HTMLDivElement | null>(null);
+// shallowRef: a plain ref would hand back a reactive Proxy of the player, and the
+// IFrame API does not appreciate being wrapped.
+const player = shallowRef<YouTubePlayer | null>(null);
+const hasStarted = ref(false);
 const currentTime = ref(0);
 
 interface Chapter {
@@ -42,42 +95,111 @@ const activeChapterName = computed(() => {
 });
 
 const dropdownValue = ref<string>(chapters[0].name);
-const isMuted = ref(true);
 
-const toggleMute = () => {
-  if (videoRef.value) {
-    videoRef.value.muted = !videoRef.value.muted;
-    isMuted.value = videoRef.value.muted;
-  }
-};
-
-let animationFrameId: number | null = null;
-
-const updateTimeLoop = () => {
-  if (videoRef.value) {
-    currentTime.value = videoRef.value.currentTime;
-    animationFrameId = requestAnimationFrame(updateTimeLoop);
-  }
-};
+// The chapter bars track playback position; 4Hz is plenty given the 300ms CSS
+// transition on the fill, and avoids a rAF loop for a value that barely moves.
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 const startAnimation = () => {
-  if (!animationFrameId) {
-    updateTimeLoop();
-  }
+  if (pollTimer || !player.value) return;
+  pollTimer = setInterval(() => {
+    if (player.value) {
+      currentTime.value = player.value.getCurrentTime();
+    }
+  }, 250);
 };
 
 const stopAnimation = () => {
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
   }
 };
 
+// Loaded on demand, once, and shared by every caller racing to start playback.
+let apiPromise: Promise<void> | null = null;
+
+const loadYouTubeApi = (): Promise<void> => {
+  if (window.YT?.Player) return Promise.resolve();
+  if (apiPromise) return apiPromise;
+
+  apiPromise = new Promise<void>((resolve) => {
+    const previousCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousCallback?.();
+      resolve();
+    };
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(script);
+  });
+
+  return apiPromise;
+};
+
+// Set for the whole async gap between the first click and the player existing,
+// so a second click in that window seeks rather than building a second player.
+let pendingStart: number | null = null;
+
+const startPlayback = async (startSeconds = 0) => {
+  // Already playing: just seek.
+  if (player.value) {
+    player.value.seekTo(startSeconds, true);
+    player.value.playVideo();
+    return;
+  }
+
+  if (pendingStart !== null) {
+    pendingStart = startSeconds;
+    return;
+  }
+  pendingStart = startSeconds;
+
+  hasStarted.value = true;
+  await loadYouTubeApi();
+  await nextTick();
+
+  if (!window.YT || !playerHost.value) {
+    pendingStart = null;
+    return;
+  }
+
+  // A chapter clicked while the API was loading wins over the original click.
+  const startAt = Math.floor(pendingStart ?? startSeconds);
+  pendingStart = null;
+
+  // The API replaces the host element with its iframe, so it must be a leaf node
+  // Vue never patches.
+  player.value = new window.YT.Player(playerHost.value, {
+    host: 'https://www.youtube-nocookie.com',
+    videoId: YOUTUBE_VIDEO_ID,
+    playerVars: {
+      autoplay: 1,
+      start: startAt,
+      rel: 0,
+      modestbranding: 1,
+      playsinline: 1,
+    },
+    events: {
+      onReady: () => startAnimation(),
+      onStateChange: (event: { data: number }) => {
+        if (event.data === window.YT?.PlayerState.PLAYING) {
+          startAnimation();
+        } else {
+          stopAnimation();
+        }
+      },
+    },
+  });
+};
+
 const jumpToChapter = (chapter: Chapter) => {
-  if (videoRef.value) {
-    videoRef.value.currentTime = chapter.start;
+  void startPlayback(chapter.start);
+  currentTime.value = chapter.start;
+
+  if (playerWrapper.value) {
     const offset = 10;
-    const elementPosition = videoRef.value.getBoundingClientRect().top;
+    const elementPosition = playerWrapper.value.getBoundingClientRect().top;
     const offsetPosition = elementPosition + window.scrollY - offset;
 
     window.scrollTo({
@@ -104,16 +226,14 @@ const getChapterProgress = (chapter: Chapter) => {
   return ((currentTime.value - chapter.start) / duration) * 100 + '%';
 };
 
-const videoSrc = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/media/demov1-1.mp4`;
-
 watch(activeChapterName, (name) => {
   dropdownValue.value = name;
 });
 
-onMounted(() => {
-  if (videoRef.value) {
-    startAnimation();
-  }
+onBeforeUnmount(() => {
+  stopAnimation();
+  player.value?.destroy();
+  player.value = null;
 });
 </script>
 
@@ -194,14 +314,6 @@ onMounted(() => {
 
       </div>
     <div class="w-full max-w-[2000px] mt-4 min-[1200px]:mt-0 min-[1200px]:px-24 min-[1200px]:pt-4 pb-10 overflow-hidden">
-      <div class="mb-2 w-full px-4 min-[1200px]:px-0 text-center">
-        <button
-          @click="toggleMute"
-          class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 font-medium transition-colors text-sm"
-        >
-          {{ isMuted ? '🔇 Unmute' : '🔊 Mute' }}
-        </button>
-      </div>
       <div class="mb-4 w-full px-4 min-[1200px]:px-0 text-center">
         <select
           :value="dropdownValue"
@@ -237,19 +349,41 @@ onMounted(() => {
           </template>
         </div>
       </div>
-      <video
-        ref="videoRef"
-        :src="videoSrc"
-        autoplay
-        loop
-        muted
-        playsinline
-        controls
-        @play="startAnimation"
-        @pause="stopAnimation"
-        @ended="stopAnimation"
-        class="w-full min-[1200px]:border-2 min-[1200px]:border-gray-500 min-[1200px]:rounded-lg"
-      />
+      <div
+        ref="playerWrapper"
+        class="relative w-full aspect-video bg-black overflow-hidden min-[1200px]:border-2 min-[1200px]:border-gray-500 min-[1200px]:rounded-lg"
+      >
+        <!-- Poster facade: no YouTube script, cookies or iframe until it's clicked. -->
+        <button
+          v-if="!hasStarted"
+          type="button"
+          class="group absolute inset-0 w-full h-full cursor-pointer"
+          aria-label="Play the Albion Roads Mapper demo video"
+          @click="startPlayback(0)"
+        >
+          <img
+            :src="thumbnailSrc"
+            alt=""
+            width="1280"
+            height="720"
+            class="w-full h-full object-cover"
+            @load="onThumbnailLoad"
+            @error="nextThumbnailSize"
+          />
+          <span class="absolute inset-0 bg-black/30 transition-colors group-hover:bg-black/10"></span>
+          <span
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-20 h-14 rounded-2xl bg-black/70 transition-colors group-hover:bg-red-600"
+          >
+            <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+        </button>
+        <!-- Replaced wholesale by the API's iframe; keep it free of bindings. -->
+        <div v-else class="w-full h-full">
+          <div ref="playerHost" class="w-full h-full"></div>
+        </div>
+      </div>
     </div>
     <div class="w-full text-center pb-8 pointer-events-none">
       <CopyrightNotice class="pointer-events-auto" />

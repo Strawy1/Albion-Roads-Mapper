@@ -20,7 +20,7 @@ Client dev server: http://localhost:5173, proxying `/api` and `/ws` to the API o
 
 ## Env files
 
-- `web/server/.env`: `DATABASE_URL` (required), `JWT_SECRET`, `PORT` (3001), `HOST` (0.0.0.0), optionally `MEDIA_PATH`.
+- `web/server/.env`: `DATABASE_URL` (required), `JWT_SECRET`, `PORT` (3001), `HOST` (0.0.0.0).
 - `provisioning/.env`: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` (compose defaults: `user`/`password`/`dbname`). Keep `POSTGRES_DB` and the database name inside `DATABASE_URL` in sync.
 - Client: `VITE_API_URL` overrides the API base in non-dev builds (`web/client/src/utils/api.ts`); Vercel `preview` deployments hardcode `https://api-testing.albionroads.live`.
 
@@ -42,8 +42,8 @@ Other tooling: `web/server/scripts/generate-hash.ts` (bcrypt hash utility), `scr
 
 ## Docker / deployment
 
-- **`provisioning/Dockerfile`** — two-stage: `node:24` builder (`pnpm install --frozen-lockfile`, build shared + server) → `node:24-slim` runtime with `server/dist`, `server/migrations`, `server/fixtures`, `shared/dist`, `shared/data`, and `media/`. Exposes 3001, `CMD pnpm --filter server start`.
-- **`scripts/build-docker.sh`** — builds/pushes `maelstromeous/applications:dig-roadmap-latest` (linux/amd64); pass `test` for the `-testing` tag. Requires `media/*.mp4` to exist locally.
+- **`provisioning/Dockerfile`** — two-stage: `node:24` builder (`pnpm install --frozen-lockfile`, build shared + server) → `node:24-slim` runtime with `server/dist`, `server/migrations`, `server/fixtures`, `shared/dist` and `shared/data`. Exposes 3001, `CMD pnpm --filter server start`.
+- **`scripts/build-docker.sh`** — builds/pushes `maelstromeous/applications:dig-roadmap-latest` (linux/amd64); pass `test` for the `-testing` tag.
 - **`provisioning/docker-compose.yml`** — services: `db` (postgres:16-alpine, port 5432, bind mount `provisioning/volumes/db-data/`), `server` (prod image, :3001), `server-testing` (testing image, host :3002, uses `DATABASE_URL_TESTING`).
 - Client deploys to Vercel; the server image runs behind a Cloudflare tunnel. `/metrics` is IP-allowlisted to localhost + `10.0.1.0/24` (Prometheus scrape network) — the tunnel subnet is deliberately blocked.
 

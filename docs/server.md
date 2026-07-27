@@ -6,7 +6,7 @@ Fastify 5 (ESM, TypeScript) with a `pg` Pool, `@fastify/jwt`, `@fastify/websocke
 
 - **Entry:** `web/server/src/index.ts` — loads dotenv, runs `initDb()` (node-pg-migrate `up`, migrations table `pgmigrations`), builds the app via `buildApp({ db })`, starts three background intervals, listens on `PORT`/`HOST`.
 - **App factory:** `web/server/src/app.ts` — `buildApp({ db, jwtSecret?, logger?, disableRateLimit? })`. Registers CORS, the `db` decorator, JWT, the `authenticate` preHandler, rate limiting, websocket, then route plugins: rooms, connections, ws, health, media, metrics.
-- **Env vars** (`web/server/.env.example`): `DATABASE_URL` (required), `JWT_SECRET` (default `change-me-in-production`), `PORT` (3001), `HOST` (0.0.0.0), `MEDIA_PATH` (media dir for the demo video).
+- **Env vars** (`web/server/.env.example`): `DATABASE_URL` (required), `JWT_SECRET` (default `change-me-in-production`), `PORT` (3001), `HOST` (0.0.0.0).
 - **Scripts:** `dev` (tsx watch), `build` (tsc), `start` (node dist), `test` (vitest run), `seed` (`fixtures/seed.ts`), `migrate`.
 
 ## Auth model
@@ -65,7 +65,6 @@ The bulk statement's orphan check runs against the pre-`DELETE` snapshot (all CT
 - `GET /api/health` — `{ status: 'ok', roomCount }` (`routes/health.ts`).
 - `GET /api/version` — `{ version }` (`routes/health.ts`). Unauthenticated, `Cache-Control: no-store`. Returns the `app_settings.client_version` token (falls back to `'1'` if the row is missing). It's an **opaque reload-generation token**, not a git SHA — the client (`useVersionWatch`) snapshots it on load and polls every 3 min (+ on tab focus); when it changes, every open tab shows a persistent "please reload" prompt (it does **not** auto-reload — see [client.md](client.md)). Start a wave by bumping the DB value by hand — `UPDATE app_settings SET value = value::int + 1 WHERE key = 'client_version'` — no redeploy of client or server needed. This reaches users **not** in a room (they hold no WS), unlike the WS `force_reload` message.
 - `POST /api/events` — generic client analytics ingestion (`routes/events.ts`). Body `{ type }` where `type` is an open slug (`/^[a-z0-9_]+$/`, ≤64 chars, `EventBodySchema` in shared) — **not** an enum, so new client events need no server changes. Upserts `analytics_events (event_type, date, count)` per Europe/London day (`incrementEvent` in `analytics.ts`, fire-and-forget). Deliberately **unauthenticated** (a JWT'd version would be 403'd by the room-lock guard in locked rooms); slug validation + rate limiting are the abuse guards. Current events: `donation_modal_shown`, `donation_modal_clicked`, `donation_planner_clicked`.
-- `GET /api/media/demov1-1.mp4` — Range-capable video streaming from `MEDIA_PATH` (`routes/media.ts`).
 - `GET /metrics` — Prometheus text format, **IP-allowlisted** (localhost + `10.0.1.0/24` only), no JWT (`routes/metrics.ts`). ~40 `albionmapper_*` metric families; timezone math is Europe/London. Generic client events surface automatically as labeled series in the Events section: `albionmapper_events_total{event=…}` (counter, SUM over day buckets) and `albionmapper_events_today{event=…}` (gauge).
 
 #### Server-breakdown metrics
