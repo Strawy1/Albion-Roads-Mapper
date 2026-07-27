@@ -1,5 +1,5 @@
 ---
-name: albion-mapper-metrics-conventions
+name: albionroads-metrics-conventions
 description: /metrics output must keep similarly-named metrics grouped by topic; other conventions Matt has set for the metrics endpoint
 metadata: 
   node_type: memory
@@ -18,4 +18,4 @@ Conventions for `web/server/src/routes/metrics.ts` (`GET /metrics`):
 
 **Why:** Matt reads the raw /metrics page and wants related series findable in one place; scattered route metrics prompted the reorganization (2026-07-18).
 
-**How to apply:** When touching metrics.ts, keep queries in the query block and emission in the topic sections; add new metrics to their topic group and follow the existing type/naming patterns. See also [[albion-mapper-gotchas]].
+**How to apply:** When touching metrics.ts, keep queries in the query block and emission in the topic sections; add new metrics to their topic group and follow the existing type/naming patterns. See also [[albionroads-gotchas]].

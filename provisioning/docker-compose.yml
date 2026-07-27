@@ -16,7 +16,7 @@ services:
 
   server:
     container_name: server
-    image: maelstromeous/albion-mapper:latest
+    image: maelstromeous/albionroads:latest
     restart: always
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://user:password@db:5432/dbname}
@@ -29,7 +29,7 @@ services:
 
   server-testing:
     container_name: server-testing
-    image: maelstromeous/albion-mapper:testing-latest
+    image: maelstromeous/albionroads:testing-latest
     restart: always
     environment:
       DATABASE_URL: ${DATABASE_URL_TESTING:-postgres://user:password@db:5432/dbname-testing}

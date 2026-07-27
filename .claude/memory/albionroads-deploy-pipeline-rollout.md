@@ -1,5 +1,5 @@
 ---
-name: albion-mapper-deploy-pipeline-rollout
+name: albionroads-deploy-pipeline-rollout
 description: "Backend auto-deploy: live and validated end to end since 2026-07-27, plus the infra facts that live outside the repo"
 metadata: 
   node_type: memory
@@ -8,7 +8,7 @@ metadata:
   modified: 2026-07-27T03:39:49.193Z
 ---
 
-Since 2026-07-27 the backend deploys itself — no local `build-docker.sh`, no manual SSH. Validated end to end that day: two `Backend Deployment` runs on `main` (PRs #7 and #9) published and deployed cleanly. Mechanics are in `docs/development.md` ("Backend CI/CD") — see [[albion-mapper-docs]]. Shipped as dignityofwar/albion-mapper#8 (demo video → YouTube), #7 (the pipeline), Maelstromeous/webhooks#4 (the hook).
+Since 2026-07-27 the backend deploys itself — no local `build-docker.sh`, no manual SSH. Validated end to end that day: two `Backend Deployment` runs on `main` (PRs #7 and #9) published and deployed cleanly. Mechanics are in `docs/development.md` ("Backend CI/CD") — see [[albionroads-docs]]. Shipped as dignityofwar/albion-mapper#8 (demo video → YouTube), #7 (the pipeline), Maelstromeous/webhooks#4 (the hook).
 
 **The parts that aren't in this repo:**
 - `WEBHOOK_URL` is `https://hooks.mattcavanagh.me/hooks/albion-mapper` — a Cloudflare Zero Trust tunnel to `10.0.5.3:9000`, no `cloudflared` on the box. The hook is chosen by **URL path**; the JSON body is decorative, existing only to give the HMAC something to sign. One `WEBHOOK_SECRET` is shared by every project on that host. Full runbook: `~/code/webhooks` (private, `Maelstromeous/webhooks`).
@@ -20,4 +20,4 @@ Since 2026-07-27 the backend deploys itself — no local `build-docker.sh`, no m
 - The server's compose still carried a dead `MEDIA_PATH: /app/media` as of 27 Jul; harmless, but the image no longer has that directory.
 - **Unverified:** whether `/root/update.sh` does `pull && up -d` or a wholesale `down && up`. Both channels share one hook, so if it's the latter, every *testing* deploy briefly drops production. Worth reading before trusting the testing channel.
 
-**How to apply:** if a deploy goes green but nothing changes on the box, suspect the server's compose image tag first — `dig-roadmap` was this project's original name and that tag lived in the shared `maelstromeous/applications` repo, not today's dedicated `maelstromeous/albion-mapper` one.
+**How to apply:** if a deploy goes green but nothing changes on the box, suspect the server's compose image tag first — `dig-roadmap` was this project's original name and that tag lived in the shared `maelstromeous/applications` repo, not today's dedicated `maelstromeous/albionroads` one.

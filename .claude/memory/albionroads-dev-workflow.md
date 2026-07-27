@@ -1,6 +1,6 @@
 ---
-name: albion-mapper-dev-workflow
-description: "How to build, run, and test albion-mapper (pnpm monorepo) — including the shared-rebuild and mocked-DB test facts"
+name: albionroads-dev-workflow
+description: "How to build, run, and test albionroads (pnpm monorepo) — including the shared-rebuild and mocked-DB test facts"
 metadata: 
   node_type: memory
   type: project
@@ -20,4 +20,4 @@ pnpm workspace monorepo: `web/client` (Vue 3 + Vue Flow), `web/server` (Fastify 
 - Migrations auto-run on server boot (`node-pg-migrate`, `web/server/migrations/`).
 - Zone data changes go through `pnpm --filter map-parser sync-maps`, never hand-edit `web/shared/data/maps.json`.
 
-Details in `docs/testing.md` and `docs/development.md`. Related: [[albion-mapper-docs]], [[albion-mapper-gotchas]].
+Details in `docs/testing.md` and `docs/development.md`. Related: [[albionroads-docs]], [[albionroads-gotchas]].

@@ -43,7 +43,7 @@ Other tooling: `web/server/scripts/generate-hash.ts` (bcrypt hash utility), `scr
 ## Docker / deployment
 
 - **`provisioning/Dockerfile`** — two-stage: `node:24` builder (`pnpm install --frozen-lockfile`, build shared + server) → `node:24-slim` runtime with `server/dist`, `server/migrations`, `server/fixtures`, `shared/dist` and `shared/data`. Exposes 3001, `CMD pnpm --filter server start`.
-- **`scripts/build-docker.sh`** — manual fallback; builds/pushes `maelstromeous/albion-mapper:latest` (linux/amd64), pass `test` for the `:testing-latest` tag. The `:latest` image is normally published by CI (below).
+- **`scripts/build-docker.sh`** — manual fallback; builds/pushes `maelstromeous/albionroads:latest` (linux/amd64), pass `test` for the `:testing-latest` tag. The `:latest` image is normally published by CI (below).
 - **`provisioning/docker-compose.yml`** — services: `db` (postgres:16-alpine, port 5432, bind mount `provisioning/volumes/db-data/`), `server` (prod image, :3001), `server-testing` (testing image, host :3002, uses `DATABASE_URL_TESTING`).
 - Client deploys to Vercel; the server image runs behind a Cloudflare tunnel. `/metrics` is IP-allowlisted to localhost + `10.0.1.0/24` (Prometheus scrape network) — the tunnel subnet is deliberately blocked.
 
@@ -70,9 +70,9 @@ Merging a backend change to `main` publishes the image and redeploys the server;
 `testing` is a deploy target rather than a line of development — reset it onto whatever you want on :3002 and force-push (`git push --force origin HEAD:testing`). Both channels call the same webhook, because `/root/update.sh` pulls every image in the compose file; production is only recreated if its own digest changed.
 
 - **Backend paths** (shared by the deploy and PR-docker triggers): `web/server/**`, `web/shared/**`, `provisioning/**`, `.dockerignore`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/workflows/**`. Client-only changes deploy through Vercel and never touch this pipeline.
-- **The webhook** hits [`Maelstromeous/webhooks`](https://github.com/Maelstromeous/webhooks), whose `albion-mapper` hook SSHes to the server and runs `/root/update.sh` (a `docker compose pull` + recreate). The hook is chosen by URL path; the body is only what the HMAC signature covers.
-- **Required repo secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `WEBHOOK_URL` (…`/hooks/albion-mapper`), `WEBHOOK_SECRET`.
-- **Rolling back:** every build is also tagged `maelstromeous/albion-mapper:<commit sha>` — repoint the compose file at one and recreate.
+- **The webhook** hits [`Maelstromeous/webhooks`](https://github.com/Maelstromeous/webhooks), whose `albionroads` hook SSHes to the server and runs `/root/update.sh` (a `docker compose pull` + recreate). The hook is chosen by URL path; the body is only what the HMAC signature covers.
+- **Required repo secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `WEBHOOK_URL` (…`/hooks/albionroads`), `WEBHOOK_SECRET`.
+- **Rolling back:** every build is also tagged `maelstromeous/albionroads:<commit sha>` — repoint the compose file at one and recreate.
 - Deploys are serialised by a `deploy-backend` concurrency group and are never cancelled mid-flight.
 
 ## Releasing

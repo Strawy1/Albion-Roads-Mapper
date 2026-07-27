@@ -1,7 +1,7 @@
 name: Testing Deployment
 
 # The testing twin of Backend Deployment: pushes to `testing` publish
-# maelstromeous/albion-mapper:testing-latest, which the server-testing container
+# maelstromeous/albionroads:testing-latest, which the server-testing container
 # on :3002 pulls (the API behind api-testing.albionroads.live).
 #
 # Note the branch is a deploy target, not a long-lived line of development — it is

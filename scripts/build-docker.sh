@@ -7,10 +7,10 @@
 cd "$(dirname "$0")/.."
 
 if [ "$1" == "test" ]; then
-  IMAGE_TAG="maelstromeous/albion-mapper:testing-latest"
+  IMAGE_TAG="maelstromeous/albionroads:testing-latest"
   BUILD_MSG="Docker test build completed"
 else
-  IMAGE_TAG="maelstromeous/albion-mapper:latest"
+  IMAGE_TAG="maelstromeous/albionroads:latest"
   BUILD_MSG="Docker build completed"
 fi
 

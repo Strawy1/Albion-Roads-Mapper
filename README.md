@@ -41,7 +41,7 @@ The client dev server runs on **http://localhost:5173** (proxied to the API serv
 ## Project Structure
 
 ```
-albion-mapper/
+albionroads/
 ├── web/
 │   ├── client/         # Vue 3 SPA — components, stores, composables
 │   │   ├── src/
