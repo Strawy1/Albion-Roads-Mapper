@@ -2,5 +2,24 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Patch and minor updates merge themselves. The Unit tests & build check is required on main, so nothing lands without the suite passing. Majors are left alone deliberately.",
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Database migration tooling and the driver it runs through stay manual. A green suite does not prove a migration applies cleanly to production data, and a bad migration is not undone by reverting the commit.",
+      "matchPackageNames": [
+        "node-pg-migrate",
+        "pg",
+        "@types/pg"
+      ],
+      "automerge": false
+    }
   ]
 }
