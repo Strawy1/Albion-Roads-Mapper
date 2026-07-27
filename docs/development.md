@@ -71,12 +71,8 @@ Merging a backend change to `main` publishes the image and redeploys the server;
 
 - **Backend paths** (shared by the deploy and PR-docker triggers): `web/server/**`, `web/shared/**`, `provisioning/**`, `.dockerignore`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/workflows/**`. Client-only changes deploy through Vercel and never touch this pipeline.
 - **The webhook** hits [`Maelstromeous/webhooks`](https://github.com/Maelstromeous/webhooks), whose `albionroads` hook SSHes to the server and runs `/root/update.sh`. The hook is chosen by URL path; the body is only what the HMAC signature covers.
-- **`/root/update.sh` is mirrored here as `provisioning/update.sh`, and nothing syncs it.** Changing it in the repo changes nothing on the server until it is copied over:
-  ```bash
-  scp provisioning/update.sh root@albionroads.public.lan:/root/update.sh
-  ssh root@albionroads.public.lan 'chmod 755 /root/update.sh'
-  ```
-  The same is true of the server's `docker-compose.yml`, mirrored as `provisioning/docker-compose.yml`.
+- **There is no deploy script on the server.** The webhooks repo pipes one shared `update.sh` over SSH for every project, so nothing here needs installing or syncing to the box. This repo only supplies the compose file's service names — `server` and `server-testing` — which are configured in that repo's hook entry.
+- **`provisioning/docker-compose.yml` mirrors `/root/docker/docker-compose.yml` on the server, and nothing syncs it.** Changing it here changes nothing there until it is copied over. The two had drifted far enough that a dead `MEDIA_PATH` variable survived on the box, so check both when changing either.
 - **A green deploy does not mean the deploy worked** — the webhook returns `200` before the SSH happens and never reports its exit code. `ssh root@albionroads.public.lan 'tail -20 /root/deploy.log'` is the confirmation. Look for `updated <old> -> <new>` per service and a health status; `unchanged` means the pull found nothing.
 - **Required repo secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `WEBHOOK_URL` (…`/hooks/albionroads`), `WEBHOOK_SECRET`.
 - **Rolling back:** every build is also tagged `maelstromeous/albionroads:<commit sha>` — repoint the compose file at one and recreate.
