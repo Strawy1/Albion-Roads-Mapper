@@ -8,12 +8,12 @@ jobs:
     name: Trigger deployment
     runs-on: ubuntu-latest
     steps:
-      # The hook is selected by the URL path (…/hooks/albion-mapper); the body is
+      # The hook is selected by the URL path (…/hooks/albionroads); the body is
       # only what the HMAC signature is computed over.
       - name: Trigger webhook
         uses: ramzzisudip/secure-github-webhook@0.3.0
         with:
           url: "${{ secrets.WEBHOOK_URL }}"
-          data: '{ "application": "albion-mapper" }'
+          data: '{ "application": "albionroads" }'
           timeout: 2000
           hmacSecret: "${{ secrets.WEBHOOK_SECRET }}"

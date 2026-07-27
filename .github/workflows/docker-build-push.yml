@@ -48,7 +48,7 @@ jobs:
           # commit. The channels are namespaced so a testing build can never be
           # mistaken for something production ever ran.
           tags: |
-            maelstromeous/albion-mapper:${{ inputs.channel == 'testing' && 'testing-latest' || 'latest' }}
-            maelstromeous/albion-mapper:${{ inputs.channel == 'testing' && format('testing-{0}', github.sha) || github.sha }}
+            maelstromeous/albionroads:${{ inputs.channel == 'testing' && 'testing-latest' || 'latest' }}
+            maelstromeous/albionroads:${{ inputs.channel == 'testing' && format('testing-{0}', github.sha) || github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

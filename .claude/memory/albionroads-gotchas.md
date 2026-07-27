@@ -1,6 +1,6 @@
 ---
-name: albion-mapper-gotchas
-description: "albion-mapper invariants and known drift that will bite changes (server-owned positions, full-array broadcasts, duplicate GameMap defs)"
+name: albionroads-gotchas
+description: "albionroads invariants and known drift that will bite changes (server-owned positions, full-array broadcasts, duplicate GameMap defs)"
 metadata: 
   node_type: memory
   type: project
@@ -28,4 +28,4 @@ Invariants and drift observed 2026-07-17 (verify still true before relying on th
 - Emoji in the zoomed canvas need the bundled vector font (fixed 2026-07-24): the OS Noto Color Emoji is a bitmap (CBDT) font and Chromium intermittently fails to re-raster bitmap emoji glyphs under the Vue Flow pane's `transform: scale()` — buttons zoom, icons (🔔 ✅ ⏳ ⛓ 🔗) stick at a stale size. Regular vector text is unaffected. Fix: `web/client/public/fonts/noto-color-emoji-subset.woff2`, a COLRv1 (vector) subset self-hosted and declared in `style.css` under the family name "Noto Color Emoji" so it shadows the system font via Tailwind's default sans stack (only bites on Linux/Android; Windows/macOS resolve Segoe/Apple emoji first). **When adding a new emoji anywhere in the client, re-subset the font and extend the `unicode-range`** — instructions are in the comment above the `@font-face` in `style.css`; an emoji missing from the subset silently falls back to the buggy bitmap font. Matt insisted on keeping emoji (not SVG icon replacements).
 - Client read-only mode: Vue Flow **per-node `draggable` overrides the global `:nodes-draggable` prop** — RoomView sets `draggable: store.canEdit` per node AND binds the globals, with `() => store.canEdit` in the flowNodes watcher deps so lock changes rebuild live. Mutation gating is centralized in the store (`send()` drops mutating WS types; optimistic mutators early-return; REST actions throw 'Room is locked').
 
-Related: [[albion-mapper-docs]], [[albion-mapper-dev-workflow]].
+Related: [[albionroads-docs]], [[albionroads-dev-workflow]].
