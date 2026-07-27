@@ -32,7 +32,7 @@ services:
     image: maelstromeous/albion-mapper:testing-latest
     restart: always
     environment:
-      DATABASE_URL: ${DATABASE_URL_TESTING:-postgres://user:password@db:5432/dbname}
+      DATABASE_URL: ${DATABASE_URL_TESTING:-postgres://user:password@db:5432/dbname-testing}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
     ports:
       - '3002:3001'
