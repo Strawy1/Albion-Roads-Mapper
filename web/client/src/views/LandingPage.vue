@@ -304,7 +304,7 @@ onBeforeUnmount(() => {
           Discord
         </a>
         <a
-          href="https://github.com/dignityofwar/albion-mapper"
+          href="https://github.com/dignityofwar/albionroads"
           target="_blank"
           class="px-4 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 border border-transparent hover:border hover:border-gray-300 font-medium text-sm transition-colors text-center duration-500"
         >
