@@ -1,0 +1,46 @@
+name: Backend Deployment
+
+# Server/database changes used to mean a local `scripts/build-docker.sh` followed
+# by an SSH to the box to run ./update.sh by hand. This does both: publishes the
+# image, then pokes the webhook that runs update.sh remotely.
+#
+# The client is not built here — it deploys itself via Vercel.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/server/**'       # server source, migrations and fixtures
+      - 'web/shared/**'       # bundled into the server image
+      - 'provisioning/**'     # Dockerfile / compose
+      - '.dockerignore'       # changes what lands in the build context
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/**'
+  # Lets a deploy be re-run by hand after a failed webhook or a server rebuild.
+  workflow_dispatch:
+
+# Never cancel a deploy that is already publishing or calling the webhook; queue
+# the next one behind it instead.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests
+    uses: ./.github/workflows/test.yml
+
+  publish:
+    name: Publish image
+    needs: test
+    uses: ./.github/workflows/docker-build-push.yml
+    with:
+      push: true
+    secrets: inherit
+
+  deploy:
+    name: Deploy
+    needs: publish
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

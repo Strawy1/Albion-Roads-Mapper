@@ -1,12 +1,16 @@
 #!/bin/bash
 
+# Manual escape hatch. The `:latest` image is normally built and pushed by the
+# Backend Deployment workflow on every merge to main; use this for the `:testing`
+# image, or when Actions is unavailable.
+
 cd "$(dirname "$0")/.."
 
 if [ "$1" == "test" ]; then
-  IMAGE_TAG="maelstromeous/applications:dig-roadmap-testing"
+  IMAGE_TAG="maelstromeous/albion-mapper:testing-latest"
   BUILD_MSG="Docker test build completed"
 else
-  IMAGE_TAG="maelstromeous/applications:dig-roadmap-latest"
+  IMAGE_TAG="maelstromeous/albion-mapper:latest"
   BUILD_MSG="Docker build completed"
 fi
 
@@ -17,4 +21,3 @@ else
   docker push $IMAGE_TAG
 fi
 echo "$BUILD_MSG"
-cd "$(dirname "$0")/scripts"

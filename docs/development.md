@@ -43,9 +43,37 @@ Other tooling: `web/server/scripts/generate-hash.ts` (bcrypt hash utility), `scr
 ## Docker / deployment
 
 - **`provisioning/Dockerfile`** — two-stage: `node:24` builder (`pnpm install --frozen-lockfile`, build shared + server) → `node:24-slim` runtime with `server/dist`, `server/migrations`, `server/fixtures`, `shared/dist` and `shared/data`. Exposes 3001, `CMD pnpm --filter server start`.
-- **`scripts/build-docker.sh`** — builds/pushes `maelstromeous/applications:dig-roadmap-latest` (linux/amd64); pass `test` for the `-testing` tag.
+- **`scripts/build-docker.sh`** — manual fallback; builds/pushes `maelstromeous/albion-mapper:latest` (linux/amd64), pass `test` for the `:testing-latest` tag. The `:latest` image is normally published by CI (below).
 - **`provisioning/docker-compose.yml`** — services: `db` (postgres:16-alpine, port 5432, bind mount `provisioning/volumes/db-data/`), `server` (prod image, :3001), `server-testing` (testing image, host :3002, uses `DATABASE_URL_TESTING`).
 - Client deploys to Vercel; the server image runs behind a Cloudflare tunnel. `/metrics` is IP-allowlisted to localhost + `10.0.1.0/24` (Prometheus scrape network) — the tunnel subnet is deliberately blocked.
+
+### Backend CI/CD
+
+Merging a backend change to `main` publishes the image and redeploys the server; nothing is built or SSH'd by hand.
+
+| Workflow | Trigger | Does |
+|---|---|---|
+| `test.yml` (*Tests*) | PR, push to `main`, `workflow_call` | unit suites + `pnpm build` |
+| `pr-docker.yml` (*Docker Build*) | PR touching backend paths | builds the image without pushing |
+| `docker-build-push.yml` (*Build & Publish*) | `workflow_call` only | builds; when `push: true`, publishes the channel's moving tag + a SHA-pinned tag |
+| `deploy-backend.yml` (*Backend Deployment*) | push to `main` on backend paths, or manual | Tests → Build & Publish → Trigger Deployment Webhook |
+| `deploy-testing.yml` (*Testing Deployment*) | push to `testing` on backend paths, or manual | same chain, publishing the testing channel |
+| `deploy.yml` (*Trigger Deployment Webhook*) | `workflow_call` only | HMAC-signed POST to the webhook host |
+
+**Channels.** `docker-build-push.yml` takes a `channel` input (`production` by default):
+
+| Channel | Moving tag | Pinned tag | Consumed by |
+|---|---|---|---|
+| `production` | `:latest` | `:<sha>` | `server` on :3001 |
+| `testing` | `:testing-latest` | `:testing-<sha>` | `server-testing` on :3002, behind `api-testing.albionroads.live` |
+
+`testing` is a deploy target rather than a line of development — reset it onto whatever you want on :3002 and force-push (`git push --force origin HEAD:testing`). Both channels call the same webhook, because `/root/update.sh` pulls every image in the compose file; production is only recreated if its own digest changed.
+
+- **Backend paths** (shared by the deploy and PR-docker triggers): `web/server/**`, `web/shared/**`, `provisioning/**`, `.dockerignore`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/workflows/**`. Client-only changes deploy through Vercel and never touch this pipeline.
+- **The webhook** hits [`Maelstromeous/webhooks`](https://github.com/Maelstromeous/webhooks), whose `albion-mapper` hook SSHes to the server and runs `/root/update.sh` (a `docker compose pull` + recreate). The hook is chosen by URL path; the body is only what the HMAC signature covers.
+- **Required repo secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `WEBHOOK_URL` (…`/hooks/albion-mapper`), `WEBHOOK_SECRET`.
+- **Rolling back:** every build is also tagged `maelstromeous/albion-mapper:<commit sha>` — repoint the compose file at one and recreate.
+- Deploys are serialised by a `deploy-backend` concurrency group and are never cancelled mid-flight.
 
 ## Releasing
 
