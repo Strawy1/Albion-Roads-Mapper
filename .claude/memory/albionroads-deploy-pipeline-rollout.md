@@ -8,7 +8,7 @@ metadata:
   modified: 2026-07-27T03:39:49.193Z
 ---
 
-Since 2026-07-27 the backend deploys itself — no local `build-docker.sh`, no manual SSH. Validated end to end that day: two `Backend Deployment` runs on `main` (PRs #7 and #9) published and deployed cleanly. Mechanics are in `docs/development.md` ("Backend CI/CD") — see [[albionroads-docs]]. Shipped as dignityofwar/albion-mapper#8 (demo video → YouTube), #7 (the pipeline), Maelstromeous/webhooks#4 (the hook).
+Since 2026-07-27 the backend deploys itself — no local `build-docker.sh`, no manual SSH. Validated end to end that day: two `Backend Deployment` runs on `main` (PRs #7 and #9) published and deployed cleanly. Mechanics are in `docs/development.md` ("Backend CI/CD") — see [[albionroads-docs]]. Shipped as dignityofwar/albionroads#8 (demo video → YouTube), #7 (the pipeline), Maelstromeous/webhooks#4 (the hook).
 
 **The parts that aren't in this repo:**
 - `WEBHOOK_URL` is a repo secret holding the deploy hook's endpoint on Mael's webhooks host, reached over a Cloudflare Zero Trust tunnel (no `cloudflared` on the box). **This repo is public — do not write the endpoint or the host's LAN address down here;** they live in the private `Maelstromeous/webhooks` repo, which is also the full runbook. The hook is chosen by **URL path**; the JSON body is decorative, existing only to give the HMAC something to sign. One `WEBHOOK_SECRET` is shared by every project on that host.
