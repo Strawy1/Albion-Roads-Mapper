@@ -21,6 +21,7 @@ import {
 } from 'shared';
 import { broadcast } from '../broadcast.js';
 import { getInitialFeatures } from '../utils/nodeFeatures.js';
+import { safeRollback } from '../db_tx.js';
 import {
   trackRoomCreated,
   trackPasswordRotated,
@@ -122,7 +123,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
       await client.query('COMMIT');
     } catch (e) {
-      await client.query('ROLLBACK');
+      await safeRollback(client);
       throw e;
     } finally {
       client.release();
@@ -455,11 +456,11 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
       await client.query('COMMIT');
     } catch (e) {
-      await client.query('ROLLBACK');
-      client.release();
+      await safeRollback(client);
       throw e;
+    } finally {
+      client.release();
     }
-    client.release();
 
     broadcast(id, { type: 'chain_added', chain: { id: chainId, sourceZoneId, chainNumber, chainColor } });
 
@@ -664,11 +665,11 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
       await client.query('COMMIT');
     } catch (e) {
-      await client.query('ROLLBACK');
-      client.release();
+      await safeRollback(client);
       throw e;
+    } finally {
+      client.release();
     }
-    client.release();
 
     const updatedChain = {
       id: chain.id,
@@ -892,7 +893,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       
       await client.query('COMMIT');
     } catch (e) {
-      await client.query('ROLLBACK');
+      await safeRollback(client);
       throw e;
     } finally {
       client.release();
@@ -993,7 +994,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       await client.query('DELETE FROM rooms WHERE id = $1', [id]);
       await client.query('COMMIT');
     } catch (e) {
-      await client.query('ROLLBACK');
+      await safeRollback(client);
       throw e;
     } finally {
       client.release();
@@ -1156,7 +1157,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
       await client.query('COMMIT');
     } catch (e) {
-      await client.query('ROLLBACK');
+      await safeRollback(client);
       throw e;
     } finally {
       client.release();
