@@ -14,6 +14,8 @@ export interface Zone {
   category?: string;
   mapShape?: string;
   proximityTo?: string;
+  baselineFeatures?: GameMapBaselineFeatures;
+  groupPortal?: true;
 }
 
 // ── GameMap (on-disk shape from maps.json) ──────────────────────────────────
@@ -21,6 +23,28 @@ export interface Zone {
 export type MapType = 'royalBlue' | 'royalYellow' | 'royalRed' | 'outlands' | 'roads' | 'other';
 
 export type KnownFeatures = string[];
+
+/**
+ * Static zone metadata imported from Albion Maps (albionmaps.com.br) by
+ * map-parser. Authoritative for Roads-of-Avalon zones: the UI renders it
+ * read-only and nothing at runtime edits it.
+ */
+export interface GameMapBaselineFeatures {
+  chests: {
+    largeGold: number;
+    smallGold: number;
+    blue: number;
+    green: number;
+  };
+  dungeon: number; // DG count
+  resources: {
+    hide: boolean;
+    ore: boolean;
+    fiber: boolean;
+    wood: boolean;
+    stone: boolean;
+  };
+}
 
 export interface GameMap {
   mapID: string;
@@ -35,6 +59,10 @@ export interface GameMap {
   largeSocketCount?: number;
   smallSocketCount?: number;
   proximityTo?: string;
+  /** Albion Maps baseline — see GameMapBaselineFeatures. */
+  baselineFeatures?: GameMapBaselineFeatures;
+  /** Roads zone containing a group portal (Albion Maps GROUP PORTAL tag). */
+  groupPortal?: true;
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────

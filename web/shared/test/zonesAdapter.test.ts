@@ -41,6 +41,16 @@ describe('zones adapter', () => {
     });
   });
 
+  it('carries baselineFeatures and groupPortal through the adapter when present', () => {
+    const withBaseline = maps.filter((m) => m.baselineFeatures);
+    withBaseline.forEach((m) => {
+      const zone = ZONE_BY_ID.get(m.mapID);
+      expect(zone).toBeDefined();
+      expect(zone!.baselineFeatures).toEqual(m.baselineFeatures);
+      expect(zone!.groupPortal).toBe(m.groupPortal);
+    });
+  });
+
   it('sets isRoadsHome to true for roads zones with X-X-X name', () => {
     // Find zones with X-X-X pattern (exactly 3 hyphen-separated parts, no spaces)
     const xXxPattern = /^[^-\s]+-[^-\s]+-[^-\s]+$/;
