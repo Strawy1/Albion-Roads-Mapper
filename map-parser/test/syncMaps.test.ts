@@ -28,21 +28,27 @@ interface RunResult {
 
 const TEST_OUTPUT_PATH = join(FIXTURE_DIR, 'maps.json');
 
-// Run the script through the tsx binary this workspace installed, rather than
-// via `npx`: npx is not guaranteed to be on PATH (a pnpm-only machine has no
-// npm at all), and when it is missing every run exits 127 — which reads as
-// "script failed" in the exit-code assertions and as a missing output file in
-// the rest. Resolving the local bin keeps the suite dependent only on
-// `pnpm install` having run.
-const TSX_BIN = resolve(__dirname, '../node_modules/.bin/tsx');
+// Run the script through the tsx CLI this workspace installed, rather than via
+// `npx`: npx is not guaranteed to be on PATH (a pnpm-only machine has no npm
+// at all), and when it is missing every run exits 127 — which reads as "script
+// failed" in the exit-code assertions and as a missing output file in the
+// rest. We invoke tsx's own dist entry with `process.execPath` instead of the
+// `.bin/tsx` shim: on Windows that shim is a `#!/bin/sh` script that
+// `spawnSync` cannot execute (CreateProcess has no shebang handling), which
+// made every run die with status null. Resolving the local CLI keeps the suite
+// dependent only on `pnpm install` having run.
+const TSX_ENTRY = resolve(__dirname, '../node_modules/tsx/dist/cli.mjs');
 
 function runSync(fixturePath: string, extra: string[] = []): RunResult {
-  const args = [SCRIPT, '--source', fixturePath, '--output', TEST_OUTPUT_PATH, ...extra];
+  const args = [TSX_ENTRY, SCRIPT, '--source', fixturePath, '--output', TEST_OUTPUT_PATH,
+    // The Albion Maps enrichment stage must not hit the live site in these
+    // tests; albionmaps tests opt in explicitly via --albionmaps-source.
+    '--no-albionmaps', ...extra];
   // spawnSync (not execFileSync) because the script warns on stderr while
   // still exiting 0, and execFileSync only hands back stderr when the child
   // fails. stderr is piped rather than redirected to a shared temp file, so
   // concurrently-running test files cannot read each other's warnings.
-  const result = spawnSync(TSX_BIN, args, {
+  const result = spawnSync(process.execPath, args, {
     cwd: resolve(__dirname, '..'),
     encoding: 'utf8',
     timeout: 30_000,
@@ -51,7 +57,7 @@ function runSync(fixturePath: string, extra: string[] = []): RunResult {
   if (result.error) {
     const code = (result.error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
-      throw new Error(`tsx binary not found at ${TSX_BIN} — run \`pnpm install\` first`);
+      throw new Error(`tsx CLI not found at ${TSX_ENTRY} — run \`pnpm install\` first`);
     }
     throw result.error;
   }

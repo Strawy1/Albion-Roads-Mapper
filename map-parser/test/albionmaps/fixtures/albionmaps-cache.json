@@ -1,0 +1,512 @@
+{
+ "Setent-In-Qinsum": [
+  {
+   "title": "Setent - In - Qinsum",
+   "tags": "T6, HO, BLUE, GREEN ×5, Fiber",
+   "tagsPayload": [
+    {
+     "tagId": 2,
+     "tagName": "T6",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-2.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 26,
+     "iconH": 26,
+     "iconOnlyBorderColor": "#bd8d0a",
+     "iconOnlyBackground": "rgba(182,152,43,0.07)",
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 7,
+     "tagName": "HO",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-7.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#8e0628",
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 11,
+     "tagName": "BLUE",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-11.png",
+     "pillColor": "#1a5ecb",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#1a5dd1",
+     "iconOnlyBackground": "rgba(108,175,208,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 10,
+     "tagName": "GREEN",
+     "category": "multiple",
+     "quantity": 5,
+     "iconUrl": "/tag-icons/tag-10.png",
+     "pillColor": "#04672f",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(145,232,146,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 15,
+     "tagName": "Fiber",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-15.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(255,255,255,0.07)",
+     "allowHomeHighlight": true
+    }
+   ]
+  }
+ ],
+ "Quaent-Vynsum": [
+  {
+   "title": "Quaent - Vynsum",
+   "tags": "T6, HO, BLUE, GREEN ×5, Hide",
+   "tagsPayload": [
+    {
+     "tagId": 2,
+     "tagName": "T6",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-2.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 26,
+     "iconH": 26,
+     "iconOnlyBorderColor": "#bd8d0a",
+     "iconOnlyBackground": "rgba(182,152,43,0.07)",
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 7,
+     "tagName": "HO",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-7.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#8e0628",
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 11,
+     "tagName": "BLUE",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-11.png",
+     "pillColor": "#1a5ecb",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#1a5dd1",
+     "iconOnlyBackground": "rgba(108,175,208,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 10,
+     "tagName": "GREEN",
+     "category": "multiple",
+     "quantity": 5,
+     "iconUrl": "/tag-icons/tag-10.png",
+     "pillColor": "#04672f",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(145,232,146,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 14,
+     "tagName": "Hide",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-14.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(149,87,29,0.07)",
+     "allowHomeHighlight": true
+    }
+   ]
+  }
+ ],
+ "Qiient-Odesas": [
+  {
+   "title": "Qiient - Odesas",
+   "tags": "T6, HO, BLUE, GREEN, Hide, Ore",
+   "tagsPayload": [
+    {
+     "tagId": 2,
+     "tagName": "T6",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-2.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 26,
+     "iconH": 26,
+     "iconOnlyBorderColor": "#bd8d0a",
+     "iconOnlyBackground": "rgba(182,152,43,0.07)",
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 7,
+     "tagName": "HO",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-7.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#8e0628",
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 11,
+     "tagName": "BLUE",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-11.png",
+     "pillColor": "#1a5ecb",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#1a5dd1",
+     "iconOnlyBackground": "rgba(108,175,208,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 10,
+     "tagName": "GREEN",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-10.png",
+     "pillColor": "#04672f",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(145,232,146,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 14,
+     "tagName": "Hide",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-14.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(149,87,29,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 16,
+     "tagName": "Ore",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-16.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(112,112,112,0.07)",
+     "allowHomeHighlight": true
+    }
+   ]
+  }
+ ],
+ "Secent-Al-Duosom": [
+  {
+   "title": "Secent - Al - Duosom",
+   "tags": "T6, HO, GREEN ×6, Ore, Wood",
+   "tagsPayload": [
+    {
+     "tagId": 2,
+     "tagName": "T6",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-2.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 26,
+     "iconH": 26,
+     "iconOnlyBorderColor": "#bd8d0a",
+     "iconOnlyBackground": "rgba(182,152,43,0.07)",
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 7,
+     "tagName": "HO",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-7.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#8e0628",
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 10,
+     "tagName": "GREEN",
+     "category": "multiple",
+     "quantity": 6,
+     "iconUrl": "/tag-icons/tag-10.png",
+     "pillColor": "#04672f",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(145,232,146,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 16,
+     "tagName": "Ore",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-16.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(112,112,112,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 18,
+     "tagName": "Wood",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-18.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(142,97,1,0.07)",
+     "allowHomeHighlight": true
+    }
+   ]
+  }
+ ],
+ "Qiient-Al-Viesis": [
+  {
+   "title": "Qiient - Al - Viesis",
+   "tags": "T6, HO, BLUE, GREEN, Hide ×2",
+   "tagsPayload": [
+    {
+     "tagId": 2,
+     "tagName": "T6",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-2.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 26,
+     "iconH": 26,
+     "iconOnlyBorderColor": "#bd8d0a",
+     "iconOnlyBackground": "rgba(182,152,43,0.07)",
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 7,
+     "tagName": "HO",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-7.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#8e0628",
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 11,
+     "tagName": "BLUE",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-11.png",
+     "pillColor": "#1a5ecb",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#1a5dd1",
+     "iconOnlyBackground": "rgba(108,175,208,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 10,
+     "tagName": "GREEN",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-10.png",
+     "pillColor": "#04672f",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(145,232,146,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 14,
+     "tagName": "Hide",
+     "category": "multiple",
+     "quantity": 2,
+     "iconUrl": "/tag-icons/tag-14.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(149,87,29,0.07)",
+     "allowHomeHighlight": true
+    }
+   ]
+  }
+ ],
+ "Suyites-Uzurtum": [
+  {
+   "title": "Suyites - Uzurtum",
+   "tags": "T6, TUNNEL, L GOLD, S GOLD ×2, DG, Ore, Fiber ×2",
+   "tagsPayload": [
+    {
+     "tagId": 2,
+     "tagName": "T6",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-2.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 26,
+     "iconH": 26,
+     "iconOnlyBorderColor": "#bd8d0a",
+     "iconOnlyBackground": "rgba(182,152,43,0.07)",
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 6,
+     "tagName": "TUNNEL",
+     "category": "single",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-6.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": false
+    },
+    {
+     "tagId": 13,
+     "tagName": "L GOLD",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-13.png",
+     "pillColor": "#ffea15",
+     "pillTextColor": "#454007",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": "#a7a20c",
+     "iconOnlyBackground": "rgba(244,237,31,0.02)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 12,
+     "tagName": "S GOLD",
+     "category": "multiple",
+     "quantity": 2,
+     "iconUrl": "/tag-icons/tag-12.png",
+     "pillColor": "#b59f0d",
+     "pillTextColor": "#ffffff",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 19,
+     "tagName": "DG",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-19.png",
+     "pillColor": "#28edf0",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": null,
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 16,
+     "tagName": "Ore",
+     "category": "multiple",
+     "quantity": 1,
+     "iconUrl": "/tag-icons/tag-16.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(112,112,112,0.07)",
+     "allowHomeHighlight": true
+    },
+    {
+     "tagId": 15,
+     "tagName": "Fiber",
+     "category": "multiple",
+     "quantity": 2,
+     "iconUrl": "/tag-icons/tag-15.png",
+     "pillColor": "#37b7ff",
+     "pillTextColor": "#0a0e14",
+     "iconW": 30,
+     "iconH": 30,
+     "iconOnlyBorderColor": null,
+     "iconOnlyBackground": "rgba(255,255,255,0.07)",
+     "allowHomeHighlight": true
+    }
+   ]
+  }
+ ]
+}

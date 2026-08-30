@@ -6,6 +6,7 @@ import { EXCLUDED_MAP_NAMES } from './excludedMaps.js';
 import { MANUAL_MAPS, MAP_OVERRIDES } from './manualMaps.js';
 import { GameMapSchema, type GameMap, type MapType } from '../src/types.js';
 import { ZoneNameParser } from '../src/ZoneNameParser.js';
+import { enrichRoadsZones } from '../src/albionmaps/sync.js';
 import { getZoneCategory } from 'shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,12 @@ const args = process.argv.slice(2);
 const strictMode = args.includes('--strict');
 const sourceIndex = args.indexOf('--source');
 const sourcePath = sourceIndex !== -1 ? args[sourceIndex + 1] : null;
+
+// Albion Maps enrichment stage controls.
+const albionMapsEnabled = !args.includes('--no-albionmaps');
+const albionMapsCacheIndex = args.indexOf('--albionmaps-source');
+const albionMapsCachePath =
+  albionMapsCacheIndex !== -1 ? args[albionMapsCacheIndex + 1] : undefined;
 
 const outputIndex = args.indexOf('--output');
 const OUTPUT_PATH = outputIndex !== -1
@@ -269,6 +276,15 @@ async function main(): Promise<void> {
     Object.assign(target, patch);
   }
 
+  // 9.5 Albion Maps enrichment — authoritative static metadata for roads zones.
+  // Any fetch/parse failure propagates and aborts BEFORE the atomic write, so
+  // a broken source never clobbers the previous dataset.
+  const albionMapsReport = await enrichRoadsZones(maps, {
+    enabled: albionMapsEnabled,
+    cachePath: albionMapsCachePath,
+    warn,
+  });
+
   // 10. Sort deterministically by mapID
   maps.sort((a, b) => a.mapID.localeCompare(b.mapID));
 
@@ -280,6 +296,15 @@ async function main(): Promise<void> {
   renameSync(tmpPath, OUTPUT_PATH);
 
   process.stdout.write(`Wrote ${maps.length} maps to ${OUTPUT_PATH}\n`);
+  if (albionMapsEnabled) {
+    process.stdout.write(
+      `Albion Maps: ${albionMapsReport.matched}/${albionMapsReport.roadsZones} roads zones enriched` +
+      (albionMapsReport.unmatched.length > 0
+        ? `, ${albionMapsReport.unmatched.length} unmatched`
+        : '') +
+      '\n',
+    );
+  }
   if (warnCount > 0) {
     process.stderr.write(`${warnCount} warning(s) emitted.\n`);
   }

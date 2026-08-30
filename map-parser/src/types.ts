@@ -36,4 +36,21 @@ export const GameMapSchema: z.ZodType<GameMap> = z.object({
   largeSocketCount: z.number().int().nonnegative().optional(),
   smallSocketCount: z.number().int().nonnegative().optional(),
   proximityTo: z.string().optional(),
+  baselineFeatures: z.object({
+    chests: z.object({
+      largeGold: z.number().int().nonnegative(),
+      smallGold: z.number().int().nonnegative(),
+      blue: z.number().int().nonnegative(),
+      green: z.number().int().nonnegative(),
+    }),
+    dungeon: z.number().int().nonnegative(),
+    resources: z.object({
+      hide: z.boolean(),
+      ore: z.boolean(),
+      fiber: z.boolean(),
+      wood: z.boolean(),
+      stone: z.boolean(),
+    }),
+  }).optional(),
+  groupPortal: z.literal(true).optional(),
 });
