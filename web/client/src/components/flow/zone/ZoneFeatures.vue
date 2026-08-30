@@ -5,6 +5,8 @@ import { ZONE_BUTTON_BG_HAS_REDS } from '@/constants/ui';
 const props = defineProps<{
   activeFeatures: { type: string; title: string; icon: string; smallCount?: number; largeCount?: number; count?: number; isResource: boolean; upstream?: boolean }[];
   hasReds: boolean;
+  /** Static metadata (Albion Maps) is shown on this node — empty live features are normal, not a prompt to add data. */
+  hasStaticBaseline?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -31,11 +33,11 @@ const featureRows = computed(() => {
 
 <template>
   <div class="flex flex-col items-center justify-center gap-1 mt-1 max-w-[220px] mx-auto">
-    <div v-if="activeFeatures.length === 0" class="callout" @click="$emit('edit')">
+    <div v-if="activeFeatures.length === 0 && !hasStaticBaseline" class="callout" @click="$emit('edit')">
       No features!
     </div>
     <template v-else>
-      <div v-if="!activeFeatures.some(f => f.isResource)" class="callout callout-gray" @click="$emit('edit')">
+      <div v-if="!activeFeatures.some(f => f.isResource) && !hasStaticBaseline" class="callout callout-gray" @click="$emit('edit')">
         Missing Resources
       </div>
     </template>

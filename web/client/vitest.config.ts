@@ -20,5 +20,9 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     globals: true,
     setupFiles: ['./test/setup.ts'],
+    // RoomView-mount tests use real timers and routinely exceed the 5s default
+    // on loaded machines (observed 5s timeouts under CPU contention — pre-existing,
+    // unrelated to any single change). 20s still catches genuine hangs.
+    testTimeout: 20_000,
   },
 });

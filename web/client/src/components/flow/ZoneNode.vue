@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Position, useVueFlow, Handle, rendererPointToPoint } from '@vue-flow/core';
 import type { NodeProps } from '@vue-flow/core';
-import { ZoneType, NodeFeatures, CustomHandle, getDefaultHandles, getHandleFacing, rotationStepsToDegrees } from 'shared';
+import { ZoneType, NodeFeatures, CustomHandle, GameMapBaselineFeatures, getDefaultHandles, getHandleFacing, rotationStepsToDegrees } from 'shared';
 import { getBorderBgClass } from '@/utils/zoneStyles';
 import { connectionStyle } from '@/utils/connectionStyle';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent, TooltipPortal } from 'reka-ui';
@@ -42,6 +42,8 @@ const props = defineProps<NodeProps<{
   rotation?: number;
   isGhost?: boolean;
   explored?: boolean;
+  baselineFeatures?: GameMapBaselineFeatures;
+  groupPortal?: true;
 }>>();
 
 const store = useRoomStore();
@@ -55,24 +57,17 @@ const featuresRequireUpdate = computed(() => {
   const f = entry.features;
   if (!f) return true;
 
-  // Resources with unknown quantities (both small and large are null/undefined) need fixing
-  if (f.resources && f.resources.some(r => r.small == null && r.large == null)) return true;
-
-  // Check if any meaningful content exists
-  const hasContent = (
-    (f.resources && f.resources.length > 0) ||
+  // Static zone metadata is auto-populated from the catalogue; only LIVE
+  // observations make the node require a manual update.
+  const hasDynamicContent = (
     f.powercoreBlue || f.powercorePurple || f.powercoreGreen || f.powercoreYellow ||
     f.crystalCreaturePresent ||
-    f.dungeonStatic || f.dungeonGroup ||
-    (f.dungeonStaticCount && f.dungeonStaticCount > 0) ||
-    (f.dungeonGroupCount && f.dungeonGroupCount > 0) ||
-    (f.treasuresGreenCount && f.treasuresGreenCount > 0) ||
-    (f.treasuresBlueCount && f.treasuresBlueCount > 0) ||
-    (f.treasuresYellowCount && f.treasuresYellowCount > 0) ||
+    f.reds !== undefined && f.reds !== 0 ||
+    f.timedChest != null ||
     f.slots != null
   );
 
-  return !hasContent;
+  return !hasDynamicContent;
 });
 const { updateNodeData, findNode, viewport, viewportRef } = useVueFlow();
 const now = inject<Ref<number>>('globalNow', ref(Date.now()));
@@ -599,68 +594,59 @@ const showFeatures = computed(() => {
 const activeFeatures = computed(() => {
   if (!props.data.features) return [];
   const features = props.data.features;
-  const upstream = features.upstreamFeatures ?? [];
-  const list: { type: string; title: string; icon: string; smallCount?: number; largeCount?: number; count?: number; isResource: boolean; upstream?: boolean }[] = [];
-  
-  const countableFeatures = [
-    { key: 'treasuresGreen',        countKey: 'treasuresGreenCount',  title: 'Green Treasures',   icon: '/images/treasures-green.png' },
-    { key: 'treasuresBlue',         countKey: 'treasuresBlueCount',   title: 'Blue Treasures',    icon: '/images/treasures-blue.png' },
-    { key: 'treasuresYellow',       countKey: 'treasuresYellowCount', title: 'Yellow Treasures',  icon: '/images/treasures-yellow.png' },
-    { key: 'crystalCreaturePresent',countKey: null,                   title: 'Crystal Creature',  icon: '/images/crystal.png' },
-    { key: 'dungeonStatic',         countKey: 'dungeonStaticCount',   title: 'Static Dungeon',    icon: '/images/dungeon-static.png' },
-    { key: 'dungeonGroup',          countKey: 'dungeonGroupCount',    title: 'Group Dungeon',     icon: '/images/dungeon-group.png' },
-  ];
+  const list: { type: string; title: string; icon: string; count?: number; isResource: boolean }[] = [];
 
-  const resourceMeta: Record<string, { title: string; icon: string }> = {
-    fibre:   { title: 'Fibre',   icon: '/images/resource-fibre.png' },
-    leather: { title: 'Leather', icon: '/images/resource-leather.png' },
-    ore:     { title: 'Ore',     icon: '/images/resource-ore.png' },
-    stone:   { title: 'Stone',   icon: '/images/resource-stone.png' },
-    wood:    { title: 'Wood',    icon: '/images/resource-wood.png' },
-  };
-
-  for (const entry of (features.resources ?? [])) {
-    const meta = resourceMeta[entry.type];
-    if (!meta) continue;
-    const smallCount = entry.small ?? 0;
-    const largeCount = entry.large ?? 0;
-    const isUpstream = upstream.includes(entry.type);
-    if (smallCount > 0 || largeCount > 0 || isUpstream) {
-      list.push({ type: entry.type, title: meta.title, icon: meta.icon, smallCount, largeCount, isResource: true, upstream: isUpstream && smallCount === 0 && largeCount === 0 });
-    }
+  // Only LIVE observations are shown here. Chests, resources and dungeons are
+  // static zone data (Albion Maps) and render from `staticBaseline` instead.
+  if (features.crystalCreaturePresent) {
+    list.push({ type: 'crystalCreaturePresent', title: 'Crystal Creature', icon: '/images/crystal.png', isResource: false });
   }
 
-  for (const f of countableFeatures) {
-    const isBoolean = f.countKey === null;
-    const countKey = f.countKey ?? '';
-    const count = countKey ? ((features[countKey as keyof NodeFeatures] as number | undefined) ?? 0) : 0;
-    const booleanVal = isBoolean ? (features[f.key as keyof NodeFeatures] as boolean | undefined) : false;
-    
-    const upstreamKey = isBoolean ? f.key : countKey;
-    const isUpstream = upstream.includes(upstreamKey);
-    
-    const active = (isBoolean ? booleanVal : count > 0) || isUpstream;
-    
-    if (active) {
-      list.push({ 
-        type: f.key, 
-        title: f.title, 
-        icon: f.icon, 
-        count: isBoolean ? undefined : count, 
-        isResource: false, 
-        upstream: isUpstream && (isBoolean ? !booleanVal : count === 0) 
-      });
-    }
-  }
   return list;
 });
 
-const hasUnknownResources = computed(() => {
-  const resources = props.data.features?.resources;
-  if (!resources || resources.length === 0) return false;
-  const hasUnknown = resources.some(r => r.small == null && r.large == null);
-  const hasKnown = resources.some(r => (r.small != null && r.small > 0) || (r.large != null && r.large > 0));
-  return hasUnknown && hasKnown;
+/**
+ * Static zone metadata (Albion Maps baseline) rendered read-only: zone type,
+ * chest counts, dungeon count and resource presence. Distinct from live
+ * observations — there is no edit path for anything in here.
+ */
+const staticBaseline = computed<{ key: string; icon: string; label: string }[]>(() => {
+  const b = props.data.baselineFeatures;
+  if (!b) return [];
+  const rows: { key: string; icon: string; label: string }[] = [];
+
+  const chestMeta: [keyof typeof b.chests, string, string][] = [
+    ['green', '/images/treasures-green.png', 'Green'],
+    ['blue', '/images/treasures-blue.png', 'Blue'],
+    ['largeGold', '/images/chest.png', 'L Gold'],
+    ['smallGold', '/images/chest.png', 'S Gold'],
+  ];
+  for (const [key, icon, title] of chestMeta) {
+    const n = b.chests[key];
+    if (n > 0) rows.push({ key: `chest-${key}`, icon, label: `${title} ×${n}` });
+  }
+  if (b.dungeon > 0) {
+    rows.push({ key: 'dungeon', icon: '/images/dungeon-group.png', label: `Dungeon ×${b.dungeon}` });
+  }
+  const resourceMeta: [keyof typeof b.resources, string, string][] = [
+    ['hide', '/images/resource-leather.png', 'Hide'],
+    ['ore', '/images/resource-ore.png', 'Ore'],
+    ['fiber', '/images/resource-fibre.png', 'Fiber'],
+    ['wood', '/images/resource-wood.png', 'Wood'],
+    ['stone', '/images/resource-stone.png', 'Stone'],
+  ];
+  for (const [key, icon, title] of resourceMeta) {
+    if (b.resources[key]) rows.push({ key: `res-${key}`, icon, label: title });
+  }
+  return rows;
+});
+
+const staticZoneTypeLabel = computed<string | null>(() => {
+  const b = props.data.baselineFeatures;
+  if (!b) return null;
+  if (props.data.type === 'roadsHideout') return 'HO';
+  if (props.data.groupPortal) return 'GROUP PORTAL';
+  return null;
 });
 
 const hasReds = computed(() => {
@@ -695,7 +681,7 @@ const diamondInnerClass = computed(() => {
   return classes;
 });
 
-function toggleFeature(feature: 'powercoreBlue' | 'powercorePurple' | 'powercoreGreen' | 'powercoreYellow' | 'crystalCreaturePresent' | 'dungeonStatic' | 'dungeonGroup') {
+function toggleFeature(feature: 'powercoreBlue' | 'powercorePurple' | 'powercoreGreen' | 'powercoreYellow' | 'crystalCreaturePresent') {
   const currentFeatures = props.data.features || {};
   const features = { ...currentFeatures };
   
@@ -741,73 +727,6 @@ function toggleFeature(feature: 'powercoreBlue' | 'powercorePurple' | 'powercore
   
   store.updateNodeFeatures(props.id, features);
 }
-
-function setFeatureSize(type: keyof NodeFeatures, size: 'S' | 'L') {
-  const currentFeatures = props.data.features || {};
-  const features: any = { ...currentFeatures };
-  const sizeKey = `${type}Size` as keyof NodeFeatures;
-  features[sizeKey] = size;
-  features[type] = true;
-  store.updateNodeFeatures(props.id, features);
-}
-
-function setFeatureCount(type: string, count: number) {
-  const countKey = `${type}Count` as keyof NodeFeatures;
-  const currentFeatures = props.data.features || {};
-  const features: any = { ...currentFeatures };
-  if (count > 0) {
-    features[countKey] = count;
-  } else {
-    delete features[countKey];
-  }
-  // Clear upstream marker when user explicitly sets a count
-  if (features.upstreamFeatures) {
-    features.upstreamFeatures = features.upstreamFeatures.filter((k: string) => k !== String(countKey));
-    if (features.upstreamFeatures.length === 0) delete features.upstreamFeatures;
-  }
-  store.updateNodeFeatures(props.id, features);
-}
-
-function setResourceCount(type: string, size: 'small' | 'large', count: number) {
-  const currentFeatures = props.data.features || {};
-  const resources = [...(currentFeatures.resources ?? [])];
-  const idx = resources.findIndex(r => r.type === type);
-  if (idx >= 0) {
-    const updated = { ...resources[idx], [size]: count > 0 ? count : undefined };
-    if (!updated.small && !updated.large) {
-      resources.splice(idx, 1);
-    } else {
-      resources[idx] = updated;
-    }
-  } else if (count > 0) {
-    resources.push({ type: type as any, [size]: count });
-  }
-  // Clear upstream marker when user explicitly sets a resource count
-  let upstreamFeatures = currentFeatures.upstreamFeatures ? [...currentFeatures.upstreamFeatures] : undefined;
-  if (upstreamFeatures) {
-    upstreamFeatures = upstreamFeatures.filter(k => k !== type);
-    if (upstreamFeatures.length === 0) upstreamFeatures = undefined;
-  }
-  store.updateNodeFeatures(props.id, { ...currentFeatures, resources, upstreamFeatures });
-}
-
-function clearResource(type: string) {
-  const currentFeatures = props.data.features || {};
-  const resources = [...(currentFeatures.resources ?? [])];
-  const idx = resources.findIndex(r => r.type === type);
-  if (idx >= 0) {
-    resources.splice(idx, 1);
-    
-    // Clear upstream marker
-    let upstreamFeatures = currentFeatures.upstreamFeatures ? [...currentFeatures.upstreamFeatures] : undefined;
-    if (upstreamFeatures) {
-      upstreamFeatures = upstreamFeatures.filter(k => k !== type);
-      if (upstreamFeatures.length === 0) upstreamFeatures = undefined;
-    }
-    store.updateNodeFeatures(props.id, { ...currentFeatures, resources, upstreamFeatures });
-  }
-}
-
 
 function saveTimer() {
   if (!activeEditingCore.value) return;
@@ -1135,35 +1054,43 @@ function lockCore(core: string) {
               :proximity-to="props.data.proximityTo"
             />
 
-          <!-- Map Features -->
+          <!-- Static Zone Data (Albion Maps) — read-only, auto-populated -->
+          <div v-if="staticBaseline.length > 0" class="flex flex-col items-center gap-1 mt-2 pointer-events-none">
+            <div class="flex items-center gap-1.5 px-2 py-0.5 rounded border border-blue-500/30 bg-blue-500/5">
+              <span class="text-[8px] uppercase tracking-widest text-blue-300/80 font-bold">Static · Albion Maps</span>
+              <span v-if="staticZoneTypeLabel" class="text-[8px] uppercase tracking-widest text-white/90 font-bold">{{ staticZoneTypeLabel }}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-1 max-w-[220px]">
+              <span
+                v-for="row in staticBaseline"
+                :key="row.key"
+                class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-800/70 border border-gray-700/60"
+                :title="row.label"
+              >
+                <img :src="row.icon" class="w-4 h-4 object-cover" :alt="row.label" />
+                <span class="text-[10px] font-bold text-gray-200 leading-none">{{ row.label }}</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Live Map Features -->
           <div class="flex flex-col items-center pointer-events-auto mt-2" ref="featuresContainerRef">
             <div class="flex items-center justify-center gap-1 mb-1 relative">
-              <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Map Features</span>
+              <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Live Features</span>
               <button 
                 ref="mapFeaturesButtonRef"
                 @click.stop="isMapFeaturesModalOpen = !isMapFeaturesModalOpen"
                 @mousedown.stop
-                :class="['zone-button p-1 pointer-events-auto relative', hasReds ? 'zone-button-reds' : '', (featuresRequireUpdate && store.bluePromptsEnabled) ? 'pulse-prompt-button' : '', Z_INDEX.CONTENT_HIGH]"
-                title="Edit Map Features"
+                :class="['zone-button p-1 pointer-events-auto relative', hasReds ? 'zone-button-reds' : '', Z_INDEX.CONTENT_HIGH]"
+                title="Edit Live Features"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
-              <BluePrompt
-                v-if="promptsReady && !isMapFeaturesModalOpen && !isHandleEditorOpen && !isChestModalOpen && showFeatures && activeFeatures.length === 0 && mapFeaturesButtonRef"
-                pointing="up"
-                :offset-y="4"
-                :target="mapFeaturesButtonRef">
-                  Add Map Features</BluePrompt>
-              <BluePrompt
-                v-if="promptsReady && !isMapFeaturesModalOpen && !isHandleEditorOpen && !isChestModalOpen && showFeatures && hasUnknownResources && mapFeaturesButtonRef"
-                pointing="left"
-                :offset-x="4"
-                :target="mapFeaturesButtonRef">
-                  Review "?" resources</BluePrompt>
             </div>
             <ZoneFeatures 
               :active-features="activeFeatures"
               :has-reds="hasReds"
+              :has-static-baseline="staticBaseline.length > 0"
               @edit="isMapFeaturesModalOpen = true"
             />
           </div>
@@ -1175,12 +1102,9 @@ function lockCore(core: string) {
           :is-open="isMapFeaturesModalOpen"
           :has-reds="hasReds"
           :features="props.data.features"
-          :upstream-features="props.data.features?.upstreamFeatures ?? []"
+          :baseline-features="props.data.baselineFeatures"
+          :zone-type-label="staticZoneTypeLabel"
           @toggle="toggleFeature"
-          @size="setFeatureSize"
-          @feature-count="setFeatureCount"
-          @resource-count="setResourceCount"
-          @clear-resource="clearResource"
           @close="handleCloseTray"
         />
       </div>

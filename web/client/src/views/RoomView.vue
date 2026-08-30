@@ -392,6 +392,8 @@ watch([homeZoneId, nodePositions, connections, () => store.canEdit], (newVal, ol
           rotation: pos.rotation,
           proximityTo: zone?.proximityTo,
           explored: pos.explored,
+          baselineFeatures: zone?.baselineFeatures,
+          groupPortal: zone?.groupPortal,
           isIsolated: store.isNodeIsolated(pos.zoneId, now.value),
         },
       };
