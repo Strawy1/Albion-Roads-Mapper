@@ -391,7 +391,7 @@ useRafFn(() => {
 
 const HIDEOUT_HINT_STORAGE_KEY = 'hideoutNHandleHintDismissedIds';
 // Clean up legacy global dismissal flag so existing users get the hint back.
-try { localStorage.removeItem('hideoutNHandleHintDismissed'); } catch {}
+try { localStorage.removeItem('hideoutNHandleHintDismissed'); } catch { /* ignore */ }
 function readDismissedIds(): Set<string> {
   try {
     const raw = localStorage.getItem(HIDEOUT_HINT_STORAGE_KEY);
@@ -410,7 +410,7 @@ function dismissHideoutHint() {
     const ids = readDismissedIds();
     ids.add(props.id);
     localStorage.setItem(HIDEOUT_HINT_STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {}
+  } catch { /* ignore localStorage failures */ }
 }
 
 function undismissHideoutHint() {
@@ -421,7 +421,7 @@ function undismissHideoutHint() {
       ids.delete(props.id);
       localStorage.setItem(HIDEOUT_HINT_STORAGE_KEY, JSON.stringify([...ids]));
     }
-  } catch {}
+  } catch { /* ignore localStorage failures */ }
 }
 
 const hasOnlyDefaultHandles = computed(() => {

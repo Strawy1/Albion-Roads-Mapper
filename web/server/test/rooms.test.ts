@@ -119,7 +119,7 @@ describe('POST /api/rooms', () => {
 });
 
 describe('POST /api/rooms/:id/auth', () => {
-  let roomId = 'test-room-id';
+  const roomId = 'test-room-id';
 
   it('returns a token with correct password', async () => {
     const bcrypt = await import('bcrypt');

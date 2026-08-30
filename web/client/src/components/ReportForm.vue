@@ -12,8 +12,6 @@ import { Z_INDEX } from '@/constants/Layers';
 import TagExtras from "@/components/common/TagExtras.vue";
 import ChainIdPill from "@/components/common/ChainIdPill.vue";
 
-const props = defineProps<{}>();
-
 const store = useRoomStore();
 const goToNode = inject<(nodeId: string) => void>('goToNode');
 

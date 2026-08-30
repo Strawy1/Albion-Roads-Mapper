@@ -225,7 +225,7 @@ async function exportNodes() {
             <summary class="p-3 font-sans font-bold cursor-pointer">Edges ({{ debugEdges.length }})</summary>
             <div class="p-3 space-y-2">
               <details v-for="(edge, index) in debugEdges" :key="index" class="bg-gray-950 rounded">
-                <summary class="p-2 cursor-pointer">{{ (edge as any).source }} <-> {{ (edge as any).target }}</summary>
+                <summary class="p-2 cursor-pointer">{{ (edge as any).source }} &lt;-&gt; {{ (edge as any).target }}</summary>
                 <pre class="p-2 overflow-x-auto whitespace-pre-wrap break-all">{{ JSON.stringify(edge, null, 2) }}</pre>
               </details>
             </div>
