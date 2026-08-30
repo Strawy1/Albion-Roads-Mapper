@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
+import { matchesZoneQuery, zoneQueryScore } from '@/utils/zoneSearch';
 import {
   ComboboxRoot,
   ComboboxInput,
@@ -84,8 +85,8 @@ const filteredZones = computed<Zone[]>(() => {
     if (props.excludedIds && props.excludedIds.includes(z.id)) return false;
     if (props.showAlreadyAdded === false && mappedZoneIds.value.has(z.id) && !disabledIdsSet.value.has(z.id)) return false;
     // disabledIds zones only appear when the user has typed a query that matches them
-    if (disabledIdsSet.value.has(z.id)) return !!q && z.name.toLowerCase().includes(q);
-    if (incompatibleIdsSet.value.has(z.id)) return !!q && z.name.toLowerCase().includes(q);
+    if (disabledIdsSet.value.has(z.id)) return !!q && matchesZoneQuery(z.name, q);
+    if (incompatibleIdsSet.value.has(z.id)) return !!q && matchesZoneQuery(z.name, q);
     if (props.smartAlreadyAdded && !q && mappedZoneIds.value.has(z.id)) return false;
     
     if (!q) {
@@ -93,10 +94,13 @@ const filteredZones = computed<Zone[]>(() => {
       return mappedZoneIds.value.has(z.id) || z.id === store.homeZoneId;
     }
 
-    return (
-      z.name.toLowerCase().includes(q)
-    );
+    return matchesZoneQuery(z.name, q);
   });
+
+  // Rank prefix-token matches above substring-only matches.
+  if (q) {
+    zones.sort((a, b) => zoneQueryScore(b.name, q) - zoneQueryScore(a.name, q));
+  }
 
   if (props.smartAlreadyAdded) {
     zones.sort((a, b) => {

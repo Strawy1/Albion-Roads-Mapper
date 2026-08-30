@@ -5,6 +5,7 @@ import TagTier from './common/TagTier.vue';
 import TagZone from './common/TagZone.vue';
 import TagExtras from './common/TagExtras.vue';
 import { TYPE_LABELS, getZoneTypeDisplay } from '@/utils/zoneStyles';
+import { matchesZoneQuery } from '@/utils/zoneSearch';
 import type { ZoneType } from 'shared';
 
 const props = defineProps<{
@@ -40,7 +41,7 @@ const filteredNodes = computed(() => {
 
     if (!q) return true;
     return (
-      name.includes(q) ||
+      matchesZoneQuery(name, q) ||
       typeLabel.includes(q) ||
       typeBase.includes(q) ||
       tier.includes(q) ||
