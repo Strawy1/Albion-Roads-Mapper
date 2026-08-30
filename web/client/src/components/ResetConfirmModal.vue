@@ -66,11 +66,7 @@ function confirmDeleteRoom() {
       <!-- Top section -->
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-2 text-white">Are you sure you wish to reset the room?</h2>
-        <p class="text-sm text-gray-400 mb-6">This will delete all connections, <strong>but will perserve the Room History</strong>. If you're doing this to attempt to fix a data error, please consider contacting us on <a
-            href="https://discord.gg/uFq2PJuZ3r"
-            target="_blank"
-            class="text-indigo-500 font-medium transition-colors text-center"
-        >Discord</a><strong> first</strong>.</p>
+        <p class="text-sm text-gray-400 mb-6">This will delete all connections, <strong>but will preserve the Room History</strong>.</p>
         <div class="flex gap-3 justify-end">
           <button
             class="px-5 py-2 rounded bg-red-600 hover:bg-red-500 text-white font-medium transition-colors"

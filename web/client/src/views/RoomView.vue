@@ -11,7 +11,6 @@ import ZoneNode from '../components/flow/ZoneNode.vue';
 import NonRoadsNode from '../components/flow/NonRoadsNode.vue';
 import ConnectionEdge from '../components/flow/ConnectionEdge.vue';
 import ConnectionLine from '../components/flow/ConnectionLine.vue';
-import BottomLeftToolbar from '../components/room/BottomLeftToolbar.vue';
 import CopyrightNotice from '../components/CopyrightNotice.vue';
 import MegaToast from '../components/common/MegaToast.vue';
 import ConfirmationModal from '../components/common/ConfirmationModal.vue';
@@ -36,10 +35,8 @@ import { connectionStyle } from '@/utils/connectionStyle';
 import { ZONE_BY_ID, type Connection, type NodePosition, type NodeFeatures, type ZoneType, wouldCreateLongerLoop, getDefaultHandles, getHandleFacing } from 'shared';
 // v1.2 splash retired with v1.3 (kept for reference / future announcements)
 // import V1dot2SplashModal from "@/components/version-announcements/V1dot2SplashModal.vue";
-import DonationPromptModal from '@/components/DonationPromptModal.vue';
 import RoomServerModal from '@/components/RoomServerModal.vue';
 
-const donationModal = ref<InstanceType<typeof DonationPromptModal> | null>(null);
 
 const props = defineProps<{ id: string }>();
 const store = useRoomStore();
@@ -1446,7 +1443,6 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
     <TopToolbar :nodes="flowNodes" :show-debug="isLocal || showDebugOverride" :plot-route-mode="plotRouteStore.isPlotRouteMode" :has-route="plotRouteStore.hasRoute" @select="goToNode" @fit-view="fitView({ padding: 0.2, duration: 300 })" @open-debug="showDebug = true" @plot-route="plotRouteStore.enterPlotRouteMode()" @clear-route="plotRouteStore.exitPlotRouteMode()" @add-chain="showAddChainModal = true" />
     <ChainManager v-model="showAddChainModal" />
     <!-- <V1dot2SplashModal /> -->
-    <DonationPromptModal ref="donationModal" />
     <!-- Rooms created before servers existed must be labelled before use: this
          one is non-dismissible (see store.needsServerAssignment). -->
     <RoomServerModal v-if="store.needsServerAssignment" :model-value="true" blocking />
@@ -1646,9 +1642,6 @@ defineExpose({ flowNodes, onNodeDragStop, showToast, handleConnect, showConfirma
         </button>
       </div>
     </Transition>
-    <!-- Bottom-left toolbar (Ko-fi + Discord) -->
-    <BottomLeftToolbar @tipped="donationModal?.showThanks()" />
-    
     <ConfirmationModal
       v-model="showConfirmationModal"
       title="Rare Connection"

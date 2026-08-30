@@ -284,7 +284,8 @@ onBeforeUnmount(() => {
       <p class="text-white text-center">
         All Rooms are secured with a password, which you can rotate at any time.
       </p>
-       <p class="text-gray-400 text-center">Created by <a href="https://discord.gg/t372jvcsZn" class="text-indigo-400 hover:underline" target="_blank">[DIG]</a> <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
+       <p class="text-gray-400 text-center">Created by [DIG] <a href="https://github.com/Maelstromeous/Maelstromeous" class="text-indigo-400 hover:underline" target="_blank">Maelstrome</a></p>
+      <p class="text-gray-400 text-center">Changes Made by Strawy</p>
     </div>
 
     <div class="flex flex-col items-center gap-6 mb-4 mt-4">
@@ -295,14 +296,6 @@ onBeforeUnmount(() => {
           Create Room
         </button>
         <div class="flex gap-2">
-           <a
-          href="https://discord.gg/uFq2PJuZ3r"
-          target="_blank"
-          class="px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-indigo-500 border border-transparent hover:border hover:border-blue-300 font-medium text-sm transition-colors text-center duration-500 flex items-center gap-2"
-        >
-          <img src="/images/discord.png" alt="Discord" class="h-5 w-auto" />
-          Discord
-        </a>
         <a
           href="https://github.com/dignityofwar/albionroads"
           target="_blank"
