@@ -9,28 +9,14 @@ describe('getInitialFeatures', () => {
     expect(getInitialFeatures('unknown')).toEqual({});
   });
 
-  it('returns resource features for a roads zone with knownResources', () => {
-    // We know 'qiient-et-qinsum' has LOGS in maps.json
-    const features = getInitialFeatures('qiient-et-qinsum');
-    expect(features).toEqual({ resources: [{ type: 'wood' }], upstreamFeatures: ['wood'] });
-  });
-
-  it('returns multiple resource features', () => {
-     // cases-ugumlos has [ "hide", "logs", "ore", "rock", "largeGreenChest" ]
-    const features = getInitialFeatures('cases-ugumlos');
-    expect(features).toEqual({
-      resources: [{ type: 'leather' }, { type: 'wood' }, { type: 'ore' }, { type: 'stone' }],
-      treasuresGreenCount: 0,
-      upstreamFeatures: ['leather', 'wood', 'ore', 'stone', 'treasuresGreenCount']
-    });
-  });
-
-  it('returns cotton (unknown size) and blue treasure chest for firos-ezatam', () => {
-    // firos-ezatam has knownFeatures: ["cotton", "largeBlueChest"]
-    const features = getInitialFeatures('firos-ezatam');
-    expect(features.resources).toEqual([{ type: 'fibre' }]);
-    expect(features.treasuresBlueCount).toBe(0);
-    expect(features.upstreamFeatures).toEqual(['fibre', 'treasuresBlueCount']);
+  it('no longer seeds static metadata into editable node state', () => {
+    // Static zone data (tier, zone type, chests, resources, dungeons) is
+    // imported from Albion Maps into the catalogue and rendered read-only by
+    // the client. It must NOT be copied into per-room NodeFeatures, or a user
+    // could overwrite it — and `upstreamFeatures` would mark it unconfirmed.
+    expect(getInitialFeatures('qiient-et-qinsum')).toEqual({});
+    expect(getInitialFeatures('cases-ugumlos')).toEqual({});
+    expect(getInitialFeatures('firos-ezatam')).toEqual({});
   });
 });
 
@@ -70,7 +56,8 @@ describe('Auto-pre-population in routes', () => {
         'qiient-al-nusom',
         0,
         0,
-        expect.stringContaining('"resources":[{"type":"ore"}]'),
+        // No static metadata is copied into the editable node features.
+        '{}',
         JSON.stringify(null)
       ])
     );
@@ -105,7 +92,8 @@ describe('Auto-pre-population in routes', () => {
         'qiient-et-qinsum',
         100,
         100,
-        expect.stringContaining('"resources":[{"type":"wood"}]'),
+        // The connection's own live data (slots) is stored; static metadata is not.
+        expect.stringContaining('"slots":7'),
       ])
     );
     

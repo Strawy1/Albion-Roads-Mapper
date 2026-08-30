@@ -1,46 +1,14 @@
-import { ZONE_BY_ID, NodeFeatures, ResourceType } from 'shared';
+import { NodeFeatures } from 'shared';
 
-const KNOWN_FEATURE_TO_RESOURCE: Record<string, ResourceType> = {
-  'cotton': 'fibre',
-  'hide': 'leather',
-  'ore': 'ore',
-  'rock': 'stone',
-  'logs': 'wood',
-};
-
-const KNOWN_FEATURE_TO_COUNT: Record<string, keyof NodeFeatures> = {
-  'largeBlueChest': 'treasuresBlueCount',
-  'largeGreenChest': 'treasuresGreenCount',
-  'largeYellowChest': 'treasuresYellowCount',
-};
-
-export function getInitialFeatures(zoneId: string): NodeFeatures {
-  const zone = ZONE_BY_ID.get(zoneId);
-  const features: NodeFeatures = {};
-  const upstream: string[] = [];
-
-  if (zone && zone.knownFeatures) {
-    for (const feat of zone.knownFeatures) {
-      const resourceType = KNOWN_FEATURE_TO_RESOURCE[feat];
-      if (resourceType) {
-        if (!features.resources) features.resources = [];
-        if (!features.resources.find(r => r.type === resourceType)) {
-          features.resources.push({ type: resourceType });
-          upstream.push(resourceType);
-        }
-        continue;
-      }
-      const countKey = KNOWN_FEATURE_TO_COUNT[feat];
-      if (countKey) {
-        (features as any)[countKey] = 0;
-        upstream.push(String(countKey));
-      }
-    }
-  }
-
-  if (upstream.length > 0) {
-    features.upstreamFeatures = upstream;
-  }
-
-  return features;
+/**
+ * Initial features for a newly created node. Deliberately EMPTY: static zone
+ * metadata (tier, zone type, chests, resources, dungeons) is imported from
+ * Albion Maps into the catalogue (`Zone.baselineFeatures`) and rendered
+ * read-only by the client. It is not copied into per-room editable state, so
+ * it can never be accidentally overwritten. Everything a user records live
+ * (reds, power cores, timed chests, crystal creature) starts unset and is
+ * added by the UI.
+ */
+export function getInitialFeatures(_zoneId: string): NodeFeatures {
+  return {};
 }
