@@ -19,5 +19,7 @@ pnpm workspace monorepo: `web/client` (Vue 3 + Vue Flow), `web/server` (Fastify 
 - WS tests connect a real `ws` client to `app.listen({ port: 0 })` — the handshake/broadcast paths are exercised for real.
 - Migrations auto-run on server boot (`node-pg-migrate`, `web/server/migrations/`).
 - Zone data changes go through `pnpm --filter map-parser sync-maps`, never hand-edit `web/shared/data/maps.json`.
+- `sync-maps` now ALSO fetches static Roads metadata from Albion Maps (albionmaps.com.br): per-zone search pages, parsed in `map-parser/src/albionmaps/`. Flags: `--no-albionmaps` (skip), `--albionmaps-source <file>` (offline cache, tests). Failure aborts before the atomic write. ~400 requests × ~0.5s + 150ms delay ≈ 3-4 min for a full sync.
+- `pnpm lint` is BROKEN upstream: eslint is not a dependency of any workspace package (lockfile has zero eslint entries). Don't run it; rely on `pnpm build` (vue-tsc/tsc) + `pnpm test`.
 
 Details in `docs/testing.md` and `docs/development.md`. Related: [[albionroads-docs]], [[albionroads-gotchas]].

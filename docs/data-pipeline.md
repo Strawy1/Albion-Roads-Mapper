@@ -63,7 +63,19 @@ Name fixes belong in `NAME_CORRECTIONS` rather than in `maps.json`, since `mapID
 
 `map-parser/scripts/migrateMaps.ts` is a one-off in-place re-derivation over the existing `maps.json` (recomputes shapes/sockets/content).
 
+### Albion Maps stage (static Roads metadata)
+
+`syncMaps.ts` enriches every `roads` zone with authoritative static metadata from **Albion Maps** (`map-parser/src/albionmaps/`):
+
+- The site has no API — it embeds structured JSON in each card's `data-tags-payload` attribute on its server-rendered search pages (`?lang=en&title=<name>`). The site token-matches on spaces and breaks on hyphens, so catalogue names are sent with hyphens collapsed to spaces (`Suyites-Uzurtum` → `Suyites Uzurtum`). Results are hard-capped at 12 per page, so the importer queries per catalogue zone (the catalogue is the authoritative zone identity) and exact-matches normalized names. `client.ts` parses the HTML (deduping the save-button/thumbnail double render) — no CSS-selector fragility leaks past this module.
+- `normalize.ts` maps the site's tag vocabulary (T4/T6/T8, HO/TUNNEL/GROUP PORTAL/BLACK, GREEN/BLUE/L GOLD/S GOLD, DG, Hide/Ore/Fiber/Wood/Stone) onto `baselineFeatures`; unknown tags are collected and reported, never silently dropped. `match.ts` is exact-only (alias table + no fuzzy fallback); near-miss spellings stay unmatched rather than guessed.
+- `applyBaseline` (in `sync.ts`) writes `tier` (when the site carries one), `isRoadsHideout` (HO tag — replaces the name-prefix heuristic for matched zones), `groupPortal`, `baselineFeatures`, and regenerates `knownFeatures` from the baseline so there is exactly one derivation path.
+- **Failure semantics:** any fetch/parse error propagates and aborts **before** the atomic write; the previous `maps.json` is never clobbered. Unmatched zones (the site simply does not carry them) are warned about, keep their feed-derived fallback, and are listed in the sync summary. `--albionmaps-source <file>` reads cached responses (test/offline mode); `--no-albionmaps` skips the stage.
+- Deterministic: same input → byte-identical output; the stage is safe to run twice against a committed dataset.
+
+**Attribution:** Albion Maps is a community project not affiliated with Sandbox Interactive; robots.txt sets no content signals. The UI footer and README carry attribution, and the sync runs only when an admin runs it — never from a client at runtime.
+
 ## Type ownership (be careful)
 
-- **`GameMap` is owned by shared** (`web/shared/src/types.ts`); `map-parser/src/types.ts` re-exports it and keeps only the Zod `GameMapSchema` (typed `z.ZodType<GameMap>` so a field-type mismatch fails typecheck). When adding a `GameMap` field, add it to the shared interface **and** to `GameMapSchema` — Zod strips unknown keys, and both `syncMaps` and `migrateMaps` write `parsed.data`, so a field missing from the schema is silently dropped from `maps.json`.
+- **`GameMap` is owned by shared** (`web/shared/src/types.ts`); `map-parser/src/types.ts` re-exports it and keeps only the Zod `GameMapSchema` (typed `z.ZodType<GameMap>` so a field-type mismatch fails typecheck). When adding a `GameMap` field, add it to the shared interface **and** to `GameMapSchema` — Zod strips unknown keys, and both `syncMaps` and `migrateMaps` write `parsed.data`, so a field missing from the schema is silently dropped from `maps.json`. The Albion Maps baseline fields (`baselineFeatures`, `groupPortal`) must follow the same rule.
 - map-parser has **no build/typecheck step** in its scripts (`tsx` elides types at runtime) — run `npx tsc --noEmit` in `map-parser/` after touching its types.

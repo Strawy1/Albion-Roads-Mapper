@@ -106,6 +106,34 @@ WebSocket at `/ws/rooms/:id`. Authenticated via JWT (sent as first `auth` messag
 
 ---
 
+## Data Sources
+
+**Static zone metadata is imported from [Albion Maps](https://www.albionmaps.com.br/?lang=en)** (community project, not affiliated with Sandbox Interactive) by `map-parser`:
+
+- Tier, zone type (HO / TUNNEL / GROUP PORTAL), chest counts (large/small gold, blue, green), dungeon count, and resource presence are fetched at sync time and committed into `web/shared/data/maps.json`.
+- The data is authoritative and rendered read-only in the UI — users never enter or override chests, resources, tiers, or dungeon counts.
+- Everything **live** stays user-entered: portal connections, timers, reds, power cores, timed chests, crystal creature, rotations, handles.
+
+### Running the sync
+
+```bash
+# Full sync: upstream zone feed + Albion Maps static metadata (network)
+pnpm --filter map-parser sync-maps
+
+# Offline / test runs (no network):
+pnpm --filter map-parser sync-maps -- --source ./fixture.json --albionmaps-source ./cached-cards.json --output /tmp/maps.json
+```
+
+Flags: `--source <file>` (upstream feed fixture), `--albionmaps-source <file>` (cached Albion Maps responses keyed by zone name), `--no-albionmaps` (skip the Albion Maps stage), `--output <path>`, `--strict` (abort on any warning).
+
+### Failure behaviour
+
+- If Albion Maps is unreachable or returns unparseable data, the sync **aborts before writing** — the previous `maps.json` stays intact and the app keeps working. Albion Maps is never contacted at runtime.
+- Zones the site does not carry are reported as unmatched (12 today) and keep their feed-derived fallback data. Zone matching is exact after name normalization; ambiguous or near-miss spellings are never guessed.
+- Output is deterministic — re-running the sync produces a byte-identical `maps.json` (no timestamps, stable ordering).
+
+---
+
 ## Environment Variables (server)
 
 | Variable | Default | Description |
