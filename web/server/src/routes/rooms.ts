@@ -131,7 +131,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
 
     trackRoomCreated(app.db);
 
-    const shareUrl = `${request.protocol}://${request.hostname}/rooms/${id}`;
+    // SHARE_URL_BASE overrides the derived origin for deployments where the
+    // request host/protocol is unreliable (reverse proxies, Tailscale Funnel).
+    const shareUrlBase = process.env.SHARE_URL_BASE ?? `${request.protocol}://${request.hostname}`;
+    const shareUrl = `${shareUrlBase}/rooms/${id}`;
     return reply.status(201).send({ id, shareUrl });
   });
 

@@ -28,4 +28,19 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 4173,
+    // Tailscale Funnel forwards the public host header; without this the
+    // preview server's anti-DNS-rebinding check 403s every request.
+    allowedHosts: ['desktop-f30p0l1.tail3fe6fb.ts.net'],
+    // Same-origin serving for production builds (Tailscale Funnel, nginx):
+    // the static client and the API share one origin.
+    proxy: {
+      '/api': 'http://localhost:3001',
+      '/ws': {
+        target: 'ws://localhost:3001',
+        ws: true,
+      },
+    },
+  },
 });

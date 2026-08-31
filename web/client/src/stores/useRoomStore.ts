@@ -627,7 +627,10 @@ export const useRoomStore = defineStore('room', () => {
     wsStatus.value = 'connecting';
     // Whatever the old socket told us is now unverified — re-armed by `sync`.
     hasSynced.value = false;
-    const url = new URL(`${API_BASE_URL}/ws/rooms/${roomId.value}`);
+    // Same-origin default (''): resolve against the page location so the WS
+    // endpoint follows the host serving the client (dev proxy, preview, Funnel).
+    const base = API_BASE_URL || window.location.origin;
+    const url = new URL(`${base}/ws/rooms/${roomId.value}`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url.toString());
     ws = socket;
